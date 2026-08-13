@@ -35,61 +35,37 @@ async fn exact_version_count(plane: &MemoryObjectPlane, path: &ObjectPath) -> us
 fn every_mutable_control_family_has_one_canonical_classification() {
     let prefix = ".prolly/repository";
     let cases = [
-        ("writers/lease.cbor", MutableControlKind::WriterLeaseV1),
         (
-            "authority/v2/branches/6d61696e/lease.cbor",
-            MutableControlKind::AuthorityLeaseV2,
+            "authority/branches/6d61696e/lease.cbor",
+            MutableControlKind::AuthorityLease,
         ),
         (
-            "authority/v2/system/6763/lease.cbor",
-            MutableControlKind::AuthorityLeaseV2,
+            "authority/system/6763/lease.cbor",
+            MutableControlKind::AuthorityLease,
         ),
         (
-            "authority/v2/maintenance/gate.cbor",
-            MutableControlKind::MaintenanceGateV2,
+            "authority/maintenance/gate.cbor",
+            MutableControlKind::MaintenanceGate,
         ),
-        ("refs/heads/6d61696e", MutableControlKind::BranchRefV1),
-        ("refs/v2/heads/6d61696e", MutableControlKind::BranchRefV2),
-        ("refs/tags/7631", MutableControlKind::TagRefV1),
-        ("refs/v2/tags/7631", MutableControlKind::TagRefV2),
+        ("refs/heads/6d61696e", MutableControlKind::BranchRef),
+        ("refs/tags/7631", MutableControlKind::TagRef),
+        ("node-index/head.cbor", MutableControlKind::NodeIndexHead),
+        ("ref-catalog/head.cbor", MutableControlKind::RefCatalogHead),
         (
-            "retention/pins/6c6567616c",
-            MutableControlKind::RetentionPinV1,
-        ),
-        (
-            "node-index/latest.cbor",
-            MutableControlKind::NodeIndexHeadV1,
+            "ref-catalog/shards/0a/head.cbor",
+            MutableControlKind::RefCatalogShardHead,
         ),
         (
-            "node-index/v2/head.cbor",
-            MutableControlKind::NodeIndexHeadV2,
+            "commit-graph/head.cbor",
+            MutableControlKind::CommitGraphHead,
         ),
         (
-            "ref-catalog/v2/head.cbor",
-            MutableControlKind::RefCatalogHeadV2,
+            "operation-index/heads/6d61696e.cbor",
+            MutableControlKind::OperationIndexHead,
         ),
         (
-            "ref-catalog/v2/shards/0a/head.cbor",
-            MutableControlKind::RefCatalogShardHeadV2,
-        ),
-        (
-            "commit-graph/v2/head.cbor",
-            MutableControlKind::CommitGraphHeadV2,
-        ),
-        (
-            "operation-index/v2/heads/6d61696e.cbor",
-            MutableControlKind::OperationIndexHeadV2,
-        ),
-        (
-            "journal-index/v2/heads/6d61696e.cbor",
-            MutableControlKind::JournalDerivedIndexHeadV2,
-        ),
-        ("gc/mark-runs/01.cbor", MutableControlKind::GcMarkRunV1),
-        ("gc/runs/pgc1_x.cbor", MutableControlKind::GcRunV1),
-        ("gc/v2/epochs/01/head.cbor", MutableControlKind::GcEpochV2),
-        (
-            "gc/v2/coordinator.cbor",
-            MutableControlKind::GcCoordinatorV2,
+            "journal-index/heads/6d61696e.cbor",
+            MutableControlKind::JournalDerivedIndexHead,
         ),
     ];
     for (relative, expected) in cases {
@@ -101,7 +77,7 @@ fn every_mutable_control_family_has_one_canonical_classification() {
         );
     }
     for relative in [
-        "format/v1.cbor",
+        "format/unregistered.cbor",
         "commits/sha256/00/00/id",
         "reflogs/tags/7631/id",
         "probes/id/mutable",
@@ -114,7 +90,7 @@ fn every_mutable_control_family_has_one_canonical_classification() {
 #[tokio::test]
 async fn one_hot_control_key_pages_past_one_thousand_and_compacts_exactly() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
-    let path = ObjectPath::new(".prolly/repository/writers/lease.cbor").unwrap();
+    let path = ObjectPath::new(".prolly/repository/authority/maintenance/gate.cbor").unwrap();
     let mut expected = None;
     for generation in 0..1_105_u64 {
         let outcome = plane

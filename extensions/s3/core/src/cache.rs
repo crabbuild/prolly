@@ -14,19 +14,17 @@ use crate::{RepositoryId, TreeFormatDigest};
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeCacheKey {
     pub repository: RepositoryId,
-    pub protocol_version: u32,
     pub tree_format: TreeFormatDigest,
     pub cid: Cid,
 }
 
 impl NodeCacheKey {
     /// Canonical fixed-width representation suitable for external cache keys.
-    pub fn encode(&self) -> [u8; 100] {
-        let mut encoded = [0u8; 100];
+    pub fn encode(&self) -> [u8; 96] {
+        let mut encoded = [0u8; 96];
         encoded[..32].copy_from_slice(self.repository.as_bytes());
-        encoded[32..36].copy_from_slice(&self.protocol_version.to_be_bytes());
-        encoded[36..68].copy_from_slice(self.tree_format.as_bytes());
-        encoded[68..].copy_from_slice(self.cid.as_bytes());
+        encoded[32..64].copy_from_slice(self.tree_format.as_bytes());
+        encoded[64..].copy_from_slice(self.cid.as_bytes());
         encoded
     }
 }
@@ -178,7 +176,6 @@ mod tests {
     fn key(byte: u8) -> NodeCacheKey {
         NodeCacheKey {
             repository: RepositoryId::from_hash([1; 32]),
-            protocol_version: 1,
             tree_format: TreeFormatDigest::from_hash([2; 32]),
             cid: Cid([byte; 32]),
         }
@@ -208,7 +205,7 @@ mod tests {
     fn encoded_key_is_namespaced_and_fixed_width() {
         let first = key(1).encode();
         let second = key(2).encode();
-        assert_eq!(first.len(), 100);
+        assert_eq!(first.len(), 96);
         assert_ne!(first, second);
     }
 }

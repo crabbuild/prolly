@@ -9,12 +9,12 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub enum AuthorityScopeV2 {
+pub enum AuthorityScope {
     Branch { name: String },
     System { namespace: String },
 }
 
-impl AuthorityScopeV2 {
+impl AuthorityScope {
     fn validate(&self) -> Result<()> {
         match self {
             Self::Branch { name } => crate::repository::validate_branch(name),
@@ -43,25 +43,25 @@ impl AuthorityScopeV2 {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AuthorityLeaseStateV2 {
+pub enum AuthorityLeaseState {
     Active,
     BarrierPending { previous_generation: u64 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthorityLeaseV2 {
+pub struct AuthorityLease {
     pub repository: RepositoryId,
-    pub scope: AuthorityScopeV2,
+    pub scope: AuthorityScope,
     pub generation: u64,
     pub writer_id: String,
     pub fencing_token: [u8; 32],
-    pub state: AuthorityLeaseStateV2,
+    pub state: AuthorityLeaseState,
     pub expires_at_millis: u64,
     pub updated_at_millis: u64,
 }
 
-impl AuthorityLeaseV2 {
-    fn validate(&self, repository: RepositoryId, scope: &AuthorityScopeV2) -> Result<()> {
+impl AuthorityLease {
+    fn validate(&self, repository: RepositoryId, scope: &AuthorityScope) -> Result<()> {
         self.scope.validate()?;
         if self.repository != repository
             || &self.scope != scope
@@ -75,7 +75,7 @@ impl AuthorityLeaseV2 {
                 "writer authority lease is malformed",
             ));
         }
-        if let AuthorityLeaseStateV2::BarrierPending {
+        if let AuthorityLeaseState::BarrierPending {
             previous_generation,
         } = self.state
         {
@@ -89,8 +89,8 @@ impl AuthorityLeaseV2 {
         Ok(())
     }
 
-    pub fn stamp(&self) -> AuthorityStampV2 {
-        AuthorityStampV2 {
+    pub fn stamp(&self) -> AuthorityStamp {
+        AuthorityStamp {
             repository: self.repository,
             scope: self.scope.clone(),
             generation: self.generation,
@@ -101,16 +101,16 @@ impl AuthorityLeaseV2 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AuthorityStampV2 {
+pub struct AuthorityStamp {
     pub repository: RepositoryId,
-    pub scope: AuthorityScopeV2,
+    pub scope: AuthorityScope,
     pub generation: u64,
     pub writer_id: String,
     pub fencing_token_digest: [u8; 32],
 }
 
-impl AuthorityStampV2 {
-    pub fn validate(&self, repository: RepositoryId, scope: &AuthorityScopeV2) -> Result<()> {
+impl AuthorityStamp {
+    pub fn validate(&self, repository: RepositoryId, scope: &AuthorityScope) -> Result<()> {
         scope.validate()?;
         if self.repository != repository
             || &self.scope != scope
@@ -128,13 +128,13 @@ impl AuthorityStampV2 {
 }
 
 #[derive(Clone, Debug)]
-pub struct AuthorityPermitV2 {
-    lease: AuthorityLeaseV2,
+pub struct AuthorityPermit {
+    lease: AuthorityLease,
     token: StorageToken,
 }
 
-impl AuthorityPermitV2 {
-    pub fn stamp(&self) -> AuthorityStampV2 {
+impl AuthorityPermit {
+    pub fn stamp(&self) -> AuthorityStamp {
         self.lease.stamp()
     }
 
@@ -144,17 +144,17 @@ impl AuthorityPermitV2 {
 }
 
 #[derive(Clone, Debug)]
-pub struct PendingAuthorityV2(AuthorityPermitV2);
+pub struct PendingAuthority(AuthorityPermit);
 
-impl PendingAuthorityV2 {
-    pub fn stamp(&self) -> AuthorityStampV2 {
+impl PendingAuthority {
+    pub fn stamp(&self) -> AuthorityStamp {
         self.0.stamp()
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct TakeoverRequestV2 {
-    pub scope: AuthorityScopeV2,
+pub struct TakeoverRequest {
+    pub scope: AuthorityScope,
     pub expected_writer: String,
     pub expected_generation: u64,
     pub next_writer: String,
@@ -164,26 +164,26 @@ pub struct TakeoverRequestV2 {
 }
 
 #[derive(Clone, Debug)]
-pub struct BranchRefBarrierV2 {
-    stamp: AuthorityStampV2,
+pub struct BranchRefBarrier {
+    stamp: AuthorityStamp,
 }
 
-impl BranchRefBarrierV2 {
-    #[allow(dead_code)] // Constructed by the protocol v2 repository ref-CAS integration.
-    pub(crate) fn new(stamp: AuthorityStampV2) -> Self {
+impl BranchRefBarrier {
+    #[allow(dead_code)] // Constructed by the repository ref-CAS integration.
+    pub(crate) fn new(stamp: AuthorityStamp) -> Self {
         Self { stamp }
     }
 
-    pub fn stamp(&self) -> &AuthorityStampV2 {
+    pub fn stamp(&self) -> &AuthorityStamp {
         &self.stamp
     }
 }
 
-/// Shard-aware writer authority implementation for protocol v2. A branch is
+/// Shard-aware writer authority implementation for repository. A branch is
 /// the first assignment adapter: its single ref CAS is the complete takeover
 /// barrier. Repository code must publish that barrier before calling
 /// `activate_after_barrier`.
-pub struct ShardWriterAuthorityV2<P: ObjectPlane> {
+pub struct ShardWriterAuthority<P: ObjectPlane> {
     plane: Arc<P>,
     controls: MutableControlStore<P>,
     prefix: String,
@@ -191,7 +191,7 @@ pub struct ShardWriterAuthorityV2<P: ObjectPlane> {
     lease_duration: Duration,
 }
 
-impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
+impl<P: ObjectPlane> ShardWriterAuthority<P> {
     pub fn new(
         plane: Arc<P>,
         prefix: impl Into<String>,
@@ -235,11 +235,11 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
 
     pub async fn acquire(
         &self,
-        scope: AuthorityScopeV2,
+        scope: AuthorityScope,
         writer_id: &str,
         now_millis: u64,
         nonce: OperationId,
-    ) -> Result<AuthorityPermitV2> {
+    ) -> Result<AuthorityPermit> {
         scope.validate()?;
         if writer_id.is_empty() {
             return Err(Error::new(ErrorCode::InvalidRequest, "writer ID is empty"));
@@ -250,21 +250,21 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
             .as_ref()
             .map(|stored| stored.metadata.token.clone());
         let lease = match existing {
-            None => AuthorityLeaseV2 {
+            None => AuthorityLease {
                 repository: self.repository,
                 scope: scope.clone(),
                 generation: 1,
                 writer_id: writer_id.to_string(),
                 fencing_token: self.fencing_token(&scope, writer_id, nonce, b"acquire")?,
-                state: AuthorityLeaseStateV2::Active,
+                state: AuthorityLeaseState::Active,
                 expires_at_millis: self.expiry(now_millis)?,
                 updated_at_millis: now_millis,
             },
             Some(stored) => {
-                let mut current: AuthorityLeaseV2 = decode_canonical(&stored.bytes)?;
+                let mut current: AuthorityLease = decode_canonical(&stored.bytes)?;
                 current.validate(self.repository, &scope)?;
                 if current.writer_id != writer_id
-                    || !matches!(current.state, AuthorityLeaseStateV2::Active)
+                    || !matches!(current.state, AuthorityLeaseState::Active)
                 {
                     return Err(Error::new(
                         ErrorCode::PreconditionFailed,
@@ -287,9 +287,9 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
 
     pub async fn validate_active(
         &self,
-        permit: &AuthorityPermitV2,
+        permit: &AuthorityPermit,
         now_millis: u64,
-    ) -> Result<AuthorityStampV2> {
+    ) -> Result<AuthorityStamp> {
         let stored = self
             .plane
             .load_mutable(&self.path(&permit.lease.scope)?)
@@ -297,12 +297,12 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
             .ok_or_else(|| {
                 Error::new(ErrorCode::PreconditionFailed, "authority lease is missing")
             })?;
-        let current: AuthorityLeaseV2 = decode_canonical(&stored.bytes)?;
+        let current: AuthorityLease = decode_canonical(&stored.bytes)?;
         current.validate(self.repository, &permit.lease.scope)?;
         if current != permit.lease
             || stored.metadata.token != permit.token
             || current.expires_at_millis <= now_millis
-            || !matches!(current.state, AuthorityLeaseStateV2::Active)
+            || !matches!(current.state, AuthorityLeaseState::Active)
         {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
@@ -312,13 +312,9 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
         Ok(current.stamp())
     }
 
-    pub async fn renew(
-        &self,
-        permit: AuthorityPermitV2,
-        now_millis: u64,
-    ) -> Result<AuthorityPermitV2> {
+    pub async fn renew(&self, permit: AuthorityPermit, now_millis: u64) -> Result<AuthorityPermit> {
         if permit.lease.expires_at_millis <= now_millis
-            || !matches!(permit.lease.state, AuthorityLeaseStateV2::Active)
+            || !matches!(permit.lease.state, AuthorityLeaseState::Active)
         {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
@@ -332,7 +328,7 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
             .await
     }
 
-    pub async fn begin_takeover(&self, request: TakeoverRequestV2) -> Result<PendingAuthorityV2> {
+    pub async fn begin_takeover(&self, request: TakeoverRequest) -> Result<PendingAuthority> {
         if request.next_writer.is_empty() || request.handoff_evidence.trim().is_empty() {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
@@ -344,17 +340,17 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
             self.plane.load_mutable(&path).await?.ok_or_else(|| {
                 Error::new(ErrorCode::MissingClosure, "authority lease is missing")
             })?;
-        let current: AuthorityLeaseV2 = decode_canonical(&stored.bytes)?;
+        let current: AuthorityLease = decode_canonical(&stored.bytes)?;
         current.validate(self.repository, &request.scope)?;
         if current.writer_id == request.next_writer
             && current.generation == request.expected_generation.saturating_add(1)
             && matches!(
                 current.state,
-                AuthorityLeaseStateV2::BarrierPending { previous_generation }
+                AuthorityLeaseState::BarrierPending { previous_generation }
                     if previous_generation == request.expected_generation
             )
         {
-            return Ok(PendingAuthorityV2(AuthorityPermitV2 {
+            return Ok(PendingAuthority(AuthorityPermit {
                 lease: current,
                 token: stored.metadata.token,
             }));
@@ -373,7 +369,7 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
                 "authority generation overflow",
             )
         })?;
-        let next = AuthorityLeaseV2 {
+        let next = AuthorityLease {
             repository: self.repository,
             scope: request.scope.clone(),
             generation,
@@ -384,13 +380,13 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
                 request.nonce,
                 request.handoff_evidence.as_bytes(),
             )?,
-            state: AuthorityLeaseStateV2::BarrierPending {
+            state: AuthorityLeaseState::BarrierPending {
                 previous_generation: request.expected_generation,
             },
             expires_at_millis: self.expiry(request.now_millis)?,
             updated_at_millis: request.now_millis,
         };
-        Ok(PendingAuthorityV2(
+        Ok(PendingAuthority(
             self.cas_lease(path, Some(stored.metadata.token), next)
                 .await?,
         ))
@@ -398,11 +394,11 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
 
     pub async fn activate_after_barrier(
         &self,
-        pending: PendingAuthorityV2,
-        barrier: BranchRefBarrierV2,
+        pending: PendingAuthority,
+        barrier: BranchRefBarrier,
         now_millis: u64,
-    ) -> Result<AuthorityPermitV2> {
-        let AuthorityLeaseStateV2::BarrierPending { .. } = pending.0.lease.state else {
+    ) -> Result<AuthorityPermit> {
+        let AuthorityLeaseState::BarrierPending { .. } = pending.0.lease.state else {
             return Err(Error::new(
                 ErrorCode::InternalInvariant,
                 "takeover permit is not waiting for a ref barrier",
@@ -415,7 +411,7 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
             ));
         }
         let mut active = pending.0.lease;
-        active.state = AuthorityLeaseStateV2::Active;
+        active.state = AuthorityLeaseState::Active;
         active.updated_at_millis = now_millis;
         active.expires_at_millis = self.expiry(now_millis)?;
         self.cas_lease(self.path(&active.scope)?, Some(pending.0.token), active)
@@ -426,8 +422,8 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
         &self,
         path: ObjectPath,
         expected: Option<StorageToken>,
-        lease: AuthorityLeaseV2,
-    ) -> Result<AuthorityPermitV2> {
+        lease: AuthorityLease,
+    ) -> Result<AuthorityPermit> {
         lease.validate(self.repository, &lease.scope)?;
         let bytes = encode_canonical(&lease)?;
         let outcome = self
@@ -442,7 +438,7 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
             Err(error) => {
                 if let Some(current) = self.plane.load_mutable(&path).await? {
                     if current.bytes == bytes {
-                        return Ok(AuthorityPermitV2 {
+                        return Ok(AuthorityPermit {
                             lease,
                             token: current.metadata.token,
                         });
@@ -453,12 +449,12 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
                     format!("authority lease CAS outcome is unknown: {error}"),
                 ))
             }
-            Ok(CompareExchangeOutcome::Applied(metadata)) => Ok(AuthorityPermitV2 {
+            Ok(CompareExchangeOutcome::Applied(metadata)) => Ok(AuthorityPermit {
                 lease,
                 token: metadata.token,
             }),
             Ok(CompareExchangeOutcome::Conflict(Some(current))) if current.bytes == bytes => {
-                Ok(AuthorityPermitV2 {
+                Ok(AuthorityPermit {
                     lease,
                     token: current.metadata.token,
                 })
@@ -470,10 +466,10 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
         }
     }
 
-    fn path(&self, scope: &AuthorityScopeV2) -> Result<ObjectPath> {
+    fn path(&self, scope: &AuthorityScope) -> Result<ObjectPath> {
         scope.validate()?;
         ObjectPath::new(format!(
-            "{}/authority/v2/{}/lease.cbor",
+            "{}/authority/{}/lease.cbor",
             self.prefix,
             scope.path_component()
         ))
@@ -492,7 +488,7 @@ impl<P: ObjectPlane> ShardWriterAuthorityV2<P> {
 
     fn fencing_token(
         &self,
-        scope: &AuthorityScopeV2,
+        scope: &AuthorityScope,
         writer_id: &str,
         nonce: OperationId,
         evidence: &[u8],
@@ -518,14 +514,14 @@ mod tests {
 
     #[tokio::test]
     async fn only_the_matching_branch_barrier_activates_takeover() {
-        let authority = ShardWriterAuthorityV2::new(
+        let authority = ShardWriterAuthority::new(
             Arc::new(MemoryObjectPlane::new(true)),
-            ".prolly/v2",
+            ".prolly",
             RepositoryId::from_hash([0x44; 32]),
             Duration::from_secs(60),
         )
         .unwrap();
-        let scope = AuthorityScopeV2::Branch {
+        let scope = AuthorityScope::Branch {
             name: "main".to_string(),
         };
         authority
@@ -533,7 +529,7 @@ mod tests {
             .await
             .unwrap();
         let pending = authority
-            .begin_takeover(TakeoverRequestV2 {
+            .begin_takeover(TakeoverRequest {
                 scope,
                 expected_writer: "writer-a".to_string(),
                 expected_generation: 1,
@@ -547,14 +543,14 @@ mod tests {
         let mut wrong = pending.stamp();
         wrong.generation += 1;
         let error = authority
-            .activate_after_barrier(pending.clone(), BranchRefBarrierV2::new(wrong), 2_001)
+            .activate_after_barrier(pending.clone(), BranchRefBarrier::new(wrong), 2_001)
             .await
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::PreconditionFailed);
 
         let stamp = pending.stamp();
         let active = authority
-            .activate_after_barrier(pending, BranchRefBarrierV2::new(stamp), 2_002)
+            .activate_after_barrier(pending, BranchRefBarrier::new(stamp), 2_002)
             .await
             .unwrap();
         authority.validate_active(&active, 2_003).await.unwrap();

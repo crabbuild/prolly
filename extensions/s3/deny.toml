@@ -2,13 +2,13 @@
 all-features = true
 
 [advisories]
-# `serde_cbor` is the established v1 canonical codec in prolly-map and in the
+# `serde_cbor` is the established canonical codec in prolly-map and in the
 # S3 repository's signed cursors and durable records. RUSTSEC-2021-0127 reports
 # that the crate is unmaintained; it does not report a vulnerability or
-# unsoundness. Replacing it requires a versioned, golden-fixture-backed format
-# migration so existing repositories and tokens remain readable. Keep this one
+# unsoundness. Replacing it requires a deliberately specified,
+# golden-fixture-backed durable-format transition. Keep this one
 # exception exact and reason-bearing; every other advisory remains denied.
 ignore = [
-  { id = "RUSTSEC-2021-0127", reason = "Unmaintained canonical v1 codec; replacement requires an explicit backward-compatible durable-format migration" },
+  { id = "RUSTSEC-2021-0127", reason = "Unmaintained canonical codec; replacement requires an explicit golden-fixture-backed durable-format transition" },
   { id = "RUSTSEC-2024-0436", reason = "Unmaintained macro-only transitive dependency of pinned Foyer 0.22.3; the advisory reports no vulnerability or unsoundness and cache correctness remains independent of Foyer" },
 ]

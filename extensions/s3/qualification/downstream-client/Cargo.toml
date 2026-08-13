@@ -7,10 +7,9 @@ publish = false
 
 [workspace]
 
-[features]
-default = []
-slatedb-index = ["prolly-s3-client/slatedb-index"]
-
 [dependencies]
 aws-sdk-s3 = { version = "=1.140.0", default-features = false, features = ["default-https-client", "http-1x", "rt-tokio", "sigv4a"] }
 prolly-s3-client = { path = "../../client", default-features = false }
+
+[features]
+foyer-cache = ["prolly-s3-client/foyer-cache"]

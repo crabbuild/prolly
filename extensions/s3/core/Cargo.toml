@@ -31,4 +31,3 @@ tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "time"] }
 
 [lints.rust]
 unsafe_code = "forbid"
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(prolly_s3_legacy_v1_codec)'] }

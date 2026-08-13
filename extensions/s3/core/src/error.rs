@@ -115,3 +115,12 @@ impl Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl From<prolly::Error> for Error {
+    fn from(error: prolly::Error) -> Self {
+        Self::new(
+            ErrorCode::CorruptNode,
+            format!("Prolly operation failed: {error}"),
+        )
+    }
+}

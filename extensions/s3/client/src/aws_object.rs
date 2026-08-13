@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeMap,
-    io::Write as _,
     ops::RangeInclusive,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -10,24 +9,15 @@ use std::{
 
 use aws_sdk_s3::{
     primitives::ByteStream,
-    types::{Delete, MetadataDirective, ObjectIdentifier},
+    types::{Delete, ObjectIdentifier},
     Client,
 };
 use aws_smithy_types::error::metadata::ProvideErrorMetadata;
-use aws_smithy_types::DateTime;
 use aws_types::request_id::RequestId;
-use base64::{engine::general_purpose::STANDARD, Engine as _};
-use md5::Md5;
 use prolly_s3_core::{
-    Checksums, CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode,
-    GetRequest, ImmutableFilePut, ImmutablePut, ImmutablePutOutcome, ListRequest, ObjectPath,
-    ObjectPlane, PhysicalCopy, PhysicalDelete, PhysicalFileGet, PhysicalFileGetResult,
-    PhysicalFilePut, PhysicalListEntry, PhysicalListPage, PhysicalMultipartAbort,
-    PhysicalMultipartComplete, PhysicalMultipartCreate, PhysicalMultipartFilePart,
-    PhysicalMultipartListParts, PhysicalMultipartListPartsPage, PhysicalMultipartListUploads,
-    PhysicalMultipartListUploadsPage, PhysicalMultipartPartResult, PhysicalMultipartUploadEntry,
-    PhysicalMultipartUploadPart, PhysicalMultipartUploadPartCopy, PhysicalObjectBindingV1,
-    PhysicalObjectWriteResult, PhysicalPut, PhysicalVersion, Result, RetryAdvice, StorageToken,
+    CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode, GetRequest,
+    ImmutableFilePut, ImmutablePut, ImmutablePutOutcome, ListRequest, ObjectPath, ObjectPlane,
+    PhysicalListEntry, PhysicalListPage, PhysicalVersion, Result, RetryAdvice, StorageToken,
     StoredMetadata, StoredObject,
 };
 use sha2::{Digest, Sha256};
@@ -40,18 +30,10 @@ pub struct S3OperationMetrics {
     pub get_object: u64,
     pub head_object: u64,
     pub put_object: u64,
-    pub copy_object: u64,
     pub list_objects_v2: u64,
     pub list_object_versions: u64,
     pub delete_object: u64,
     pub delete_objects: u64,
-    pub create_multipart_upload: u64,
-    pub upload_part: u64,
-    pub upload_part_copy: u64,
-    pub complete_multipart_upload: u64,
-    pub abort_multipart_upload: u64,
-    pub list_parts: u64,
-    pub list_multipart_uploads: u64,
     pub uploaded_body_bytes: u64,
     pub downloaded_body_bytes: u64,
 }
@@ -61,18 +43,10 @@ impl S3OperationMetrics {
         self.get_object
             + self.head_object
             + self.put_object
-            + self.copy_object
             + self.list_objects_v2
             + self.list_object_versions
             + self.delete_object
             + self.delete_objects
-            + self.create_multipart_upload
-            + self.upload_part
-            + self.upload_part_copy
-            + self.complete_multipart_upload
-            + self.abort_multipart_upload
-            + self.list_parts
-            + self.list_multipart_uploads
     }
 }
 
@@ -81,18 +55,10 @@ struct AtomicS3OperationMetrics {
     get_object: AtomicU64,
     head_object: AtomicU64,
     put_object: AtomicU64,
-    copy_object: AtomicU64,
     list_objects_v2: AtomicU64,
     list_object_versions: AtomicU64,
     delete_object: AtomicU64,
     delete_objects: AtomicU64,
-    create_multipart_upload: AtomicU64,
-    upload_part: AtomicU64,
-    upload_part_copy: AtomicU64,
-    complete_multipart_upload: AtomicU64,
-    abort_multipart_upload: AtomicU64,
-    list_parts: AtomicU64,
-    list_multipart_uploads: AtomicU64,
     uploaded_body_bytes: AtomicU64,
     downloaded_body_bytes: AtomicU64,
 }
@@ -103,18 +69,10 @@ impl AtomicS3OperationMetrics {
             get_object: self.get_object.load(Ordering::Relaxed),
             head_object: self.head_object.load(Ordering::Relaxed),
             put_object: self.put_object.load(Ordering::Relaxed),
-            copy_object: self.copy_object.load(Ordering::Relaxed),
             list_objects_v2: self.list_objects_v2.load(Ordering::Relaxed),
             list_object_versions: self.list_object_versions.load(Ordering::Relaxed),
             delete_object: self.delete_object.load(Ordering::Relaxed),
             delete_objects: self.delete_objects.load(Ordering::Relaxed),
-            create_multipart_upload: self.create_multipart_upload.load(Ordering::Relaxed),
-            upload_part: self.upload_part.load(Ordering::Relaxed),
-            upload_part_copy: self.upload_part_copy.load(Ordering::Relaxed),
-            complete_multipart_upload: self.complete_multipart_upload.load(Ordering::Relaxed),
-            abort_multipart_upload: self.abort_multipart_upload.load(Ordering::Relaxed),
-            list_parts: self.list_parts.load(Ordering::Relaxed),
-            list_multipart_uploads: self.list_multipart_uploads.load(Ordering::Relaxed),
             uploaded_body_bytes: self.uploaded_body_bytes.load(Ordering::Relaxed),
             downloaded_body_bytes: self.downloaded_body_bytes.load(Ordering::Relaxed),
         }
@@ -125,18 +83,10 @@ impl AtomicS3OperationMetrics {
             get_object: self.get_object.swap(0, Ordering::Relaxed),
             head_object: self.head_object.swap(0, Ordering::Relaxed),
             put_object: self.put_object.swap(0, Ordering::Relaxed),
-            copy_object: self.copy_object.swap(0, Ordering::Relaxed),
             list_objects_v2: self.list_objects_v2.swap(0, Ordering::Relaxed),
             list_object_versions: self.list_object_versions.swap(0, Ordering::Relaxed),
             delete_object: self.delete_object.swap(0, Ordering::Relaxed),
             delete_objects: self.delete_objects.swap(0, Ordering::Relaxed),
-            create_multipart_upload: self.create_multipart_upload.swap(0, Ordering::Relaxed),
-            upload_part: self.upload_part.swap(0, Ordering::Relaxed),
-            upload_part_copy: self.upload_part_copy.swap(0, Ordering::Relaxed),
-            complete_multipart_upload: self.complete_multipart_upload.swap(0, Ordering::Relaxed),
-            abort_multipart_upload: self.abort_multipart_upload.swap(0, Ordering::Relaxed),
-            list_parts: self.list_parts.swap(0, Ordering::Relaxed),
-            list_multipart_uploads: self.list_multipart_uploads.swap(0, Ordering::Relaxed),
             uploaded_body_bytes: self.uploaded_body_bytes.swap(0, Ordering::Relaxed),
             downloaded_body_bytes: self.downloaded_body_bytes.swap(0, Ordering::Relaxed),
         }
@@ -613,657 +563,6 @@ impl ObjectPlane for AwsS3ObjectPlane {
         }
         Ok(vec![DeleteOutcome::Deleted; objects.len()])
     }
-
-    async fn put_physical(&self, request: PhysicalPut) -> Result<PhysicalObjectWriteResult> {
-        self.metrics.put_object.fetch_add(1, Ordering::Relaxed);
-        let size = request.bytes.len() as u64;
-        self.metrics
-            .uploaded_body_bytes
-            .fetch_add(size, Ordering::Relaxed);
-        let checksum_sha256: [u8; 32] = Sha256::digest(&request.bytes).into();
-        let checksum_md5: [u8; 16] = Md5::digest(&request.bytes).into();
-        let logical_etag = format!("\"{}\"", hex::encode(checksum_md5));
-        let metadata = physical_metadata(
-            request.user_metadata,
-            request.repository.to_string(),
-            request.operation.to_string(),
-            request.writer_fence_generation,
-            Some(checksum_sha256),
-        )?;
-        let mut operation = self
-            .client
-            .put_object()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .set_cache_control(request.headers.cache_control)
-            .set_content_disposition(request.headers.content_disposition)
-            .set_content_encoding(request.headers.content_encoding)
-            .set_content_language(request.headers.content_language)
-            .set_content_type(request.headers.content_type)
-            .set_expires(
-                request
-                    .headers
-                    .expires_at_millis
-                    .and_then(|millis| i64::try_from(millis / 1_000).ok())
-                    .map(DateTime::from_secs),
-            )
-            .set_metadata(Some(metadata))
-            .checksum_sha256(STANDARD.encode(checksum_sha256))
-            .body(ByteStream::from(request.bytes));
-        operation = operation.metadata("prolly-logical-etag", &logical_etag);
-        let output = operation
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("PutObject physical", error))?;
-        let version_id = required_version_id("PutObject", output.version_id())?;
-        let provider_etag = output.e_tag().unwrap_or_default().to_string();
-        Ok(PhysicalObjectWriteResult {
-            binding: PhysicalObjectBindingV1::Live {
-                version_id,
-                provider_etag,
-                checksum_sha256,
-            },
-            size,
-            logical_etag,
-            checksums: Checksums {
-                md5: Some(checksum_md5),
-                sha256: Some(checksum_sha256),
-                algorithm_values: Default::default(),
-            },
-        })
-    }
-
-    async fn put_physical_file(
-        &self,
-        request: PhysicalFilePut,
-    ) -> Result<PhysicalObjectWriteResult> {
-        self.metrics.put_object.fetch_add(1, Ordering::Relaxed);
-        self.metrics
-            .uploaded_body_bytes
-            .fetch_add(request.size, Ordering::Relaxed);
-        let metadata = physical_metadata(
-            request.user_metadata,
-            request.repository.to_string(),
-            request.operation.to_string(),
-            request.writer_fence_generation,
-            Some(request.checksum_sha256),
-        )?;
-        let logical_etag = format!("\"{}\"", hex::encode(request.checksum_md5));
-        let body = ByteStream::from_path(&request.body_path)
-            .await
-            .map_err(|error| transport_error("physical spool open", error))?;
-        let mut operation = self
-            .client
-            .put_object()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .set_cache_control(request.headers.cache_control)
-            .set_content_disposition(request.headers.content_disposition)
-            .set_content_encoding(request.headers.content_encoding)
-            .set_content_language(request.headers.content_language)
-            .set_content_type(request.headers.content_type)
-            .set_expires(
-                request
-                    .headers
-                    .expires_at_millis
-                    .and_then(|millis| i64::try_from(millis / 1_000).ok())
-                    .map(DateTime::from_secs),
-            )
-            .set_metadata(Some(metadata))
-            .checksum_sha256(STANDARD.encode(request.checksum_sha256))
-            .body(body);
-        operation = operation.metadata("prolly-logical-etag", &logical_etag);
-        let output = operation
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("PutObject physical spool", error))?;
-        Ok(PhysicalObjectWriteResult {
-            binding: PhysicalObjectBindingV1::Live {
-                version_id: required_version_id("PutObject", output.version_id())?,
-                provider_etag: output.e_tag().unwrap_or_default().to_string(),
-                checksum_sha256: request.checksum_sha256,
-            },
-            size: request.size,
-            logical_etag,
-            checksums: Checksums {
-                md5: Some(request.checksum_md5),
-                sha256: Some(request.checksum_sha256),
-                algorithm_values: Default::default(),
-            },
-        })
-    }
-
-    async fn get_physical_file(&self, request: PhysicalFileGet) -> Result<PhysicalFileGetResult> {
-        self.metrics.get_object.fetch_add(1, Ordering::Relaxed);
-        let output = self
-            .client
-            .get_object()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .version_id(&request.version_id)
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("GetObject physical transfer", error))?;
-        if output.version_id() != Some(request.version_id.as_str()) {
-            return Err(Error::new(
-                ErrorCode::ProviderNotQualified,
-                "physical transfer GET omitted or changed the requested VersionId",
-            ));
-        }
-        let mut file = std::fs::File::create(&request.body_path).map_err(|error| {
-            Error::new(
-                ErrorCode::Transport,
-                format!("physical transfer spool could not be created: {error}"),
-            )
-        })?;
-        let mut body = output.body;
-        let mut size = 0_u64;
-        let mut sha256 = Sha256::new();
-        let mut md5 = Md5::new();
-        while let Some(chunk) = body.next().await {
-            let chunk = chunk.map_err(|error| transport_error("physical transfer body", error))?;
-            size = size.checked_add(chunk.len() as u64).ok_or_else(|| {
-                Error::new(
-                    ErrorCode::EntityTooLarge,
-                    "physical transfer length overflow",
-                )
-            })?;
-            file.write_all(&chunk).map_err(|error| {
-                Error::new(
-                    ErrorCode::Transport,
-                    format!("physical transfer spool write failed: {error}"),
-                )
-            })?;
-            sha256.update(&chunk);
-            md5.update(&chunk);
-        }
-        file.flush().map_err(|error| {
-            Error::new(
-                ErrorCode::Transport,
-                format!("physical transfer spool flush failed: {error}"),
-            )
-        })?;
-        self.metrics
-            .downloaded_body_bytes
-            .fetch_add(size, Ordering::Relaxed);
-        Ok(PhysicalFileGetResult {
-            size,
-            checksum_sha256: sha256.finalize().into(),
-            checksum_md5: md5.finalize().into(),
-        })
-    }
-
-    async fn copy_physical(&self, request: PhysicalCopy) -> Result<PhysicalObjectWriteResult> {
-        self.metrics.copy_object.fetch_add(1, Ordering::Relaxed);
-        let metadata = physical_metadata(
-            request.user_metadata,
-            request.repository.to_string(),
-            request.operation.to_string(),
-            request.writer_fence_generation,
-            Some(request.checksum_sha256),
-        )?;
-        let copy_source = format!(
-            "{}/{}?versionId={}",
-            self.bucket,
-            request.source.as_str(),
-            request.source_version_id
-        );
-        let output = self
-            .client
-            .copy_object()
-            .bucket(&self.bucket)
-            .key(request.destination.as_str())
-            .copy_source(copy_source)
-            .metadata_directive(MetadataDirective::Replace)
-            .set_cache_control(request.headers.cache_control)
-            .set_content_disposition(request.headers.content_disposition)
-            .set_content_encoding(request.headers.content_encoding)
-            .set_content_language(request.headers.content_language)
-            .set_content_type(request.headers.content_type)
-            .set_expires(
-                request
-                    .headers
-                    .expires_at_millis
-                    .and_then(|millis| i64::try_from(millis / 1_000).ok())
-                    .map(DateTime::from_secs),
-            )
-            .set_metadata(Some(metadata))
-            .checksum_algorithm(aws_sdk_s3::types::ChecksumAlgorithm::Sha256)
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("CopyObject physical", error))?;
-        let version_id = required_version_id("CopyObject", output.version_id())?;
-        let provider_etag = output
-            .copy_object_result()
-            .and_then(|result| result.e_tag())
-            .unwrap_or_default()
-            .to_string();
-        Ok(PhysicalObjectWriteResult {
-            binding: PhysicalObjectBindingV1::Live {
-                version_id,
-                provider_etag,
-                checksum_sha256: request.checksum_sha256,
-            },
-            size: request.size,
-            logical_etag: request.logical_etag,
-            checksums: request.checksums,
-        })
-    }
-
-    async fn delete_physical(&self, request: PhysicalDelete) -> Result<PhysicalObjectBindingV1> {
-        self.metrics.delete_object.fetch_add(1, Ordering::Relaxed);
-        let output = self
-            .client
-            .delete_object()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("DeleteObject physical", error))?;
-        if output.delete_marker() != Some(true) {
-            return Err(Error::new(
-                ErrorCode::ProviderNotQualified,
-                "DeleteObject did not create a physical delete marker",
-            ));
-        }
-        Ok(PhysicalObjectBindingV1::DeleteMarker {
-            version_id: required_version_id("DeleteObject", output.version_id())?,
-        })
-    }
-
-    async fn create_physical_multipart(&self, request: PhysicalMultipartCreate) -> Result<String> {
-        self.metrics
-            .create_multipart_upload
-            .fetch_add(1, Ordering::Relaxed);
-        let metadata = physical_metadata(
-            request.user_metadata,
-            request.repository.to_string(),
-            request.operation.to_string(),
-            request.writer_fence_generation,
-            None,
-        )?;
-        let output = self
-            .client
-            .create_multipart_upload()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .set_cache_control(request.headers.cache_control)
-            .set_content_disposition(request.headers.content_disposition)
-            .set_content_encoding(request.headers.content_encoding)
-            .set_content_language(request.headers.content_language)
-            .set_content_type(request.headers.content_type)
-            .set_expires(
-                request
-                    .headers
-                    .expires_at_millis
-                    .and_then(|millis| i64::try_from(millis / 1_000).ok())
-                    .map(DateTime::from_secs),
-            )
-            .set_metadata(Some(metadata))
-            .checksum_algorithm(aws_sdk_s3::types::ChecksumAlgorithm::Sha256)
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("CreateMultipartUpload physical", error))?;
-        output
-            .upload_id()
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string)
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::ProviderNotQualified,
-                    "CreateMultipartUpload succeeded without an upload ID",
-                )
-            })
-    }
-
-    async fn upload_physical_multipart_part(
-        &self,
-        request: PhysicalMultipartUploadPart,
-    ) -> Result<PhysicalMultipartPartResult> {
-        self.metrics.upload_part.fetch_add(1, Ordering::Relaxed);
-        let size = request.bytes.len() as u64;
-        self.metrics
-            .uploaded_body_bytes
-            .fetch_add(size, Ordering::Relaxed);
-        let checksum_sha256: [u8; 32] = Sha256::digest(&request.bytes).into();
-        let output = self
-            .client
-            .upload_part()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .upload_id(request.upload_id)
-            .part_number(i32::try_from(request.part_number).map_err(|_| {
-                Error::new(
-                    ErrorCode::InvalidRequest,
-                    "multipart part number is invalid",
-                )
-            })?)
-            .checksum_sha256(STANDARD.encode(checksum_sha256))
-            .body(ByteStream::from(request.bytes))
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("UploadPart physical", error))?;
-        let etag = output
-            .e_tag()
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::ProviderNotQualified,
-                    "UploadPart succeeded without an ETag",
-                )
-            })?;
-        if output.checksum_sha256().is_some_and(|value| {
-            STANDARD.decode(value).ok().as_deref() != Some(checksum_sha256.as_slice())
-        }) {
-            return Err(Error::new(
-                ErrorCode::ChecksumMismatch,
-                "UploadPart returned a different SHA-256 checksum",
-            ));
-        }
-        Ok(PhysicalMultipartPartResult {
-            part_number: request.part_number,
-            etag: etag.to_string(),
-            checksum_sha256: Some(checksum_sha256),
-            size,
-        })
-    }
-
-    async fn upload_physical_multipart_file_part(
-        &self,
-        request: PhysicalMultipartFilePart,
-    ) -> Result<PhysicalMultipartPartResult> {
-        self.metrics.upload_part.fetch_add(1, Ordering::Relaxed);
-        self.metrics
-            .uploaded_body_bytes
-            .fetch_add(request.size, Ordering::Relaxed);
-        let body = ByteStream::from_path(&request.body_path)
-            .await
-            .map_err(|error| transport_error("physical multipart spool open", error))?;
-        let output = self
-            .client
-            .upload_part()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .upload_id(request.upload_id)
-            .part_number(i32::try_from(request.part_number).map_err(|_| {
-                Error::new(
-                    ErrorCode::InvalidRequest,
-                    "multipart part number is invalid",
-                )
-            })?)
-            .checksum_sha256(STANDARD.encode(request.checksum_sha256))
-            .body(body)
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("UploadPart physical spool", error))?;
-        let etag = output
-            .e_tag()
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::ProviderNotQualified,
-                    "UploadPart succeeded without an ETag",
-                )
-            })?;
-        if output.checksum_sha256().is_some_and(|value| {
-            STANDARD.decode(value).ok().as_deref() != Some(request.checksum_sha256.as_slice())
-        }) {
-            return Err(Error::new(
-                ErrorCode::ChecksumMismatch,
-                "UploadPart returned a different SHA-256 checksum",
-            ));
-        }
-        Ok(PhysicalMultipartPartResult {
-            part_number: request.part_number,
-            etag: etag.to_string(),
-            checksum_sha256: Some(request.checksum_sha256),
-            size: request.size,
-        })
-    }
-
-    async fn upload_physical_multipart_part_copy(
-        &self,
-        request: PhysicalMultipartUploadPartCopy,
-    ) -> Result<PhysicalMultipartPartResult> {
-        self.metrics
-            .upload_part_copy
-            .fetch_add(1, Ordering::Relaxed);
-        let copy_source = format!(
-            "{}/{}?versionId={}",
-            self.bucket,
-            request.source.as_str(),
-            request.source_version_id
-        );
-        let mut operation = self
-            .client
-            .upload_part_copy()
-            .bucket(&self.bucket)
-            .key(request.destination.as_str())
-            .upload_id(request.upload_id)
-            .part_number(i32::try_from(request.part_number).map_err(|_| {
-                Error::new(
-                    ErrorCode::InvalidRequest,
-                    "multipart part number is invalid",
-                )
-            })?)
-            .copy_source(copy_source);
-        if let Some(range) = request.range.as_ref() {
-            operation = operation.copy_source_range(format_range(range));
-        }
-        let output = operation
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("UploadPartCopy physical", error))?;
-        let result = output.copy_part_result().ok_or_else(|| {
-            Error::new(
-                ErrorCode::ProviderNotQualified,
-                "UploadPartCopy succeeded without a result",
-            )
-        })?;
-        let checksum = result.checksum_sha256().ok_or_else(|| {
-            Error::new(
-                ErrorCode::ProviderNotQualified,
-                "UploadPartCopy omitted the requested SHA-256 checksum",
-            )
-        })?;
-        let checksum_sha256 = STANDARD
-            .decode(checksum)
-            .ok()
-            .and_then(|bytes| bytes.try_into().ok())
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::ProviderNotQualified,
-                    "UploadPartCopy returned an invalid SHA-256 checksum",
-                )
-            })?;
-        Ok(PhysicalMultipartPartResult {
-            part_number: request.part_number,
-            etag: result.e_tag().unwrap_or_default().to_string(),
-            checksum_sha256: Some(checksum_sha256),
-            size: request.size,
-        })
-    }
-
-    async fn complete_physical_multipart(
-        &self,
-        request: PhysicalMultipartComplete,
-    ) -> Result<PhysicalObjectWriteResult> {
-        self.metrics
-            .complete_multipart_upload
-            .fetch_add(1, Ordering::Relaxed);
-        let parts = request
-            .parts
-            .iter()
-            .map(|part| {
-                Ok(aws_sdk_s3::types::CompletedPart::builder()
-                    .part_number(i32::try_from(part.part_number).map_err(|_| {
-                        Error::new(
-                            ErrorCode::InvalidRequest,
-                            "multipart part number is invalid",
-                        )
-                    })?)
-                    .e_tag(&part.etag)
-                    .checksum_sha256(STANDARD.encode(part.checksum_sha256))
-                    .build())
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let output = self
-            .client
-            .complete_multipart_upload()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .upload_id(request.upload_id)
-            .multipart_upload(
-                aws_sdk_s3::types::CompletedMultipartUpload::builder()
-                    .set_parts(Some(parts))
-                    .build(),
-            )
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("CompleteMultipartUpload physical", error))?;
-        let version_id = required_version_id("CompleteMultipartUpload", output.version_id())?;
-        let provider_etag = output.e_tag().unwrap_or_default().to_string();
-        Ok(PhysicalObjectWriteResult {
-            binding: PhysicalObjectBindingV1::Live {
-                version_id,
-                provider_etag: provider_etag.clone(),
-                checksum_sha256: request.checksum_sha256,
-            },
-            size: request.size,
-            logical_etag: format!("\"{}\"", hex::encode(request.checksum_md5)),
-            checksums: Checksums {
-                md5: Some(request.checksum_md5),
-                sha256: Some(request.checksum_sha256),
-                algorithm_values: Default::default(),
-            },
-        })
-    }
-
-    async fn abort_physical_multipart(&self, request: PhysicalMultipartAbort) -> Result<()> {
-        self.metrics
-            .abort_multipart_upload
-            .fetch_add(1, Ordering::Relaxed);
-        self.client
-            .abort_multipart_upload()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .upload_id(request.upload_id)
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("AbortMultipartUpload physical", error))?;
-        Ok(())
-    }
-
-    async fn list_physical_multipart_parts(
-        &self,
-        request: PhysicalMultipartListParts,
-    ) -> Result<PhysicalMultipartListPartsPage> {
-        self.metrics.list_parts.fetch_add(1, Ordering::Relaxed);
-        let output = self
-            .client
-            .list_parts()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .upload_id(request.upload_id)
-            .part_number_marker(request.after_part_number.to_string())
-            .max_parts(i32::try_from(request.limit.min(1_000)).unwrap_or(1_000))
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("ListParts physical", error))?;
-        let parts = output
-            .parts()
-            .iter()
-            .map(|part| {
-                let part_number = part
-                    .part_number()
-                    .and_then(|value| u32::try_from(value).ok())
-                    .ok_or_else(|| {
-                        Error::new(
-                            ErrorCode::ProviderNotQualified,
-                            "ListParts returned an invalid part number",
-                        )
-                    })?;
-                let checksum_sha256 = part
-                    .checksum_sha256()
-                    .map(|checksum| {
-                        STANDARD
-                            .decode(checksum)
-                            .ok()
-                            .and_then(|bytes| bytes.try_into().ok())
-                            .ok_or_else(|| {
-                                Error::new(
-                                    ErrorCode::ProviderNotQualified,
-                                    "ListParts returned an invalid part SHA-256 checksum",
-                                )
-                            })
-                    })
-                    .transpose()?;
-                Ok(PhysicalMultipartPartResult {
-                    part_number,
-                    etag: part.e_tag().unwrap_or_default().to_string(),
-                    checksum_sha256,
-                    size: part
-                        .size()
-                        .and_then(|value| u64::try_from(value).ok())
-                        .ok_or_else(|| {
-                            Error::new(
-                                ErrorCode::ProviderNotQualified,
-                                "ListParts omitted a valid part size",
-                            )
-                        })?,
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        Ok(PhysicalMultipartListPartsPage {
-            parts,
-            next_part_number: output
-                .next_part_number_marker()
-                .and_then(|value| value.parse().ok()),
-        })
-    }
-
-    async fn list_physical_multipart_uploads(
-        &self,
-        request: PhysicalMultipartListUploads,
-    ) -> Result<PhysicalMultipartListUploadsPage> {
-        self.metrics
-            .list_multipart_uploads
-            .fetch_add(1, Ordering::Relaxed);
-        let output = self
-            .client
-            .list_multipart_uploads()
-            .bucket(&self.bucket)
-            .prefix(request.prefix)
-            .set_key_marker(request.key_marker)
-            .set_upload_id_marker(request.upload_id_marker)
-            .max_uploads(i32::try_from(request.limit.min(1_000)).unwrap_or(1_000))
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("ListMultipartUploads physical", error))?;
-        let uploads = output
-            .uploads()
-            .iter()
-            .filter_map(|upload| {
-                let path = ObjectPath::new(upload.key()?).ok()?;
-                let upload_id = upload.upload_id()?.to_string();
-                let initiated_at_millis = upload
-                    .initiated()
-                    .and_then(|value| u64::try_from(value.secs()).ok())
-                    .and_then(|seconds| seconds.checked_mul(1_000))
-                    .unwrap_or_default();
-                Some(PhysicalMultipartUploadEntry {
-                    path,
-                    upload_id,
-                    initiated_at_millis,
-                })
-            })
-            .collect();
-        Ok(PhysicalMultipartListUploadsPage {
-            uploads,
-            next_key_marker: output.next_key_marker().map(ToString::to_string),
-            next_upload_id_marker: output.next_upload_id_marker().map(ToString::to_string),
-        })
-    }
 }
 
 impl AwsS3ObjectPlane {
@@ -1360,49 +659,6 @@ impl AwsS3ObjectPlane {
             continuation,
         })
     }
-}
-
-fn physical_metadata(
-    user_metadata: std::collections::BTreeMap<String, String>,
-    repository: String,
-    operation: String,
-    writer_fence_generation: u64,
-    checksum_sha256: Option<[u8; 32]>,
-) -> Result<std::collections::HashMap<String, String>> {
-    if user_metadata
-        .keys()
-        .any(|key| key.to_ascii_lowercase().starts_with("prolly-"))
-    {
-        return Err(Error::new(
-            ErrorCode::InvalidRequest,
-            "user metadata keys beginning with prolly- are reserved",
-        ));
-    }
-    let mut metadata = user_metadata
-        .into_iter()
-        .collect::<std::collections::HashMap<_, _>>();
-    metadata.insert("prolly-repository-id".to_string(), repository);
-    metadata.insert("prolly-operation-id".to_string(), operation);
-    metadata.insert(
-        "prolly-writer-fence".to_string(),
-        writer_fence_generation.to_string(),
-    );
-    if let Some(checksum_sha256) = checksum_sha256 {
-        metadata.insert("prolly-sha256".to_string(), hex::encode(checksum_sha256));
-    }
-    Ok(metadata)
-}
-
-fn required_version_id(operation: &str, version_id: Option<&str>) -> Result<String> {
-    version_id
-        .filter(|value| !value.is_empty() && *value != "null")
-        .map(ToString::to_string)
-        .ok_or_else(|| {
-            Error::new(
-                ErrorCode::ProviderNotQualified,
-                format!("{operation} succeeded without a S3 VersionId"),
-            )
-        })
 }
 
 fn format_range(range: &RangeInclusive<u64>) -> String {

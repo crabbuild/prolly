@@ -160,7 +160,6 @@ mod tests {
     fn key() -> NodeCacheKey {
         NodeCacheKey {
             repository: RepositoryId::from_hash([1; 32]),
-            protocol_version: 1,
             tree_format: TreeFormatDigest::from_hash([2; 32]),
             cid: Cid([3; 32]),
         }

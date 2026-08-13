@@ -10,7 +10,7 @@
     </style>
   </defs>
   <rect width="1180" height="680" fill="#0f172a"/><rect width="1180" height="680" fill="url(#grid)"/>
-  <text x="52" y="50" class="title">Lazy node index v2</text><text x="52" y="76" class="sub">One small head · immutable Prolly pages · O(tree depth) lazy lookup</text>
+  <text x="52" y="50" class="title">Lazy node index</text><text x="52" y="76" class="sub">One small head · immutable Prolly pages · O(tree depth) lazy lookup</text>
 
   <text x="52" y="124" class="label">LOOKUP INPUT</text>
   <g filter="url(#shadow)"><rect x="52" y="142" width="210" height="76" rx="12" fill="#172554" stroke="#60a5fa"/><text x="72" y="171" class="boxTitle">Node CID</text><text x="72" y="196" class="mono">8f:2a:91:…</text></g>

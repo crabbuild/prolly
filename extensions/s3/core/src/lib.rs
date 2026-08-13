@@ -3,88 +3,66 @@
 mod authority;
 mod cache;
 mod codec;
-mod commit_session_v2;
+mod commit_session;
 mod control_versions;
 mod error;
-mod journal_indexes_v2;
-mod merge_v2;
+mod journal_indexes;
+mod merge;
 mod model;
 mod object_plane;
-mod operation_index_v2;
-mod payload_v2;
-mod publication_v2;
-mod ref_catalog_v2;
+mod operation_index;
+mod payload;
+mod publication;
+mod ref_catalog;
 mod repository;
-mod repository_v2;
 mod runtime;
 mod store;
-mod tag_v2;
+mod tag;
 
 pub use authority::{
-    AuthorityLeaseStateV2, AuthorityLeaseV2, AuthorityPermitV2, AuthorityScopeV2, AuthorityStampV2,
-    BranchRefBarrierV2, PendingAuthorityV2, ShardWriterAuthorityV2, TakeoverRequestV2,
+    AuthorityLease, AuthorityLeaseState, AuthorityPermit, AuthorityScope, AuthorityStamp,
+    BranchRefBarrier, PendingAuthority, ShardWriterAuthority, TakeoverRequest,
 };
 pub use cache::{MemoryNodeCache, NodeCache, NodeCacheError, NodeCacheKey};
 pub use codec::{decode_canonical, encode_canonical};
-pub use commit_session_v2::CommitSessionStoreV2;
+pub use commit_session::CommitSessionStore;
 pub use control_versions::{
     classify_mutable_control_path, ControlVersionCompactionReport, MutableControlKind,
     MutableControlObserver, MutableControlStore, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
-pub use journal_indexes_v2::{
-    ImportedJournalIndexStateV2, JournalDerivedIndexesV2, JournalIndexAdvanceReportV2,
-    JournalIndexRebuildCleanupV2, JournalIndexRebuildCursorV2, JournalIndexRebuildPhaseV2,
-    JournalIndexRebuildStepV2, DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
+pub use journal_indexes::{
+    JournalDerivedIndexes, JournalIndexAdvanceReport, JournalIndexRebuildCleanup,
+    JournalIndexRebuildCursor, JournalIndexRebuildPhase, JournalIndexRebuildStep,
+    DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS,
 };
-pub use merge_v2::{
-    MergeAdvancePageV2, MergeBaseCursorV2, MergeBasePageV2, MergeChangeCursorV2, MergeChangePageV2,
-    MergeChangeV2, MergeCleanupCursorV2, MergeCleanupPageV2, MergeConflictCursorV2,
-    MergeConflictPageV2, MergeConflictV2, MergeCursorV2, MergePhaseV2, MergePolicyV2,
-    MergeReceiptV2,
+pub use merge::{
+    MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChange, MergeChangeCursor,
+    MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflict, MergeConflictCursor,
+    MergeConflictPage, MergeCursor, MergePhase, MergePolicy, MergeReceipt,
 };
 pub use model::*;
 pub use object_plane::*;
-pub use operation_index_v2::{
-    OperationIndexAdvanceReportV2, OperationIndexRebuildCursorV2, OperationIndexRebuildStepV2,
-    SegmentedOperationIndexV2, DEFAULT_OPERATION_INDEX_LEAF_ENTRIES,
+pub use operation_index::{
+    OperationIndexAdvanceReport, OperationIndexRebuildCursor, OperationIndexRebuildStep,
+    SegmentedOperationIndex, DEFAULT_OPERATION_INDEX_LEAF_ENTRIES,
     DEFAULT_OPERATION_INDEX_MAX_UNINDEXED_EVENTS, DEFAULT_OPERATION_INDEX_MERGE_FANOUT,
 };
-pub use payload_v2::ImmutablePayloadStoreV2;
+pub use payload::ImmutablePayloadStore;
 pub use prolly::Cid;
-pub use publication_v2::{
-    AppliedBranchBarrierV2, CommitPublicationV2, LoadedRefV2, PublicationJournalCursorV2,
-    PublicationJournalEntryV2, PublicationJournalPageV2, ShardedBranchPublisherV2,
+pub use publication::{
+    AppliedBranchBarrier, CommitPublication, LoadedRef, PublicationJournalCursor,
+    PublicationJournalEntry, PublicationJournalPage, ShardedBranchPublisher,
 };
-pub use ref_catalog_v2::{
-    ref_catalog_shard_v2, CatalogRefV2, RefCatalogCursorV2, RefCatalogPageV2, RefCatalogUpdateV2,
-    ShardedRefCatalogV2, REF_CATALOG_SHARDS_V2,
+pub use ref_catalog::{
+    ref_catalog_shard, CatalogRef, RefCatalogCursor, RefCatalogPage, RefCatalogUpdate,
+    ShardedRefCatalog, REF_CATALOG_SHARDS,
 };
 pub use repository::{
-    validate_branch, version_cursor_after_key, BranchHead, BranchPage, BranchReflogCursor,
-    BranchReflogPage, CatalogBranchPage, CatalogTagPage, CloneReport, CommitClosureCleanupReport,
-    CommitClosureCursor, CommitClosurePage, CommitGraphAdvanceReport, CommitPage,
-    FirstParentCursor, FirstParentPage, FsckReport, GcDryRun, GcEpochStepReport, GcSweepReport,
-    HistoryCursor, IndexFreshness, InternalNodePrewarmReport, MergeConflict, MergePlan,
-    MergePolicy, NodeIndexAdvanceReport, NodeIndexMaintenance, ObjectDiff, ObjectDiffCursor,
-    ObjectDiffPage, ObjectSummary, PhysicalTransferCursor, PhysicalTransferPage,
-    RefCatalogAdvanceReport, RefMoveReceipt, RefVersionCompactionReport, RepairReport, Repository,
-    RepositoryOptions, RepositoryPerformanceSnapshot, ResumableFsckCursor, ResumableFsckPage,
-    ResumableFsckPhase, RetentionPinPage, ShardAuthorityMaintenance, SyncReport, Tag, TagPage,
-    TagReflogPage, TraversalBudget, V1ToV2MigrationCursor, V1ToV2MigrationPage,
-    V1ToV2MigrationPhase, VersionSummary,
+    validate_branch, BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth,
+    BranchIndexMaintenance, CommitReceipt, ObjectData, ObjectSummary, RefCatalogRepairPage,
+    Repository, RepositoryOptions, ShardAuthorityMaintenance, Tag, TagCatalogPage, VersionSummary,
 };
-pub use repository_v2::{
-    BranchCatalogPageV2, BranchHeadV2, BranchIndexAdvanceReportV2, BranchIndexHealthV2,
-    BranchIndexMaintenance, CommitReceiptV2, ImportedCommitReceiptV2, ObjectDataV2,
-    ObjectSummaryV2, RefCatalogRepairPageV2, RepositoryV2, RepositoryV2Options, TagCatalogPageV2,
-    TagV2, VersionSummaryV2,
-};
-#[deprecated(
-    since = "0.1.0",
-    note = "use ShardAuthorityMaintenance; repository writes use branch/system authority scopes"
-)]
-pub type WriterLeaseMaintenance = ShardAuthorityMaintenance;
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};
-pub use tag_v2::{LoadedTagV2, TagStoreV2};
+pub use tag::{LoadedTag, TagStore};

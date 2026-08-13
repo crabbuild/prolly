@@ -2,9 +2,11 @@ use std::{sync::Arc, time::Duration};
 
 use aws_config::BehaviorVersion;
 use aws_credential_types::Credentials;
-use aws_sdk_s3::primitives::ByteStream;
 use aws_types::region::Region;
-use prolly_s3_client::{Client, HmacAttestationSigner, HmacTokenSigner, ProviderIdentity};
+use prolly_s3_client::{
+    core::{MergePhase, MergePolicy, ProviderPerKeyVersionLimit},
+    Client, HmacAttestationSigner, ProviderIdentity,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -12,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let access_key = environment("PROLLY_RUSTFS_ACCESS_KEY", "prollyadmin");
     let secret_key = environment("PROLLY_RUSTFS_SECRET_KEY", "prolly-local-secret-change-me");
     let bucket = environment("PROLLY_RUSTFS_BUCKET", "prolly-versioned-s3-demo");
-    let repository_prefix = environment("PROLLY_S3_DEMO_PREFIX", ".prolly-demo/v1");
+    let repository_prefix = environment("PROLLY_S3_DEMO_PREFIX", ".prolly-demo");
 
     let aws_config = aws_sdk_s3::Config::builder()
         .behavior_version(BehaviorVersion::latest())
@@ -30,111 +32,69 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let aws = aws_sdk_s3::Client::from_conf(aws_config);
     ensure_bucket(&aws, &bucket).await?;
 
-    // These fixed keys are for the loopback demonstration only. Production
-    // deployments load independent provider-attestation and cursor key rings.
     let client = Client::builder()
-        .aws_client(aws.clone())
+        .aws_client(aws)
         .bucket(&bucket)
         .repository_prefix(&repository_prefix)
-        .default_branch("main")
         .writer("rustfs-versioned-bucket-example")
-        .provider_identity(ProviderIdentity::s3_compatible(
-            endpoint.as_str(),
-            "us-east-1",
-        ))
+        .provider_identity(ProviderIdentity::s3_compatible(&endpoint, "us-east-1"))
         .provider_attestation_validity(Duration::from_secs(24 * 60 * 60))
         .attestation_signer(Arc::new(HmacAttestationSigner::single(
             "demo-provider-key",
             vec![0x41; 32],
         )?))
-        .token_signer(Arc::new(HmacTokenSigner::single(
-            "demo-cursor-key",
-            vec![0x42; 32],
-        )?))
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
         .initialize()
         .await?;
 
-    let before = client.head_commit().await?;
     let first = client
-        .put_object()
-        .bucket(&bucket)
-        .key("demo/greeting.txt")
-        .body(ByteStream::from_static(b"hello from version one\n"))
-        .content_type("text/plain")
-        .send()
+        .put_object("demo/greeting.txt", b"hello from main\n".to_vec())
         .await?;
-    let second = client
-        .put_object()
-        .bucket(&bucket)
-        .key("demo/greeting.txt")
-        .body(ByteStream::from_static(b"hello from version two\n"))
-        .content_type("text/plain")
-        .send()
+    client.create_branch("feature", Some(first.id)).await?;
+
+    let feature = client.for_branch("feature")?;
+    feature
+        .put_object("demo/feature.txt", b"created on feature\n".to_vec())
+        .await?;
+    feature
+        .put_object("demo/greeting.txt", b"hello from feature\n".to_vec())
+        .await?;
+    client
+        .put_object("demo/main.txt", b"created on main\n".to_vec())
         .await?;
 
-    // Reconstruct the adapter as a separate process would. Ordinary open
-    // verifies the persisted format and provider attestation without probes.
-    let client = Client::builder()
-        .aws_client(aws)
-        .bucket(&bucket)
-        .repository_prefix(&repository_prefix)
-        .default_branch("main")
-        .writer("rustfs-versioned-bucket-example-reopened")
-        .provider_identity(ProviderIdentity::s3_compatible(
-            endpoint.as_str(),
-            "us-east-1",
-        ))
-        .attestation_signer(Arc::new(HmacAttestationSigner::single(
-            "demo-provider-key",
-            vec![0x41; 32],
-        )?))
-        .token_signer(Arc::new(HmacTokenSigner::single(
-            "demo-cursor-key",
-            vec![0x42; 32],
-        )?))
-        .open()
+    let mut merge = client
+        .start_merge(
+            "feature",
+            None,
+            MergePolicy::Theirs,
+            "merge feature into main",
+        )
         .await?;
-    if client.head_commit().await? != second.snapshot {
-        return Err("reopened repository did not retain the published head".into());
+    while merge.phase != MergePhase::ReadyToPublish {
+        merge = client.advance_merge(&merge, 100).await?.cursor;
     }
 
+    let changes = client.merge_changes_page(&merge, None, 100).await?.changes;
+    let receipt = client.publish_merge(&merge).await?;
     let historical = client
-        .at(first.snapshot)
+        .get_object_at(first.id, "demo/greeting.txt")
         .await?
-        .get_object()
-        .bucket(&bucket)
-        .key("demo/greeting.txt")
-        .send()
-        .await?
-        .output
-        .body
-        .collect()
-        .await?
-        .into_bytes();
-    if historical.as_ref() != b"hello from version one\n" {
-        return Err("historical snapshot returned unexpected content".into());
-    }
-
-    let listing = client
-        .list_objects_v2()
-        .bucket(&bucket)
-        .prefix("demo/")
-        .send()
-        .await?;
-    let (changes, truncated) = client.diff_page(before, second.snapshot, None, 100).await?;
-    if truncated || changes.len() != 1 {
-        return Err("expected one complete logical-key diff".into());
-    }
-    let fsck = client.fsck().await?;
+        .ok_or("historical object is missing")?;
+    let (_, current, truncated) = client.list_objects("demo/", None, 100).await?;
 
     println!("bucket={bucket}");
     println!("repository_prefix={repository_prefix}");
-    println!("first_commit={}", first.snapshot);
-    println!("second_commit={}", second.snapshot);
-    println!("listed_objects={}", listing.output.contents().len());
-    println!("diff_entries={}", changes.len());
-    println!("fsck_commits={}", fsck.commits);
-    println!("fsck_logical_versions={}", fsck.logical_versions);
+    println!("first_commit={}", first.id);
+    println!("feature_changes={}", changes.len());
+    println!("merge_commit={}", receipt.id);
+    println!("merge_changed_keys={}", receipt.changed_keys);
+    println!(
+        "historical_greeting={}",
+        String::from_utf8_lossy(&historical.bytes).trim()
+    );
+    println!("current_objects={}", current.len());
+    println!("listing_truncated={truncated}");
     Ok(())
 }
 
@@ -150,10 +110,9 @@ async fn ensure_bucket(
         Ok(_) => {}
         Err(error) => {
             let description = format!("{error:?}");
-            if description.contains("BucketAlreadyOwnedByYou")
-                || description.contains("BucketAlreadyExists")
+            if !description.contains("BucketAlreadyOwnedByYou")
+                && !description.contains("BucketAlreadyExists")
             {
-            } else {
                 return Err(error.into());
             }
         }

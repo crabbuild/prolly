@@ -1,117 +1,52 @@
-# Prolly S3 extension
+# Prolly S3
 
-This extension turns a versioned S3 bucket into a file repository with commits,
-snapshots, branches, tags, diffs, merges, restore, and exact historical reads.
-It is a thin wrapper around Prolly: file bytes stay as whole physical S3 object
-versions at their original keys, while Prolly records which exact `VersionId`
-belongs to each logical commit.
+Prolly S3 adds repository history to a versioned S3 bucket. It stores each file
+as one immutable, content-addressed S3 object and stores directory state,
+commits, branches, tags, and indexes as Prolly trees.
 
-There is one architecture. The former repository-chunked storage profile and
-its compatibility surface have been removed.
+The client is the authoritative writer for its repository prefix. Applications
+must not mutate repository data behind it.
 
 ![Prolly S3 architecture](diagram/prolly-s3-architecture.svg)
 
-## What a write does
+## What it provides
 
-A warm single-object write uses four foreground S3 operations:
+- whole-file `put`, `get`, delete, list, and historical reads;
+- atomic multi-file commits;
+- branches, tags, diffs, and resumable structural merges;
+- branch-local writer fencing and concurrent publication across branches;
+- immutable payload and node caching, including optional Foyer caching;
+- operation-ID reconciliation for ambiguous publication responses;
+- bounded journal, operation, and ref-catalog indexes.
 
-1. Validate the branch-scoped writer-authority permit.
-2. Upload the whole file to its original key and capture its S3 `VersionId`.
-3. Upload one immutable commit envelope containing the logical commit and its
-   new Prolly nodes.
-4. Compare-and-exchange the branch ref; this is the visibility point.
+## Start here
 
-![Four-call write path](diagram/prolly-s3-write-path.svg)
+- [Client guide](client/README.md) — setup and runnable Rust examples
+- [API guide](API.md) — task-to-method reference
+- [Architecture](PROLLY-S3-DESIGN.md) — data model and write/read paths
+- [Cache and scale design](CACHE-AND-SCALE-DESIGN.md)
+- [Operations](OPERATIONS.md)
+- [Qualification](QUALIFICATION.md)
+- [Durable paths](spec/prolly-s3/paths.md)
+- [State machines](spec/prolly-s3/state-machines.md)
 
-No content chunks, content manifests, durable staging workspaces, or post-CAS
-readback are created. A two-object atomic commit uses five calls: one authority
-validation, two parallelizable payload writes, one commit envelope, and one
-branch-ref CAS. For bulk ingestion, `Client::ingest_objects` is the recommended
-path and publishes up to 100 whole files per commit by default.
-
-## Authority model
-
-- Prolly is the logical authority. Applications must read and write through
-  this client.
-- The bucket must have physical versioning enabled.
-- The wrapper must be the exclusive writer for managed object keys.
-- Each branch has one fenced writer owner at a time. Different services may
-  own different branches and publish concurrently; only same-branch commit
-  construction and ref publication are serialized.
-- Reads always use the exact S3 `VersionId` recorded by the selected Prolly
-  commit. A raw `GetObject` without `version_id` is not a canonical read.
-- Bucket lifecycle rules must not expire versions managed by the repository.
-
-## Crates
-
-- `prolly-s3-client`: AWS SDK-shaped application API and S3 transport.
-- `prolly-s3-core`: provider-neutral repository engine and object-plane trait.
-
-See [client/README.md](client/README.md) for setup and concrete API examples,
-[PROLLY-S3-DESIGN.md](PROLLY-S3-DESIGN.md) for the protocol,
-[CACHE-AND-SCALE-DESIGN.md](CACHE-AND-SCALE-DESIGN.md) for the implemented v2
-cache/cardinality architecture and its pending AWS scale gates,
-and [OPERATIONS.md](OPERATIONS.md) for deployment constraints.
-
-The frozen, language-neutral contract is
-[Prolly S3 Protocol v1](spec/prolly-s3/v1/README.md). It
-includes CDDL, deterministic CBOR and hashing rules, the physical S3 layout,
-state machines, a Smithy semantic API, and executable conformance vectors for
-implementing compatible Java, Go, TypeScript, and other clients.
-
-## Local RustFS verification
-
-The checked-in Compose file runs a versioning-capable RustFS endpoint:
+Run the RustFS example:
 
 ```bash
 docker compose -f extensions/s3/docker-compose.rustfs.yml up -d
-
-extensions/s3/scripts/verify_rustfs_aws_cli.sh
-
-PROLLY_S3_RUSTFS=1 \
-  cargo test --manifest-path extensions/s3/Cargo.toml \
-  -p prolly-s3-client --test rustfs_repository -- --nocapture
+cargo run --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --example rustfs_versioned_bucket
 ```
 
-The integration tests enforce these warm-path budgets:
+## Boundaries
 
-| Operation | Foreground S3 calls |
-|---|---:|
-| 64 KiB whole-object put | 4 |
-| Two-object atomic commit | 5 |
-| Merge or restore | 3 |
-| Multipart with `N` parts | `N + 6` |
-| Warm current or historical read | 1 |
-| Bulk ingest with 100 files/commit | 1.02 per file |
+This implementation deliberately does not chunk file bodies. One logical file
+is one immutable payload object, so each file must fit the configured repository
+limit and the provider's single-`PutObject` limit. Use commit sessions to batch
+many files, not to split one file.
 
-The core contract also exercises 1, 8, and 32 concurrent callers and requires
-four calls per completed whole-object write. The RustFS probes include 32
-concurrent 64 KiB writes and an ignored-by-default 10K hot-branch regression
-gate that validates the complete logical key set and operation-ID
-reconciliation.
-
-The local 10K batch gate also enforces less than 1.5× uploaded-byte
-amplification and verifies that a closed/reopened Foyer cache lists all 10K
-files with zero node-range reads.
-
-## Current limits
-
-- The client is not a wire-compatible S3 proxy; it is an in-process Rust API.
-- Managed keys cannot be modified by another S3 client.
-- Physical S3 `VersionId` values are provider-local and are rebound during clone,
-  fetch, push, repair, or restore to another bucket.
-- Atomic commit sessions buffer staged bodies in process until publication;
-  core publication bounds concurrent payload requests.
-- Multipart upload handles are self-contained. To resume after process loss,
-  persist each part's ETag, SHA-256, and size plus the whole-object checksums.
-- Directory buckets and buckets with suspended versioning are unsupported.
-- AWS latency, throttling, request-cost, hot-branch, and million-key release
-  gates remain to be qualified. See [QUALIFICATION.md](QUALIFICATION.md).
-
-## Development checks
-
-```bash
-cargo fmt --manifest-path extensions/s3/Cargo.toml --all -- --check
-cargo check --manifest-path extensions/s3/Cargo.toml --workspace --all-features
-cargo test --manifest-path extensions/s3/Cargo.toml --workspace --all-features
-```
+The repository can scale its immutable trees and history without a fixed
+cardinality ceiling, but “unlimited” is not literal: provider quotas, request
+cost, latency, cache size, branch contention, and retained unreachable objects
+remain operational limits. Garbage collection and cross-repository
+backup/restore are not currently exposed as production APIs.
