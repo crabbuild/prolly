@@ -291,6 +291,49 @@ pub struct RestorePage {
     pub complete: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum RepairPhase {
+    CopySource,
+    DeleteDestinationOnly,
+    Complete,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RepairReport {
+    pub scanned_source_objects: u64,
+    pub copied_objects: u64,
+    pub copied_bytes: u64,
+    pub scanned_destination_objects: u64,
+    pub deleted_objects: u64,
+    pub published_commits: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RepairCursor {
+    pub source_repository: crate::RepositoryId,
+    pub destination_repository: crate::RepositoryId,
+    pub source_branch: String,
+    pub destination_branch: String,
+    pub source_snapshot: CommitId,
+    pub destination_snapshot: CommitId,
+    pub expected_head: CommitId,
+    pub source_after: Option<Vec<u8>>,
+    pub destination_after: Option<Vec<u8>>,
+    pub phase: RepairPhase,
+    pub batch: crate::BatchId,
+    pub checkpoint_sequence: u64,
+    pub message: String,
+    pub report: RepairReport,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RepairPage {
+    pub cursor: RepairCursor,
+    pub processed: usize,
+    pub receipt: Option<CommitReceipt>,
+    pub complete: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchHead {
     pub name: String,
@@ -2726,6 +2769,296 @@ impl<P: ObjectPlane> Repository<P> {
             complete: next.phase == FsckPhase::Complete,
             cursor: next,
             processed,
+        })
+    }
+
+    /// Start a logical source-assisted repair. Provider-specific bindings are
+    /// never copied: payload bytes are verified by the source and rebound by
+    /// the destination into new logical versions.
+    pub async fn start_repair_from<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        source_branch: &str,
+        source_snapshot: CommitId,
+        destination_branch: &str,
+        expected_head: CommitId,
+        message: impl Into<String>,
+    ) -> Result<RepairCursor> {
+        validate_branch(source_branch)?;
+        validate_branch(destination_branch)?;
+        let message = message.into();
+        if message.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "repair message must not be empty",
+            ));
+        }
+        source.locator.register(source_branch)?;
+        source.require_branch_indexes_ready(source_branch).await?;
+        source.load_commit_object(source_snapshot).await?;
+        self.locator.register(destination_branch)?;
+        self.require_branch_indexes_ready(destination_branch)
+            .await?;
+        if self.head(destination_branch).await? != expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "destination head does not match repair expectation",
+            ));
+        }
+        let checkpoint = self
+            .begin_durable_commit_session(destination_branch, message.clone(), 24 * 60 * 60 * 1_000)
+            .await?;
+        Ok(RepairCursor {
+            source_repository: source.format.repository_id,
+            destination_repository: self.format.repository_id,
+            source_branch: source_branch.to_string(),
+            destination_branch: destination_branch.to_string(),
+            source_snapshot,
+            destination_snapshot: expected_head,
+            expected_head,
+            source_after: None,
+            destination_after: None,
+            phase: RepairPhase::CopySource,
+            batch: checkpoint.session.id,
+            checkpoint_sequence: checkpoint.sequence,
+            message,
+            report: RepairReport::default(),
+        })
+    }
+
+    pub async fn advance_repair_from<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &RepairCursor,
+        max_steps: usize,
+    ) -> Result<RepairPage> {
+        if cursor.source_repository != source.format.repository_id
+            || cursor.destination_repository != self.format.repository_id
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "repair cursor belongs to another source or destination",
+            ));
+        }
+        if cursor.phase == RepairPhase::Complete {
+            return Ok(RepairPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                receipt: None,
+                complete: true,
+            });
+        }
+        if max_steps == 0 || max_steps > self.format.canonical_limits.max_list_page as usize {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "repair page size exceeds the canonical list limit",
+            ));
+        }
+        if self.head(&cursor.destination_branch).await? != cursor.expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "destination branch moved during repair",
+            ));
+        }
+        let checkpoint = self.resume_commit_session(cursor.batch).await?;
+        if checkpoint.sequence != cursor.checkpoint_sequence
+            || checkpoint.session.base_commit != cursor.expected_head
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "repair cursor is stale relative to its checkpoint",
+            ));
+        }
+        let remaining = (self.format.canonical_limits.max_mutations_per_commit as usize)
+            .checked_sub(checkpoint.mutations.len())
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "repair checkpoint exceeds its mutation limit",
+                )
+            })?;
+        if remaining == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "repair checkpoint is full but unpublished",
+            ));
+        }
+        let limit = max_steps.min(remaining);
+        let mut next = cursor.clone();
+        let mut mutations = checkpoint.mutations;
+        let processed;
+        match cursor.phase {
+            RepairPhase::CopySource => {
+                let (objects, truncated) = source
+                    .list_objects_at(
+                        &cursor.source_branch,
+                        cursor.source_snapshot,
+                        b"",
+                        cursor.source_after.as_deref(),
+                        limit,
+                    )
+                    .await?;
+                processed = objects.len();
+                next.source_after = objects.last().map(|object| object.key.clone());
+                next.report.scanned_source_objects = checked_fsck_add(
+                    next.report.scanned_source_objects,
+                    processed as u64,
+                    "repair-source-object",
+                )?;
+                for object in objects {
+                    let existing = self
+                        .head_object_at(
+                            &cursor.destination_branch,
+                            cursor.destination_snapshot,
+                            &object.key,
+                        )
+                        .await?;
+                    if existing
+                        .as_ref()
+                        .is_some_and(|value| value.version.body.kind == object.version.body.kind)
+                    {
+                        continue;
+                    }
+                    let data = source
+                        .get_object_at(&cursor.source_branch, cursor.source_snapshot, &object.key)
+                        .await?
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::CorruptCommit,
+                                "repair listing points to a missing source object",
+                            )
+                        })?;
+                    let size = u64::try_from(data.bytes.len()).map_err(|_| {
+                        Error::new(ErrorCode::EntityTooLarge, "repair payload exceeds u64")
+                    })?;
+                    let binding = self.payloads.put(data.bytes).await?;
+                    let LogicalObjectVersionKind::Live {
+                        logical_etag,
+                        headers,
+                        checksums,
+                        user_metadata,
+                        tags,
+                        ..
+                    } = data.version.body.kind
+                    else {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "repair source current object is a delete marker",
+                        ));
+                    };
+                    mutations.push(StagedMutation {
+                        body: StagedMutationBody::Put(Box::new(StagedPut {
+                            key: object.key,
+                            size,
+                            logical_etag,
+                            checksums,
+                            headers,
+                            user_metadata,
+                            tags,
+                            binding,
+                        })),
+                    });
+                    next.report.copied_objects =
+                        checked_fsck_add(next.report.copied_objects, 1, "repair-copied-object")?;
+                    next.report.copied_bytes =
+                        checked_fsck_add(next.report.copied_bytes, size, "repair-copied-byte")?;
+                }
+                if !truncated {
+                    next.phase = RepairPhase::DeleteDestinationOnly;
+                    next.source_after = None;
+                }
+            }
+            RepairPhase::DeleteDestinationOnly => {
+                let (objects, truncated) = self
+                    .list_objects_at(
+                        &cursor.destination_branch,
+                        cursor.destination_snapshot,
+                        b"",
+                        cursor.destination_after.as_deref(),
+                        limit,
+                    )
+                    .await?;
+                processed = objects.len();
+                next.destination_after = objects.last().map(|object| object.key.clone());
+                next.report.scanned_destination_objects = checked_fsck_add(
+                    next.report.scanned_destination_objects,
+                    processed as u64,
+                    "repair-destination-object",
+                )?;
+                for object in objects {
+                    if source
+                        .head_object_at(&cursor.source_branch, cursor.source_snapshot, &object.key)
+                        .await?
+                        .is_none()
+                    {
+                        mutations.push(StagedMutation::delete(object.key));
+                        next.report.deleted_objects = checked_fsck_add(
+                            next.report.deleted_objects,
+                            1,
+                            "repair-deleted-object",
+                        )?;
+                    }
+                }
+                if !truncated {
+                    next.phase = RepairPhase::Complete;
+                    next.destination_after = None;
+                }
+            }
+            RepairPhase::Complete => unreachable!(),
+        }
+        let full =
+            mutations.len() >= self.format.canonical_limits.max_mutations_per_commit as usize;
+        if !full && next.phase != RepairPhase::Complete {
+            let sequence = checkpoint.sequence.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "repair checkpoint sequence overflow",
+                )
+            })?;
+            let saved = self
+                .checkpoint_commit_session(&checkpoint.session, mutations, sequence)
+                .await?;
+            next.checkpoint_sequence = saved.sequence;
+            return Ok(RepairPage {
+                cursor: next,
+                processed,
+                receipt: None,
+                complete: false,
+            });
+        }
+        if mutations.is_empty() {
+            self.abort_commit_session(checkpoint.session, mutations, checkpoint.sequence)
+                .await?;
+            return Ok(RepairPage {
+                cursor: next,
+                processed,
+                receipt: None,
+                complete: true,
+            });
+        }
+        let receipt = self
+            .publish_commit_session(checkpoint.session, mutations)
+            .await?;
+        next.expected_head = receipt.id;
+        next.report.published_commits =
+            checked_fsck_add(next.report.published_commits, 1, "repair-published-commit")?;
+        let complete = next.phase == RepairPhase::Complete;
+        if !complete {
+            let new_checkpoint = self
+                .begin_durable_commit_session(
+                    &cursor.destination_branch,
+                    cursor.message.clone(),
+                    24 * 60 * 60 * 1_000,
+                )
+                .await?;
+            next.batch = new_checkpoint.session.id;
+            next.checkpoint_sequence = new_checkpoint.sequence;
+        }
+        Ok(RepairPage {
+            cursor: next,
+            processed,
+            receipt: Some(receipt),
+            complete,
         })
     }
 

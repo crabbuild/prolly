@@ -18,8 +18,8 @@ use prolly_s3_core::{
     OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
     ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
-    Repository, RepositoryOptions, RestoreCursor, RestorePage, Result, StagedMutation, Tag,
-    TagCatalogPage, TraversalBudget, VersionSummary,
+    RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
+    StagedMutation, Tag, TagCatalogPage, TraversalBudget, VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -219,6 +219,40 @@ impl Client {
     pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
         self.ensure_provider_qualified()?;
         self.repository.advance_fsck(cursor, max_steps).await
+    }
+
+    pub async fn start_repair_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+        message: impl Into<String>,
+    ) -> Result<RepairCursor> {
+        self.ensure_provider_qualified()?;
+        source.ensure_provider_qualified()?;
+        self.repository
+            .start_repair_from(
+                source.repository.as_ref(),
+                &source.branch,
+                source_snapshot,
+                &self.branch,
+                expected_head,
+                message,
+            )
+            .await
+    }
+
+    pub async fn advance_repair_from(
+        &self,
+        source: &Client,
+        cursor: &RepairCursor,
+        max_steps: usize,
+    ) -> Result<RepairPage> {
+        self.ensure_provider_qualified()?;
+        source.ensure_provider_qualified()?;
+        self.repository
+            .advance_repair_from(source.repository.as_ref(), cursor, max_steps)
+            .await
     }
 
     pub async fn start_restore(

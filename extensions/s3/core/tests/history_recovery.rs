@@ -235,3 +235,120 @@ async fn history_diff_reflog_reset_and_recovery_are_bounded_and_audited() {
         .unwrap()
         .is_none());
 }
+
+#[tokio::test]
+async fn logical_repair_rebinds_across_repositories_and_removes_destination_only_keys() {
+    let source = Repository::initialize(
+        Arc::new(MemoryObjectPlane::new(true)),
+        RepositoryOptions {
+            repository_prefix: ".tests/repair-source".to_string(),
+            writer: "source".to_string(),
+            ids: Arc::new(SequenceIdSource::new(0xa1, 1)),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let destination = Repository::initialize(
+        Arc::new(MemoryObjectPlane::new(false)),
+        RepositoryOptions {
+            repository_prefix: ".tests/repair-destination".to_string(),
+            writer: "destination".to_string(),
+            ids: Arc::new(SequenceIdSource::new(0xb2, 1)),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    source
+        .put_object(
+            "main",
+            b"same.txt".to_vec(),
+            b"source".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    let source_head = source
+        .put_object(
+            "main",
+            b"new.txt".to_vec(),
+            b"new".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap()
+        .id;
+    destination
+        .put_object(
+            "main",
+            b"same.txt".to_vec(),
+            b"destination".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    let destination_head = destination
+        .put_object(
+            "main",
+            b"extra.txt".to_vec(),
+            b"remove".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap()
+        .id;
+
+    let mut repair = destination
+        .start_repair_from(
+            &source,
+            "main",
+            source_head,
+            "main",
+            destination_head,
+            "repair from source",
+        )
+        .await
+        .unwrap();
+    loop {
+        let page = destination
+            .advance_repair_from(&source, &repair, 1)
+            .await
+            .unwrap();
+        repair = page.cursor;
+        if page.complete {
+            break;
+        }
+    }
+    assert_eq!(repair.report.copied_objects, 2);
+    assert_eq!(repair.report.deleted_objects, 1);
+    assert_eq!(
+        destination
+            .get_object("main", b"same.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"source"
+    );
+    assert_eq!(
+        destination
+            .get_object("main", b"new.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"new"
+    );
+    assert!(destination
+        .get_object("main", b"extra.txt")
+        .await
+        .unwrap()
+        .is_none());
+}
