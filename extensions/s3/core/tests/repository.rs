@@ -226,6 +226,11 @@ async fn repository_history_listing_delete_markers_and_payload_dedup_are_stable(
     assert!(
         versions[0].body.order.commit_generation.0 > versions[1].body.order.commit_generation.0
     );
+    let historical_versions = repository
+        .list_object_versions_at("main", first.id, b"docs/readme.txt", 10)
+        .await
+        .unwrap();
+    assert_eq!(historical_versions.len(), 1);
 
     let (version_page, truncated) = repository
         .list_versions_at("main", snapshot, b"docs/", None, 2)

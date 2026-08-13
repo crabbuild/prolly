@@ -205,6 +205,13 @@ async fn history_diff_reflog_reset_and_recovery_are_bounded_and_audited() {
         .await
         .unwrap();
     assert_eq!(delimited.common_prefixes, vec![b"archive/".to_vec()]);
+    let historical_delimited = repository
+        .list_objects_delimited_at("main", second.id, b"", b"/", None, 100)
+        .await
+        .unwrap();
+    assert_eq!(historical_delimited.snapshot, second.id);
+    assert_eq!(historical_delimited.objects.len(), 2);
+    assert!(historical_delimited.common_prefixes.is_empty());
 
     clock.advance(1).unwrap();
     let deleted = repository

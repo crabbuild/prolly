@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     io::Write as _,
+    str::FromStr as _,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -40,7 +41,10 @@ use crate::{
 pub struct Client {
     repository: Arc<Repository<AwsS3ObjectPlane>>,
     bucket: String,
+    /// Branch used to resolve branch-local packed-node indexes. For a detached
+    /// checkout this remains the branch from which checkout was requested.
     branch: String,
+    checked_out: CheckedOutRef,
     provider_attestation: ProviderAttestation,
     shard_authority_maintenance: Arc<Mutex<Option<prolly_s3_core::ShardAuthorityMaintenance>>>,
     _branch_index_maintenance: Arc<Mutex<Option<prolly_s3_core::BranchIndexMaintenance>>>,
@@ -73,11 +77,71 @@ pub struct ClientBuilder {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct IngestObject {
+pub struct PutObjectInput {
     pub key: String,
     pub bytes: Vec<u8>,
     pub headers: ObjectHeaders,
     pub user_metadata: BTreeMap<String, String>,
+}
+
+/// A revision accepted by [`Client::checkout`].
+///
+/// Unqualified names resolve branches before tags. Use `Branch` or `Tag` (or
+/// the `refs/heads/` and `refs/tags/` string forms) when both have the same
+/// name. Commit IDs always create a detached checkout.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckoutRef {
+    Name(String),
+    Branch(String),
+    Tag(String),
+    Commit(CommitId),
+}
+
+impl From<String> for CheckoutRef {
+    fn from(value: String) -> Self {
+        Self::Name(value)
+    }
+}
+
+impl From<&str> for CheckoutRef {
+    fn from(value: &str) -> Self {
+        Self::Name(value.to_string())
+    }
+}
+
+impl From<&String> for CheckoutRef {
+    fn from(value: &String) -> Self {
+        Self::Name(value.clone())
+    }
+}
+
+impl From<CommitId> for CheckoutRef {
+    fn from(value: CommitId) -> Self {
+        Self::Commit(value)
+    }
+}
+
+impl From<&CommitId> for CheckoutRef {
+    fn from(value: &CommitId) -> Self {
+        Self::Commit(*value)
+    }
+}
+
+/// The resolved revision selected by a client handle.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CheckedOutRef {
+    Branch(String),
+    Tag { name: String, target: CommitId },
+    Commit(CommitId),
+}
+
+impl CheckedOutRef {
+    pub fn target(&self) -> Option<CommitId> {
+        match self {
+            Self::Branch(_) => None,
+            Self::Tag { target, .. } | Self::Commit(target) => Some(*target),
+        }
+    }
 }
 
 impl Client {
@@ -89,8 +153,16 @@ impl Client {
         &self.bucket
     }
 
-    pub fn branch(&self) -> &str {
-        &self.branch
+    /// Return the attached branch, or `None` for a tag/commit checkout.
+    pub fn branch(&self) -> Option<&str> {
+        match &self.checked_out {
+            CheckedOutRef::Branch(branch) => Some(branch),
+            CheckedOutRef::Tag { .. } | CheckedOutRef::Commit(_) => None,
+        }
+    }
+
+    pub fn checked_out_ref(&self) -> &CheckedOutRef {
+        &self.checked_out
     }
 
     pub fn repository_id(&self) -> prolly_s3_core::RepositoryId {
@@ -108,17 +180,79 @@ impl Client {
             .await
     }
 
-    pub fn for_branch(&self, branch: impl Into<String>) -> Result<Self> {
-        let branch = branch.into();
+    /// Select a branch, tag, or immutable commit, following Git-like ref
+    /// precedence. Branch checkouts are writable; tag and commit checkouts are
+    /// detached and reject mutation APIs with `InvalidRevision`.
+    pub async fn checkout(&self, reference: impl Into<CheckoutRef>) -> Result<Self> {
+        self.ensure_provider_qualified()?;
+        match reference.into() {
+            CheckoutRef::Commit(id) => self.checkout_commit(id).await,
+            CheckoutRef::Branch(name) => self.checkout_branch(name).await,
+            CheckoutRef::Tag(name) => self.checkout_tag(name).await,
+            CheckoutRef::Name(name) => {
+                if let Some(name) = name.strip_prefix("refs/heads/") {
+                    return self.checkout_branch(name.to_string()).await;
+                }
+                if let Some(name) = name.strip_prefix("refs/tags/") {
+                    return self.checkout_tag(name.to_string()).await;
+                }
+                if let Ok(id) = CommitId::from_str(&name) {
+                    return self.checkout_commit(id).await;
+                }
+                match self.checkout_branch(name.clone()).await {
+                    Ok(client) => Ok(client),
+                    Err(error) if error.code == ErrorCode::InvalidRevision => {
+                        self.checkout_tag(name).await
+                    }
+                    Err(error) => Err(error),
+                }
+            }
+        }
+    }
+
+    async fn checkout_branch(&self, branch: String) -> Result<Self> {
         prolly_s3_core::validate_branch(&branch)?;
+        self.repository.head(&branch).await?;
         let mut client = self.clone();
-        client.branch = branch;
+        client.branch = branch.clone();
+        client.checked_out = CheckedOutRef::Branch(branch);
         Ok(client)
+    }
+
+    async fn checkout_tag(&self, name: String) -> Result<Self> {
+        prolly_s3_core::validate_branch(&name)?;
+        let tag = self.repository.tag(&name).await?;
+        self.repository.commit(tag.target).await?;
+        let mut client = self.clone();
+        client.checked_out = CheckedOutRef::Tag {
+            name,
+            target: tag.target,
+        };
+        Ok(client)
+    }
+
+    async fn checkout_commit(&self, id: CommitId) -> Result<Self> {
+        self.repository.commit(id).await?;
+        let mut client = self.clone();
+        client.checked_out = CheckedOutRef::Commit(id);
+        Ok(client)
+    }
+
+    fn attached_branch(&self) -> Result<&str> {
+        self.branch().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidRevision,
+                "mutation or branch-ref operation requires an attached branch checkout",
+            )
+        })
     }
 
     pub async fn head(&self) -> Result<CommitId> {
         self.ensure_provider_qualified()?;
-        self.repository.head(&self.branch).await
+        match self.checked_out.target() {
+            Some(target) => Ok(target),
+            None => self.repository.head(&self.branch).await,
+        }
     }
 
     pub async fn create_branch(
@@ -127,20 +261,23 @@ impl Client {
         from: Option<CommitId>,
     ) -> Result<BranchHead> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         let from = match from {
             Some(from) => from,
-            None => self.repository.head(&self.branch).await?,
+            None => self.head().await?,
         };
         self.repository.create_branch(name.as_ref(), from).await
     }
 
     pub async fn delete_branch(&self, name: impl AsRef<str>, expected: CommitId) -> Result<()> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.delete_branch(name.as_ref(), expected).await
     }
 
     pub async fn create_tag(&self, name: impl AsRef<str>, target: CommitId) -> Result<Tag> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.create_tag(name.as_ref(), target).await
     }
 
@@ -151,6 +288,7 @@ impl Client {
 
     pub async fn delete_tag(&self, name: impl AsRef<str>, expected: CommitId) -> Result<()> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.delete_tag(name.as_ref(), expected).await
     }
 
@@ -160,6 +298,7 @@ impl Client {
         target: CommitId,
     ) -> Result<RetentionPin> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .create_retention_pin(name.as_ref(), target)
             .await
@@ -176,6 +315,7 @@ impl Client {
         expected: CommitId,
     ) -> Result<()> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .delete_retention_pin(name.as_ref(), expected)
             .await
@@ -199,7 +339,20 @@ impl Client {
 
     pub async fn log(&self, limit: usize) -> Result<Vec<(CommitId, prolly_s3_core::BucketCommit)>> {
         self.ensure_provider_qualified()?;
-        self.repository.log(&self.branch, limit).await
+        match self.checked_out.target() {
+            Some(target) => Ok(self
+                .repository
+                .log_page_bounded(
+                    &self.branch,
+                    target,
+                    None,
+                    limit,
+                    TraversalBudget::default(),
+                )
+                .await?
+                .commits),
+            None => self.repository.log(&self.branch, limit).await,
+        }
     }
 
     pub async fn log_bounded(
@@ -235,7 +388,7 @@ impl Client {
 
     pub async fn open_reflog(&self) -> Result<PublicationJournalCursor> {
         self.ensure_provider_qualified()?;
-        self.repository.open_reflog(&self.branch).await
+        self.repository.open_reflog(self.attached_branch()?).await
     }
 
     pub async fn read_reflog_page(
@@ -254,8 +407,9 @@ impl Client {
         reason: impl AsRef<str>,
     ) -> Result<RefMoveReceipt> {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         self.repository
-            .reset_branch(&self.branch, to, expected_head, reason.as_ref())
+            .reset_branch(branch, to, expected_head, reason.as_ref())
             .await
     }
 
@@ -266,33 +420,40 @@ impl Client {
         reason: impl AsRef<str>,
     ) -> Result<RefMoveReceipt> {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         self.repository
-            .recover_branch(&self.branch, reflog, expected_head, reason.as_ref())
+            .recover_branch(branch, reflog, expected_head, reason.as_ref())
             .await
     }
 
     pub async fn start_fsck(&self, deep: bool) -> Result<FsckCursor> {
         self.ensure_provider_qualified()?;
-        self.repository.start_fsck(&self.branch, deep).await
+        self.repository
+            .start_fsck(self.attached_branch()?, deep)
+            .await
     }
 
     pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.advance_fsck(cursor, max_steps).await
     }
 
     pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.start_gc(grace_millis).await
     }
 
     pub async fn advance_gc(&self, cursor: &GcCursor, max_steps: usize) -> Result<GcPage> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.advance_gc(cursor, max_steps).await
     }
 
     pub async fn sweep_gc(&self, cursor: &GcCursor, max_candidates: usize) -> Result<GcPage> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.sweep_gc(cursor, max_candidates).await
     }
 
@@ -305,12 +466,13 @@ impl Client {
     ) -> Result<RepairCursor> {
         self.ensure_provider_qualified()?;
         source.ensure_provider_qualified()?;
+        let destination_branch = self.attached_branch()?;
         self.repository
             .start_repair_from(
                 source.repository.as_ref(),
                 &source.branch,
                 source_snapshot,
-                &self.branch,
+                destination_branch,
                 expected_head,
                 message,
             )
@@ -325,6 +487,7 @@ impl Client {
     ) -> Result<RepairPage> {
         self.ensure_provider_qualified()?;
         source.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .advance_repair_from(source.repository.as_ref(), cursor, max_steps)
             .await
@@ -338,12 +501,13 @@ impl Client {
     ) -> Result<HistoryTransferCursor> {
         self.ensure_provider_qualified()?;
         source.ensure_provider_qualified()?;
+        let destination_branch = self.attached_branch()?;
         self.repository
             .start_history_transfer_from(
                 source.repository.as_ref(),
                 &source.branch,
                 source_snapshot,
-                &self.branch,
+                destination_branch,
                 expected_head,
             )
             .await
@@ -357,6 +521,7 @@ impl Client {
     ) -> Result<HistoryTransferPage> {
         self.ensure_provider_qualified()?;
         source.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .advance_history_transfer_from(source.repository.as_ref(), cursor, max_steps)
             .await
@@ -368,6 +533,7 @@ impl Client {
         reason: impl AsRef<str>,
     ) -> Result<RefMoveReceipt> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .publish_history_transfer(cursor, reason.as_ref())
             .await
@@ -493,8 +659,9 @@ impl Client {
         message: impl Into<String>,
     ) -> Result<RestoreCursor> {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         self.repository
-            .start_restore(&self.branch, source, expected_head, message)
+            .start_restore(branch, source, expected_head, message)
             .await
     }
 
@@ -504,6 +671,7 @@ impl Client {
         max_steps: usize,
     ) -> Result<RestorePage> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.advance_restore(cursor, max_steps).await
     }
 
@@ -517,9 +685,10 @@ impl Client {
         message: impl Into<String>,
     ) -> Result<MergeCursor> {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         self.repository
             .start_merge(
-                &self.branch,
+                branch,
                 source_branch.as_ref(),
                 selected_base,
                 policy,
@@ -534,6 +703,7 @@ impl Client {
         max_steps: usize,
     ) -> Result<MergeAdvancePage> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.advance_merge(cursor, max_steps).await
     }
 
@@ -543,6 +713,7 @@ impl Client {
         base: CommitId,
     ) -> Result<MergeCursor> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.select_merge_base(cursor, base).await
     }
 
@@ -584,6 +755,7 @@ impl Client {
 
     pub async fn publish_merge(&self, cursor: &MergeCursor) -> Result<MergeReceipt> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.publish_merge(cursor).await
     }
 
@@ -594,6 +766,7 @@ impl Client {
         limit: usize,
     ) -> Result<MergeCleanupPage> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .cleanup_merge(cursor, continuation, limit)
             .await
@@ -625,6 +798,7 @@ impl Client {
         limit: usize,
     ) -> Result<RefCatalogRepairPage> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .repair_ref_catalog_page(RefKind::Branch, continuation, limit)
             .await
@@ -636,6 +810,7 @@ impl Client {
         limit: usize,
     ) -> Result<RefCatalogRepairPage> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .repair_ref_catalog_page(RefKind::Tag, continuation, limit)
             .await
@@ -658,14 +833,9 @@ impl Client {
         metadata: BTreeMap<String, String>,
     ) -> Result<CommitReceipt> {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         self.repository
-            .put_object(
-                &self.branch,
-                key.into().into_bytes(),
-                bytes,
-                headers,
-                metadata,
-            )
+            .put_object(branch, key.into().into_bytes(), bytes, headers, metadata)
             .await
     }
 
@@ -679,9 +849,10 @@ impl Client {
         operation: OperationId,
     ) -> Result<CommitReceipt> {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         self.repository
             .put_object_with_operation(
-                &self.branch,
+                branch,
                 key.into().into_bytes(),
                 bytes,
                 ObjectHeaders::default(),
@@ -691,15 +862,16 @@ impl Client {
             .await
     }
 
-    /// Ingest objects through durable atomic batches. This is the recommended
+    /// Put objects through durable atomic batches. This is the recommended
     /// path for bulk loading because publication and checkpoint costs are
     /// amortized across each batch.
-    pub async fn ingest_objects(
+    pub async fn put_objects(
         &self,
-        objects: Vec<IngestObject>,
+        objects: Vec<PutObjectInput>,
         batch_size: usize,
     ) -> Result<Vec<CommitReceipt>> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         let max = self
             .repository
             .format()
@@ -707,7 +879,7 @@ impl Client {
             .max_mutations_per_commit as usize;
         if batch_size == 0 || batch_size > max {
             return Err(invalid(
-                "ingest batch size exceeds the canonical mutation limit",
+                "put_objects batch size exceeds the canonical mutation limit",
             ));
         }
         let mut receipts = Vec::new();
@@ -719,7 +891,7 @@ impl Client {
             }
             let mut session = self
                 .begin_commit()
-                .message("bulk ingest")
+                .message("bulk object write")
                 .checkpoint_every(batch_size.min(1_000))
                 .start()
                 .await?;
@@ -740,9 +912,18 @@ impl Client {
 
     pub async fn get_object(&self, key: impl AsRef<str>) -> Result<Option<ObjectData>> {
         self.ensure_provider_qualified()?;
-        self.repository
-            .get_object(&self.branch, key.as_ref().as_bytes())
-            .await
+        match self.checked_out.target() {
+            Some(snapshot) => {
+                self.repository
+                    .get_object_at(&self.branch, snapshot, key.as_ref().as_bytes())
+                    .await
+            }
+            None => {
+                self.repository
+                    .get_object(&self.branch, key.as_ref().as_bytes())
+                    .await
+            }
+        }
     }
 
     pub async fn get_object_at(
@@ -761,9 +942,18 @@ impl Client {
         key: impl AsRef<str>,
     ) -> Result<Option<(CommitId, ObjectSummary)>> {
         self.ensure_provider_qualified()?;
-        self.repository
-            .head_object(&self.branch, key.as_ref().as_bytes())
-            .await
+        match self.checked_out.target() {
+            Some(snapshot) => Ok(self
+                .repository
+                .head_object_at(&self.branch, snapshot, key.as_ref().as_bytes())
+                .await?
+                .map(|summary| (snapshot, summary))),
+            None => {
+                self.repository
+                    .head_object(&self.branch, key.as_ref().as_bytes())
+                    .await
+            }
+        }
     }
 
     pub async fn get_object_range(
@@ -785,9 +975,10 @@ impl Client {
         destination_key: impl Into<String>,
     ) -> Result<CommitReceipt> {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         self.repository
             .copy_object(
-                &self.branch,
+                branch,
                 source_snapshot,
                 source_key.as_ref().as_bytes(),
                 destination_key.into().into_bytes(),
@@ -801,17 +992,19 @@ impl Client {
         K: Into<String>,
     {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         let keys = keys
             .into_iter()
             .map(|key| key.into().into_bytes())
             .collect();
-        self.repository.delete_objects(&self.branch, keys).await
+        self.repository.delete_objects(branch, keys).await
     }
 
     pub async fn delete_object(&self, key: impl Into<String>) -> Result<CommitReceipt> {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         self.repository
-            .delete_object(&self.branch, key.into().into_bytes())
+            .delete_object(branch, key.into().into_bytes())
             .await
     }
 
@@ -832,6 +1025,7 @@ impl Client {
     /// immutable payload bindings are reused; bodies are not uploaded again.
     pub async fn resume_commit(&self, batch: BatchId) -> Result<CommitSession> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         let checkpoint = self.repository.resume_commit_session(batch).await?;
         Ok(CommitSession {
             client: self.clone(),
@@ -855,14 +1049,31 @@ impl Client {
         limit: usize,
     ) -> Result<(CommitId, Vec<ObjectSummary>, bool)> {
         self.ensure_provider_qualified()?;
-        self.repository
-            .list_objects(
-                &self.branch,
-                prefix.as_ref().as_bytes(),
-                after.map(str::as_bytes),
-                limit,
-            )
-            .await
+        match self.checked_out.target() {
+            Some(snapshot) => {
+                let (objects, truncated) = self
+                    .repository
+                    .list_objects_at(
+                        &self.branch,
+                        snapshot,
+                        prefix.as_ref().as_bytes(),
+                        after.map(str::as_bytes),
+                        limit,
+                    )
+                    .await?;
+                Ok((snapshot, objects, truncated))
+            }
+            None => {
+                self.repository
+                    .list_objects(
+                        &self.branch,
+                        prefix.as_ref().as_bytes(),
+                        after.map(str::as_bytes),
+                        limit,
+                    )
+                    .await
+            }
+        }
     }
 
     pub async fn list_objects_delimited(
@@ -873,15 +1084,31 @@ impl Client {
         limit: usize,
     ) -> Result<DelimitedObjectPage> {
         self.ensure_provider_qualified()?;
-        self.repository
-            .list_objects_delimited(
-                &self.branch,
-                prefix.as_ref().as_bytes(),
-                delimiter.as_ref().as_bytes(),
-                after.map(str::as_bytes),
-                limit,
-            )
-            .await
+        match self.checked_out.target() {
+            Some(snapshot) => {
+                self.repository
+                    .list_objects_delimited_at(
+                        &self.branch,
+                        snapshot,
+                        prefix.as_ref().as_bytes(),
+                        delimiter.as_ref().as_bytes(),
+                        after.map(str::as_bytes),
+                        limit,
+                    )
+                    .await
+            }
+            None => {
+                self.repository
+                    .list_objects_delimited(
+                        &self.branch,
+                        prefix.as_ref().as_bytes(),
+                        delimiter.as_ref().as_bytes(),
+                        after.map(str::as_bytes),
+                        limit,
+                    )
+                    .await
+            }
+        }
     }
 
     pub async fn list_objects_at(
@@ -909,9 +1136,19 @@ impl Client {
         limit: usize,
     ) -> Result<(CommitId, Vec<ObjectVersion>)> {
         self.ensure_provider_qualified()?;
-        self.repository
-            .list_object_versions(&self.branch, key.as_ref().as_bytes(), limit)
-            .await
+        match self.checked_out.target() {
+            Some(snapshot) => Ok((
+                snapshot,
+                self.repository
+                    .list_object_versions_at(&self.branch, snapshot, key.as_ref().as_bytes(), limit)
+                    .await?,
+            )),
+            None => {
+                self.repository
+                    .list_object_versions(&self.branch, key.as_ref().as_bytes(), limit)
+                    .await
+            }
+        }
     }
 
     pub async fn list_versions_prefix(
@@ -920,9 +1157,26 @@ impl Client {
         limit: usize,
     ) -> Result<(CommitId, Vec<VersionSummary>)> {
         self.ensure_provider_qualified()?;
-        self.repository
-            .list_versions_prefix(&self.branch, prefix.as_ref().as_bytes(), limit)
-            .await
+        match self.checked_out.target() {
+            Some(snapshot) => Ok((
+                snapshot,
+                self.repository
+                    .list_versions_at(
+                        &self.branch,
+                        snapshot,
+                        prefix.as_ref().as_bytes(),
+                        None,
+                        limit,
+                    )
+                    .await?
+                    .0,
+            )),
+            None => {
+                self.repository
+                    .list_versions_prefix(&self.branch, prefix.as_ref().as_bytes(), limit)
+                    .await
+            }
+        }
     }
 
     pub async fn list_versions_at(
@@ -952,6 +1206,7 @@ impl Client {
         handoff_evidence: &str,
     ) -> Result<u64> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         let generation = self
             .repository
             .takeover_branch_writer(
@@ -967,18 +1222,22 @@ impl Client {
 
     pub async fn advance_branch_indexes(&self) -> Result<BranchIndexAdvanceReport> {
         self.ensure_provider_qualified()?;
-        self.repository.advance_branch_indexes(&self.branch).await
+        self.repository
+            .advance_branch_indexes(self.attached_branch()?)
+            .await
     }
 
     pub async fn branch_index_health(&self) -> Result<BranchIndexHealth> {
         self.ensure_provider_qualified()?;
-        self.repository.branch_index_health(&self.branch).await
+        self.repository
+            .branch_index_health(self.attached_branch()?)
+            .await
     }
 
     pub async fn start_branch_index_rebuild(&self) -> Result<JournalIndexRebuildCursor> {
         self.ensure_provider_qualified()?;
         self.repository
-            .start_branch_index_rebuild(&self.branch)
+            .start_branch_index_rebuild(self.attached_branch()?)
             .await
     }
 
@@ -988,6 +1247,7 @@ impl Client {
         max_events: usize,
     ) -> Result<JournalIndexRebuildStep> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .advance_branch_index_rebuild(cursor, max_events)
             .await
@@ -1000,6 +1260,7 @@ impl Client {
         limit: usize,
     ) -> Result<JournalIndexRebuildCleanup> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .cleanup_branch_index_rebuild(journal, operations, limit)
             .await
@@ -1010,6 +1271,7 @@ impl Client {
         journal: &JournalIndexRebuildCursor,
     ) -> Result<OperationIndexRebuildCursor> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository.start_operation_index_rebuild(journal).await
     }
 
@@ -1019,6 +1281,7 @@ impl Client {
         max_events: usize,
     ) -> Result<OperationIndexRebuildStep> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .advance_operation_index_rebuild(cursor, max_events)
             .await
@@ -1026,9 +1289,10 @@ impl Client {
 
     pub async fn wait_for_branch_indexes(&self, timeout: Duration) -> Result<BranchIndexHealth> {
         self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
         let deadline = tokio::time::Instant::now() + timeout;
         loop {
-            let health = self.repository.branch_index_health(&self.branch).await?;
+            let health = self.repository.branch_index_health(branch).await?;
             if health.ready {
                 return Ok(health);
             }
@@ -1053,6 +1317,7 @@ impl Client {
         limit: usize,
     ) -> Result<prolly_s3_core::CommitSessionCleanupReport> {
         self.ensure_provider_qualified()?;
+        self.attached_branch()?;
         self.repository
             .cleanup_expired_commit_sessions(continuation, limit)
             .await
@@ -1125,6 +1390,7 @@ impl CommitSessionBuilder {
 
     pub async fn start(self) -> Result<CommitSession> {
         self.client.ensure_provider_qualified()?;
+        let branch = self.client.attached_branch()?.to_string();
         let expires_after_millis = u64::try_from(self.expires_after.as_millis())
             .map_err(|_| invalid("commit-session expiry exceeds u64 milliseconds"))?;
         if self.durable && self.checkpoint_every == 0 {
@@ -1134,18 +1400,14 @@ impl CommitSessionBuilder {
             let checkpoint = self
                 .client
                 .repository
-                .begin_durable_commit_session(
-                    &self.client.branch,
-                    self.message,
-                    expires_after_millis,
-                )
+                .begin_durable_commit_session(&branch, self.message, expires_after_millis)
                 .await?;
             (checkpoint.session, checkpoint.sequence)
         } else {
             (
                 self.client
                     .repository
-                    .begin_commit_session(&self.client.branch, self.message, expires_after_millis)
+                    .begin_commit_session(&branch, self.message, expires_after_millis)
                     .await?,
                 0,
             )
@@ -1616,7 +1878,8 @@ impl ClientBuilder {
         let client = Client {
             repository,
             bucket,
-            branch,
+            branch: branch.clone(),
+            checked_out: CheckedOutRef::Branch(branch),
             provider_attestation: attestation,
             shard_authority_maintenance: Arc::new(Mutex::new(shard_authority_maintenance)),
             _branch_index_maintenance: Arc::new(Mutex::new(branch_index_maintenance)),

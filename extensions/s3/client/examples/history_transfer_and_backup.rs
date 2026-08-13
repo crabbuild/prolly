@@ -22,7 +22,8 @@ async fn main() -> ExampleResult {
         .put_object("data/main.txt", b"main\n".to_vec())
         .await?;
     source
-        .for_branch("feature")?
+        .checkout("feature")
+        .await?
         .put_object("data/feature.txt", b"feature\n".to_vec())
         .await?;
     let mut merge = source

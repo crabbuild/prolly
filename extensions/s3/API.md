@@ -11,14 +11,14 @@ operations from administrative maintenance.
 | Create or reopen a repository | `Client::builder`, then `initialize` or `open` |
 | Write one interactive file | `put_object` or `put_object_with_metadata` |
 | Retry a write after an ambiguous response | `put_object_with_operation` with the same `OperationId` and input |
-| Atomically write many files | `begin_commit`, or `ingest_objects` for bulk loading |
+| Atomically write many files | `begin_commit`, or `put_objects` for bulk loading |
 | Read current or historical data | `get_object`, `get_object_at` |
 | Read metadata or a byte range | `head_object`, `get_object_range` |
 | Copy without re-uploading the payload | `copy_object` |
 | Delete one or many files | `delete_object`, `delete_objects` |
 | List current or historical objects | `list_objects`, `list_objects_at`, `list_objects_delimited` |
 | Inspect object-version history | `list_object_versions`, `list_versions_prefix`, `list_versions_at` |
-| Work on an independent line of history | `create_branch`, `for_branch`, `delete_branch` |
+| Select a branch, tag, or commit | `checkout`, `checked_out_ref`, `branch` |
 | Name or retain a commit | `create_tag`, `tag`, `delete_tag`, `create_retention_pin` |
 | Compare or inspect history | `log_bounded`, `diff_bounded`, `commit` |
 | Inspect or recover ref movement | `open_reflog`, `read_reflog_page`, `recover_branch` |
@@ -32,12 +32,17 @@ operations from administrative maintenance.
 | Verify a logical backup | `start_backup_verification`, `advance_backup_verification` |
 | Inspect cache and provider requests | `prewarm_node_cache`, `node_cache_snapshot`, `s3_operation_metrics` |
 
-## Client identity and branch selection
+## Client identity and checkout
 
-- `bucket`, `branch`, and `repository_id` return the selected physical bucket,
-  logical branch, and immutable repository identity.
-- `head` returns the selected branch's current `CommitId`.
-- `for_branch` cheaply clones a client handle and selects another branch.
+- `bucket` and `repository_id` return the physical bucket and immutable
+  repository identity.
+- `checkout` accepts unqualified names, `refs/heads/...`, `refs/tags/...`, a
+  typed `CheckoutRef`, or a `CommitId`.
+- `checked_out_ref` reports the resolved `CheckedOutRef`. `branch` returns
+  `Some(name)` for an attached branch and `None` for a detached tag/commit.
+- `CheckedOutRef::target` returns the immutable target for tag/commit
+  checkouts; attached branches remain live and therefore return `None`.
+- `head` returns the attached branch head or detached tag/commit target.
 - `fenced_branches` reports branches this process can no longer publish.
 
 `Client` clones share repository state, caches, authority maintenance, and S3
@@ -96,9 +101,9 @@ When an object listing is truncated, pass the last returned logical key as
 `after`. Version-prefix pages use the opaque byte cursor returned in each
 `VersionSummary`.
 
-## Atomic commit sessions and ingestion
+## Atomic commit sessions and bulk writes
 
-`ingest_objects` is the concise bulk path. It divides `IngestObject` values
+`put_objects` is the concise bulk path. It divides `PutObjectInput` values
 into durable atomic batches and returns one receipt per published batch.
 
 For explicit control, call `begin_commit`. `CommitSessionBuilder` supports:

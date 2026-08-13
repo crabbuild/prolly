@@ -16,7 +16,7 @@ use prolly_s3_client::{
         decode_canonical, encode_canonical, LogicalObjectVersionKind, MergeCursor, MergePhase,
         MergePolicy, ProviderPerKeyVersionLimit,
     },
-    Client, HmacAttestationSigner, ProviderIdentity,
+    CheckoutRef, Client, HmacAttestationSigner, ProviderIdentity,
 };
 
 fn rustfs_enabled() -> bool {
@@ -302,13 +302,42 @@ async fn rustfs_ref_lifecycle_uses_catalog_shards_without_ref_scans() {
         .unwrap();
     let main = client.head().await.unwrap();
     client.create_branch("feature", Some(main)).await.unwrap();
-    let feature = client.for_branch("feature").unwrap();
+    let feature = client.checkout("feature").await.unwrap();
     let committed = feature
         .put_object("docs/feature.txt", b"branch-local".to_vec())
         .await
         .unwrap();
     feature.advance_branch_indexes().await.unwrap();
     let tag = client.create_tag("release-1", committed.id).await.unwrap();
+
+    let explicit_branch = client.checkout("refs/heads/feature").await.unwrap();
+    assert_eq!(explicit_branch.branch(), Some("feature"));
+    let tagged = client
+        .checkout(CheckoutRef::Tag("release-1".to_string()))
+        .await
+        .unwrap();
+    assert_eq!(tagged.branch(), None);
+    assert_eq!(tagged.head().await.unwrap(), committed.id);
+    assert_eq!(
+        tagged
+            .get_object("docs/feature.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"branch-local"
+    );
+    assert_eq!(
+        tagged
+            .put_object("docs/rejected.txt", b"detached".to_vec())
+            .await
+            .unwrap_err()
+            .code,
+        prolly_s3_client::ErrorCode::InvalidRevision
+    );
+    let detached = client.checkout(committed.id).await.unwrap();
+    assert_eq!(detached.branch(), None);
+    assert_eq!(detached.head().await.unwrap(), committed.id);
 
     client.reset_s3_operation_metrics();
     let branches = client.list_branch_catalog_page(None, 100).await.unwrap();
@@ -455,7 +484,7 @@ async fn rustfs_merge_resumes_and_publishes_structural_plan() {
         .put_object("merge/conflict.txt", b"ours".to_vec())
         .await
         .unwrap();
-    let feature = client.for_branch("feature").unwrap();
+    let feature = client.checkout("feature").await.unwrap();
     feature
         .put_object("merge/conflict.txt", b"theirs".to_vec())
         .await

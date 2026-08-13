@@ -15,7 +15,7 @@ async fn main() -> ExampleResult {
         .await?
         .id;
     main.create_branch("feature", Some(base)).await?;
-    let feature = main.for_branch("feature")?;
+    let feature = main.checkout("feature").await?;
 
     // Branches publish through independent ref lanes. Here each branch changes
     // a different key, so Fail policy can merge without resolving conflicts.
@@ -42,6 +42,19 @@ async fn main() -> ExampleResult {
     let planned = main.merge_changes_page(&merge, None, 100).await?;
     let merged = main.publish_merge(&merge).await?;
 
+    // Tags and commit IDs produce detached, immutable checkouts. Current-read
+    // APIs automatically use the selected snapshot; mutation APIs reject a
+    // detached checkout instead of accidentally publishing to another branch.
+    main.create_tag("release-2026.8", merged.id).await?;
+    let release = main.checkout("refs/tags/release-2026.8").await?;
+    let exact_commit = main.checkout(merged.id).await?;
+    let released_feature = release
+        .get_object("features/search.txt")
+        .await?
+        .ok_or("released feature is missing")?;
+    assert_eq!(release.branch(), None);
+    assert_eq!(exact_commit.head().await?, merged.id);
+
     let history = main.log(10).await?;
     let reflog = main.open_reflog().await?;
     let reflog_page = main.read_reflog_page(&reflog, 10).await?;
@@ -53,5 +66,9 @@ async fn main() -> ExampleResult {
     println!("planned_changes={}", planned.changes.len());
     println!("log_entries={}", history.len());
     println!("reflog_entries={}", reflog_page.entries.len());
+    println!(
+        "released_feature={}",
+        String::from_utf8_lossy(&released_feature.bytes).trim()
+    );
     Ok(())
 }
