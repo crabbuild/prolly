@@ -9,16 +9,17 @@ use aws_sdk_s3::primitives::ByteStream;
 use md5::Md5;
 use prolly_s3_core::{
     BatchId, BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth, CommitId,
-    CommitPage, CommitReceipt, CommitSessionManifest, Error, ErrorCode, FsckCursor, FsckPage,
-    HistoryCursor, JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
-    MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage,
-    MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor,
-    MergePolicy, MergeReceipt, ObjectData, ObjectDiff, ObjectDiffCursor, ObjectDiffPage,
-    ObjectHeaders, ObjectSummary, ObjectVersion, OperationId, OperationIndexRebuildCursor,
-    OperationIndexRebuildStep, ProviderAttestation, ProviderPerKeyVersionLimit, ProviderProfileId,
-    PublicationJournalCursor, PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage,
-    RefKind, RefMoveReceipt, Repository, RepositoryOptions, Result, StagedMutation, Tag,
-    TagCatalogPage, TraversalBudget, VersionSummary,
+    CommitPage, CommitReceipt, CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode,
+    FsckCursor, FsckPage, HistoryCursor, JournalIndexRebuildCleanup, JournalIndexRebuildCursor,
+    JournalIndexRebuildStep, MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor,
+    MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage,
+    MergeCursor, MergePolicy, MergeReceipt, ObjectData, ObjectDiff, ObjectDiffCursor,
+    ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion, OperationId,
+    OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
+    ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
+    PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
+    Repository, RepositoryOptions, Result, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
+    VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -422,6 +423,58 @@ impl Client {
             .await
     }
 
+    pub async fn head_object(
+        &self,
+        key: impl AsRef<str>,
+    ) -> Result<Option<(CommitId, ObjectSummary)>> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .head_object(&self.branch, key.as_ref().as_bytes())
+            .await
+    }
+
+    pub async fn get_object_range(
+        &self,
+        snapshot: CommitId,
+        key: impl AsRef<str>,
+        range: std::ops::RangeInclusive<u64>,
+    ) -> Result<Option<ObjectRangeData>> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .get_object_range(&self.branch, snapshot, key.as_ref().as_bytes(), range)
+            .await
+    }
+
+    pub async fn copy_object(
+        &self,
+        source_snapshot: CommitId,
+        source_key: impl AsRef<str>,
+        destination_key: impl Into<String>,
+    ) -> Result<CommitReceipt> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .copy_object(
+                &self.branch,
+                source_snapshot,
+                source_key.as_ref().as_bytes(),
+                destination_key.into().into_bytes(),
+            )
+            .await
+    }
+
+    pub async fn delete_objects<I, K>(&self, keys: I) -> Result<CommitReceipt>
+    where
+        I: IntoIterator<Item = K>,
+        K: Into<String>,
+    {
+        self.ensure_provider_qualified()?;
+        let keys = keys
+            .into_iter()
+            .map(|key| key.into().into_bytes())
+            .collect();
+        self.repository.delete_objects(&self.branch, keys).await
+    }
+
     pub async fn delete_object(&self, key: impl Into<String>) -> Result<CommitReceipt> {
         self.ensure_provider_qualified()?;
         self.repository
@@ -473,6 +526,25 @@ impl Client {
             .list_objects(
                 &self.branch,
                 prefix.as_ref().as_bytes(),
+                after.map(str::as_bytes),
+                limit,
+            )
+            .await
+    }
+
+    pub async fn list_objects_delimited(
+        &self,
+        prefix: impl AsRef<str>,
+        delimiter: impl AsRef<str>,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<DelimitedObjectPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_objects_delimited(
+                &self.branch,
+                prefix.as_ref().as_bytes(),
+                delimiter.as_ref().as_bytes(),
                 after.map(str::as_bytes),
                 limit,
             )

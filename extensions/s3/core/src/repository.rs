@@ -110,9 +110,26 @@ pub struct ObjectData {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectRangeData {
+    pub key: Vec<u8>,
+    pub version: ObjectVersion,
+    pub bytes: Vec<u8>,
+    pub snapshot: CommitId,
+    pub range: std::ops::RangeInclusive<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectSummary {
     pub key: Vec<u8>,
     pub version: ObjectVersion,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DelimitedObjectPage {
+    pub snapshot: CommitId,
+    pub objects: Vec<ObjectSummary>,
+    pub common_prefixes: Vec<Vec<u8>>,
+    pub truncated: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1164,6 +1181,7 @@ impl<P: ObjectPlane> Repository<P> {
                 },
                 headers,
                 user_metadata,
+                tags: BTreeMap::new(),
                 binding,
             })),
         })
@@ -1205,6 +1223,7 @@ impl<P: ObjectPlane> Repository<P> {
                 },
                 headers,
                 user_metadata,
+                tags: BTreeMap::new(),
                 binding,
             })),
         })
@@ -1292,6 +1311,7 @@ impl<P: ObjectPlane> Repository<P> {
                         checksums,
                         headers,
                         user_metadata,
+                        tags,
                         binding,
                         ..
                     } = staged.as_ref();
@@ -1302,7 +1322,7 @@ impl<P: ObjectPlane> Repository<P> {
                             headers: headers.clone(),
                             checksums: checksums.clone(),
                             user_metadata: user_metadata.clone(),
-                            tags: BTreeMap::new(),
+                            tags: tags.clone(),
                         },
                         Some(binding.clone()),
                     )
@@ -1739,6 +1759,195 @@ impl<P: ObjectPlane> Repository<P> {
         }))
     }
 
+    /// Read object metadata without fetching its immutable payload.
+    pub async fn head_object(
+        &self,
+        branch: &str,
+        key: &[u8],
+    ) -> Result<Option<(CommitId, ObjectSummary)>> {
+        let snapshot = self.head(branch).await?;
+        Ok(self
+            .head_object_at(branch, snapshot, key)
+            .await?
+            .map(|summary| (snapshot, summary)))
+    }
+
+    pub async fn head_object_at(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+        key: &[u8],
+    ) -> Result<Option<ObjectSummary>> {
+        self.validate_key(key)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let objects = self.tree_from_root(&commit.state.objects)?;
+        let Some(encoded) = self
+            .engine(self.node_store.clone())
+            .get(&objects, key)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let current: CurrentObject = decode_canonical(&encoded)?;
+        current.version.validate()?;
+        Ok(Some(ObjectSummary {
+            key: key.to_vec(),
+            version: current.version,
+        }))
+    }
+
+    /// Fetch an inclusive byte range from the immutable payload bound to a
+    /// logical snapshot. Range reads validate the binding and provider token;
+    /// callers wanting a full content-hash check should use `get_object`.
+    pub async fn get_object_range(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+        key: &[u8],
+        range: std::ops::RangeInclusive<u64>,
+    ) -> Result<Option<ObjectRangeData>> {
+        if range.start() > range.end() {
+            return Err(Error::new(
+                ErrorCode::InvalidRange,
+                "range start exceeds end",
+            ));
+        }
+        let Some(summary) = self.head_object_at(branch, snapshot, key).await? else {
+            return Ok(None);
+        };
+        let LogicalObjectVersionKind::Live { size, .. } = summary.version.body.kind else {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "current object resolves to a delete marker",
+            ));
+        };
+        if *range.start() >= size {
+            return Err(Error::new(
+                ErrorCode::InvalidRange,
+                "range starts beyond the object payload",
+            ));
+        }
+        let binding = summary.version.binding.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "live object has no payload binding",
+            )
+        })?;
+        if binding.path != self.payloads.path(binding.checksum_sha256)? {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "payload binding path does not match its checksum",
+            ));
+        }
+        let physical_version =
+            binding
+                .provider_version_id
+                .as_ref()
+                .map(|version_id| PhysicalVersion::Versioned {
+                    version_id: version_id.clone(),
+                });
+        let stored = self
+            .plane
+            .get(GetRequest {
+                path: binding.path.clone(),
+                range: Some(range.clone()),
+                physical_version,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "payload is missing"))?;
+        if stored.metadata.sha256 != binding.checksum_sha256
+            || stored.metadata.token.etag != binding.provider_etag
+            || stored.metadata.token.version_id != binding.provider_version_id
+        {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "range response metadata does not match its logical binding",
+            ));
+        }
+        Ok(Some(ObjectRangeData {
+            key: key.to_vec(),
+            version: summary.version,
+            bytes: stored.bytes,
+            snapshot,
+            range,
+        }))
+    }
+
+    /// Copy an object by reusing its immutable payload binding. Only metadata
+    /// nodes and one branch publication are written; the payload is not read
+    /// or uploaded again.
+    pub async fn copy_object(
+        &self,
+        branch: &str,
+        source_snapshot: CommitId,
+        source_key: &[u8],
+        destination_key: Vec<u8>,
+    ) -> Result<CommitReceipt> {
+        self.validate_key(&destination_key)?;
+        let source = self
+            .head_object_at(branch, source_snapshot, source_key)
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::InvalidKey, "copy source does not exist"))?;
+        let LogicalObjectVersionKind::Live {
+            size,
+            logical_etag,
+            headers,
+            checksums,
+            user_metadata,
+            tags,
+        } = source.version.body.kind
+        else {
+            return Err(Error::new(
+                ErrorCode::InvalidRevision,
+                "copy source is a delete marker",
+            ));
+        };
+        let binding = source.version.binding.ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "copy source has no payload binding",
+            )
+        })?;
+        let session = self
+            .begin_commit_session(branch, "CopyObject", 60_000)
+            .await?;
+        let mutation = StagedMutation {
+            body: StagedMutationBody::Put(Box::new(StagedPut {
+                key: destination_key,
+                size,
+                logical_etag,
+                checksums,
+                headers,
+                user_metadata,
+                tags,
+                binding,
+            })),
+        };
+        self.publish_commit_session(session, vec![mutation]).await
+    }
+
+    /// Delete up to the repository's canonical multi-delete bound in one
+    /// atomic commit.
+    pub async fn delete_objects(&self, branch: &str, keys: Vec<Vec<u8>>) -> Result<CommitReceipt> {
+        if keys.is_empty() || keys.len() > self.format.canonical_limits.max_delete_objects as usize
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "multi-delete requires between one key and the canonical delete limit",
+            ));
+        }
+        for key in &keys {
+            self.validate_key(key)?;
+        }
+        let session = self
+            .begin_commit_session(branch, "DeleteObjects", 60_000)
+            .await?;
+        let mutations = keys.into_iter().map(StagedMutation::delete).collect();
+        self.publish_commit_session(session, mutations).await
+    }
+
     pub async fn delete_object(&self, branch: &str, key: Vec<u8>) -> Result<CommitReceipt> {
         let operation = self.options.ids.operation();
         self.delete_object_with_operation(branch, key, operation)
@@ -1879,6 +2088,53 @@ impl<P: ObjectPlane> Repository<P> {
             .list_objects_at(branch, snapshot, prefix, after, limit)
             .await?;
         Ok((snapshot, objects, truncated))
+    }
+
+    /// S3-style delimiter projection over a stable ordered object page.
+    pub async fn list_objects_delimited(
+        &self,
+        branch: &str,
+        prefix: &[u8],
+        delimiter: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<DelimitedObjectPage> {
+        if delimiter.is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "list delimiter must not be empty",
+            ));
+        }
+        let (snapshot, candidates, truncated) =
+            self.list_objects(branch, prefix, after, limit).await?;
+        let mut objects = Vec::new();
+        let mut common_prefixes = BTreeSet::new();
+        for object in candidates {
+            let suffix = object.key.get(prefix.len()..).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "prefix listing returned a key outside its prefix",
+                )
+            })?;
+            if let Some(offset) = find_subslice(suffix, delimiter) {
+                let end = prefix
+                    .len()
+                    .checked_add(offset)
+                    .and_then(|end| end.checked_add(delimiter.len()))
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::EntityTooLarge, "common prefix length overflow")
+                    })?;
+                common_prefixes.insert(object.key[..end].to_vec());
+            } else {
+                objects.push(object);
+            }
+        }
+        Ok(DelimitedObjectPage {
+            snapshot,
+            objects,
+            common_prefixes: common_prefixes.into_iter().collect(),
+            truncated,
+        })
     }
 
     pub async fn list_objects_at(
@@ -4850,6 +5106,12 @@ fn checked_fsck_add(current: u64, add: u64, counter: &str) -> Result<u64> {
             format!("fsck {counter} counter overflow"),
         )
     })
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn merge_queue_key(generation: u64, commit: CommitId) -> Vec<u8> {

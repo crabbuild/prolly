@@ -1699,6 +1699,8 @@ pub(crate) struct StagedPut {
     pub(crate) checksums: Checksums,
     pub(crate) headers: ObjectHeaders,
     pub(crate) user_metadata: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) tags: BTreeMap<String, String>,
     pub(crate) binding: PayloadBinding,
 }
 

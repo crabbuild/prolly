@@ -10,7 +10,7 @@ async fn history_diff_reflog_reset_and_recovery_are_bounded_and_audited() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let clock = Arc::new(FixedClock::new(50_000));
     let repository = Repository::initialize(
-        plane,
+        plane.clone(),
         RepositoryOptions {
             repository_prefix: ".tests/history-recovery".to_string(),
             writer: "history-writer".to_string(),
@@ -148,4 +148,48 @@ async fn history_diff_reflog_reset_and_recovery_are_bounded_and_audited() {
     assert_eq!(report.current_objects, 2);
     assert_eq!(report.logical_versions, 2);
     assert_eq!(report.deep_content_bytes_verified, 12);
+
+    plane.reset_request_counts();
+    let (_, metadata) = repository
+        .head_object("main", b"b.txt")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(metadata.key, b"b.txt");
+    assert_eq!(plane.request_snapshot().head, 0);
+
+    let range = repository
+        .get_object_range("main", second.id, b"b.txt", 1..=1)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(range.bytes, b"w");
+
+    clock.advance(1).unwrap();
+    let copy = repository
+        .copy_object("main", second.id, b"a.txt", b"archive/a.txt".to_vec())
+        .await
+        .unwrap();
+    assert_eq!(copy.changed_keys, 1);
+    assert_eq!(
+        repository
+            .get_object("main", b"archive/a.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"one"
+    );
+    let delimited = repository
+        .list_objects_delimited("main", b"", b"/", None, 100)
+        .await
+        .unwrap();
+    assert_eq!(delimited.common_prefixes, vec![b"archive/".to_vec()]);
+
+    clock.advance(1).unwrap();
+    let deleted = repository
+        .delete_objects("main", vec![b"a.txt".to_vec(), b"b.txt".to_vec()])
+        .await
+        .unwrap();
+    assert_eq!(deleted.changed_keys, 2);
 }
