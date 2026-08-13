@@ -9,7 +9,7 @@ use hmac::{Hmac, Mac};
 use prolly_s3_core::{
     decode_canonical, encode_canonical, BucketClass, CompareExchange, CompareExchangeOutcome,
     Error, ErrorCode, GetRequest, ImmutablePut, ListRequest, ObjectPath, ObjectPlane,
-    PhysicalVersion, PhysicalVersioning, ProviderAttestationBodyV1, ProviderAttestationV1,
+    PhysicalVersion, PhysicalVersioning, ProviderAttestation, ProviderAttestationBody,
     ProviderCapabilities, ProviderProfileId, Result,
 };
 use serde::Serialize;
@@ -72,12 +72,12 @@ impl ProviderIdentity {
             path_style: self.path_style,
             bucket_class: self.bucket_class,
         })?;
-        Ok(domain_digest(b"prolly-s3/provider-endpoint/v1", &[&bytes]))
+        Ok(domain_digest(b"prolly-s3/provider-endpoint", &[&bytes]))
     }
 
     fn bucket_fingerprint(&self, bucket: &str) -> Result<[u8; 32]> {
         Ok(domain_digest(
-            b"prolly-s3/provider-bucket/v1",
+            b"prolly-s3/provider-bucket",
             &[&self.endpoint_fingerprint()?, bucket.as_bytes()],
         ))
     }
@@ -197,7 +197,7 @@ pub(crate) async fn qualify_and_store(
     identity: &ProviderIdentity,
     signer: &dyn AttestationSigner,
     options: &ProviderQualificationOptions,
-) -> Result<ProviderAttestationV1> {
+) -> Result<ProviderAttestation> {
     if options.validity < Duration::from_secs(60)
         || options.validity > Duration::from_secs(30 * 24 * 60 * 60)
     {
@@ -214,7 +214,7 @@ pub(crate) async fn qualify_and_store(
         .ok_or_else(|| invalid("provider attestation expiry overflow"))?;
     let capabilities = probe_provider(plane.clone(), repository_prefix).await?;
     capabilities.validate_prolly_s3()?;
-    let body = ProviderAttestationBodyV1 {
+    let body = ProviderAttestationBody {
         endpoint_fingerprint: identity.endpoint_fingerprint()?,
         bucket_fingerprint: identity.bucket_fingerprint(plane.bucket())?,
         bucket_class: identity.bucket_class(),
@@ -226,7 +226,7 @@ pub(crate) async fn qualify_and_store(
         signer_key_id: signer.active_key_id().to_string(),
     };
     let id = body.id()?;
-    let attestation = ProviderAttestationV1 {
+    let attestation = ProviderAttestation {
         id,
         signature: signer.sign(id.as_bytes())?,
         body,
@@ -248,7 +248,7 @@ pub(crate) async fn load_valid_attestation(
     identity: &ProviderIdentity,
     signer: &dyn AttestationSigner,
     selected: Option<ProviderProfileId>,
-) -> Result<ProviderAttestationV1> {
+) -> Result<ProviderAttestation> {
     let expected_endpoint = identity.endpoint_fingerprint()?;
     let expected_bucket = identity.bucket_fingerprint(plane.bucket())?;
     let now = now_millis()?;
@@ -262,7 +262,7 @@ pub(crate) async fn load_valid_attestation(
             })
             .await?
             .ok_or_else(|| not_qualified("selected provider attestation does not exist"))?;
-        candidates.push(decode_canonical::<ProviderAttestationV1>(&object.bytes)?);
+        candidates.push(decode_canonical::<ProviderAttestation>(&object.bytes)?);
     } else {
         let prefix = attestation_prefix(repository_prefix);
         let mut continuation = None;
@@ -284,7 +284,7 @@ pub(crate) async fn load_valid_attestation(
                     })
                     .await?
                     .ok_or_else(|| not_qualified("listed attestation disappeared"))?;
-                candidates.push(decode_canonical::<ProviderAttestationV1>(&object.bytes)?);
+                candidates.push(decode_canonical::<ProviderAttestation>(&object.bytes)?);
             }
             continuation = page.continuation;
             if continuation.is_none() {
@@ -334,7 +334,7 @@ pub(crate) async fn load_valid_attestation(
         .ok_or_else(|| not_qualified("no matching nonexpired provider attestation exists"))
 }
 
-pub(crate) fn ensure_attestation_current(attestation: &ProviderAttestationV1) -> Result<()> {
+pub(crate) fn ensure_attestation_current(attestation: &ProviderAttestation) -> Result<()> {
     if attestation.body.expires_at_millis <= now_millis()? {
         return Err(not_qualified(
             "provider attestation expired; explicitly refresh or requalify",
@@ -701,7 +701,7 @@ mod tests {
     fn expired_and_tampered_attestations_fail_closed() {
         let signer = HmacAttestationSigner::single("test", vec![3_u8; 32]).unwrap();
         let now = now_millis().unwrap();
-        let body = ProviderAttestationBodyV1 {
+        let body = ProviderAttestationBody {
             endpoint_fingerprint: [1; 32],
             bucket_fingerprint: [2; 32],
             bucket_class: BucketClass::S3Compatible,
@@ -713,7 +713,7 @@ mod tests {
             signer_key_id: signer.active_key_id().to_string(),
         };
         let id = body.id().unwrap();
-        let mut attestation = ProviderAttestationV1 {
+        let mut attestation = ProviderAttestation {
             id,
             signature: signer.sign(id.as_bytes()).unwrap(),
             body,

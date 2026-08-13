@@ -22,6 +22,6 @@ cargo +1.94.1 check \
 CARGO_TARGET_DIR="$target_root/client-1.94.1" \
 cargo +1.94.1 check \
   --manifest-path "$qualification_root/downstream-client/Cargo.toml" \
-  --no-default-features --features slatedb-index --locked
+  --no-default-features --features foyer-cache --locked
 
-echo "CLEAN_DOWNSTREAM_COMPLETE core_rust=1.89.0 client_rust=1.94.1 feature_sets=minimal,slatedb-index"
+echo "CLEAN_DOWNSTREAM_COMPLETE core_rust=1.89.0 client_rust=1.94.1 feature_sets=minimal,foyer-cache"

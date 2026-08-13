@@ -1,899 +1,237 @@
 # Prolly S3 client
 
-`prolly-s3-client` keeps files as normal, whole objects in a versioned S3
-bucket and adds Git-like history through Prolly commits. It deliberately does
-not split files into repository chunks.
+The client turns a versioned S3 bucket into a branchable file repository.
+Files remain ordinary whole S3 objects under immutable derived keys; Prolly
+trees provide snapshots and history.
 
-## Before you start
+## Requirements
 
-Your bucket and deployment must satisfy all of these conditions:
+- an S3 or S3-compatible bucket with versioning enabled;
+- conditional writes, exact-version reads, range reads, and strong read-after-write;
+- a repository prefix reserved exclusively for this client;
+- a stable writer identity and a trusted provider-attestation signer.
 
-- S3 bucket versioning is `Enabled`.
-- This client is the only writer for managed object keys.
-- One writer owns each branch authority scope. Separate processes may own and
-  publish separate branches concurrently; same-branch takeover is explicit.
-- Lifecycle rules do not expire current or noncurrent managed versions.
-- The IAM identity can read exact versions and conditionally update repository
-  metadata under `.prolly/v1/`.
+Do not write under the repository prefix outside this library.
 
-Add the crate from this workspace:
+## Create a client
 
-```toml
-[dependencies]
-prolly-s3-client = { path = "../extensions/s3/client", features = ["foyer-cache"] }
-aws-config = "1.8"
-aws-sdk-s3 = "1.140"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-```
-
-## Create or open a repository
-
-Initialization qualifies the provider, creates format v1 under `.prolly/v1/`,
-creates the initial commit, and acquires the default branch authority.
+This complete program shape works with AWS SDK configuration you supply:
 
 ```rust
 use std::{sync::Arc, time::Duration};
-
 use prolly_s3_client::{
-    Client, HmacAttestationSigner, HmacTokenSigner, ProviderIdentity,
+    core::ProviderPerKeyVersionLimit,
+    Client, HmacAttestationSigner, ProviderIdentity,
 };
 
-async fn create_client(
+async fn create(
     aws: aws_sdk_s3::Client,
     bucket: &str,
 ) -> Result<Client, prolly_s3_client::Error> {
     Client::builder()
         .aws_client(aws)
         .bucket(bucket)
-        .writer("repository-service")
-        .max_parallel_payload_writes(32)
-        .max_cached_commits(8_192)
-        .max_cached_branches(1_024)
-        .max_cached_node_pack_bytes(128 * 1024 * 1024)
-        .max_staged_batch_bytes(256 * 1024 * 1024)
+        .repository_prefix(".prolly")
+        .default_branch("main")
+        .writer("ingest-worker-01")
         .provider_identity(ProviderIdentity::aws_region("us-west-2"))
-        .attestation_signer(Arc::new(HmacAttestationSigner::single(
-            "provider-key-2026-01",
-            vec![0x41; 32],
-        )?))
-        .token_signer(Arc::new(HmacTokenSigner::single(
-            "cursor-key-2026-01",
-            vec![0x42; 32],
-        )?))
         .provider_attestation_validity(Duration::from_secs(24 * 60 * 60))
-        .initialize()
-        .await
-}
-```
-
-Use `.open().await` instead of `.initialize().await` after the repository
-exists. A writable client acquires branch authority lazily on its first
-mutation. Use `.read_only(true)` for reader processes; they acquire no mutation
-authority.
-
-The HMAC byte vectors above are illustrative. Load independent, rotated key
-rings from a secret manager in production.
-
-The cache values above are bounded examples, not universal sizing. Tune them
-against your key count and memory budget. Export `performance_snapshot()` for
-publication queue/wait telemetry and `s3_operation_metrics()` for SDK request
-counts.
-
-## Use the native v2 client for new repositories
-
-`ClientV2` stores payloads under immutable SHA-256-derived keys. Repeated
-writes to one logical filename therefore do not consume provider versions at
-that filename. V2 is a separate repository format and does not dual-write v1.
-
-```rust
-use std::sync::Arc;
-
-use prolly_s3_client::{
-    ClientV2, HmacAttestationSigner, ProviderIdentity,
-    core::ProviderPerKeyVersionLimitV2,
-};
-
-async fn create_v2(
-    aws: aws_sdk_s3::Client,
-    bucket: &str,
-) -> Result<ClientV2, prolly_s3_client::Error> {
-    ClientV2::builder()
-        .aws_client(aws)
-        .bucket(bucket)
-        .repository_prefix(".prolly/native-v2")
-        .writer("ingestion-service")
-        .provider_identity(ProviderIdentity::aws_region("us-west-2"))
         .attestation_signer(Arc::new(HmacAttestationSigner::single(
             "provider-key-2026-01",
             vec![0x41; 32],
         )?))
         .provider_per_key_version_limit(
-            ProviderPerKeyVersionLimitV2::Finite(10_000),
+            ProviderPerKeyVersionLimit::Finite(10_000),
         )
         .initialize()
         .await
 }
 ```
 
-### Stream and resume a durable batch
+Call `initialize` once for a new prefix. Use the same builder inputs with
+`open` after restart. The default prefix is `.prolly`.
 
-Durable commit sessions are the default. Each body is spooled with bounded
-memory, hashed once, and uploaded to its immutable payload key. Checkpoints
-store bindings and operation IDs, never body bytes.
+## Read and write files
 
 ```rust
-use aws_sdk_s3::primitives::ByteStream;
+let first = client
+    .put_object("documents/readme.txt", b"first revision\n".to_vec())
+    .await?;
 
+client
+    .put_object("documents/readme.txt", b"second revision\n".to_vec())
+    .await?;
+
+let current = client
+    .get_object("documents/readme.txt")
+    .await?
+    .expect("current file");
+
+let historical = client
+    .get_object_at(first.id, "documents/readme.txt")
+    .await?
+    .expect("historical file");
+
+assert_eq!(current.bytes, b"second revision\n");
+assert_eq!(historical.bytes, b"first revision\n");
+```
+
+A write uploads one whole payload. It does not split a 64 KiB or larger file
+into chunks. The content-addressed key deduplicates identical bytes.
+
+For safe retries, generate and persist one operation ID:
+
+```rust
+let operation = prolly_s3_client::core::OperationId::new();
+let receipt = client
+    .put_object_with_operation("documents/readme.txt", bytes, operation)
+    .await?;
+```
+
+After an ambiguous response, repeat the exact call with the same operation ID.
+The client reconciles an already-applied commit before fencing the writer.
+
+## Batch ingestion
+
+Batching is the recommended ingestion path. It uploads payloads while staging
+and publishes all tree changes with one branch compare-and-swap.
+
+```rust
 let mut commit = client
     .begin_commit()
-    .message("daily document import")
+    .message("import 2026-08-12")
     .checkpoint_every(256)
     .start()
     .await?;
 
-let session_id = commit.id();
-
-commit
-    .put_stream(
-        "documents/report.pdf",
-        ByteStream::from_path("report.pdf").await?,
-    )
-    .await?;
-
-commit.delete_object("documents/obsolete.pdf")?;
+let batch_id = commit.id();
+commit.put_object("incoming/0001.json", first_body).await?;
+commit.put_object("incoming/0002.json", second_body).await?;
+commit.delete_object("incoming/obsolete.json")?;
 commit.checkpoint().await?;
 
-// After a process restart, construct/open ClientV2 again and resume by ID.
-let resumed = client.resume_commit(session_id).await?;
-let receipt = resumed.publish().await?;
-println!("published {}", receipt.id);
+let receipt = commit.publish().await?;
+println!("commit={} changed={}", receipt.id, receipt.changed_keys);
 ```
 
-Resume reuses verified payloads. It fails if the branch moved, the session
-expired, or another writer took ownership. Publication reconciles an ambiguous
-ref CAS by operation ID before fencing the branch.
-
-Durability adds one checkpoint PUT at session creation, one per configured
-checkpoint interval, and a final checkpoint when needed. The payload and
-atomic publication path remains `N + 3` PUTs. For a latency-sensitive batch
-that does not require restart recovery, opt out explicitly:
+If a durable process stops after saving `batch_id`:
 
 ```rust
-let commit = client.begin_commit().ephemeral().start().await?;
+let mut commit = client.resume_commit(batch_id).await?;
+commit.put_object("incoming/0003.json", third_body).await?;
+let receipt = commit.publish().await?;
 ```
 
-### Create branches and immutable tags
+For a disposable job, add `.ephemeral()`. That removes checkpoint requests
+but cannot recover process-local staged metadata after a crash.
 
-Branches are independent publication lanes. Creating a branch points it at an
-existing durable commit; it does not copy payloads or Prolly nodes.
+## List files and versions
 
 ```rust
-let main = client.head().await?;
-let feature_head = client.create_branch("feature", Some(main)).await?;
+let mut after: Option<String> = None;
+loop {
+    let (_snapshot, page, truncated) =
+        client.list_objects("incoming/", after.as_deref(), 1_000).await?;
+    after = page
+        .last()
+        .map(|item| String::from_utf8_lossy(&item.key).into_owned());
+    for item in page {
+        println!("{}", String::from_utf8_lossy(&item.key));
+    }
+    if !truncated {
+        break;
+    }
+}
+
+let (_head, versions) =
+    client.list_object_versions("documents/readme.txt", 100).await?;
+```
+
+## Branch and merge
+
+```rust
+use prolly_s3_client::core::{MergePhase, MergePolicy};
+
+let base = client.head().await?;
+client.create_branch("feature", Some(base)).await?;
 
 let feature = client.for_branch("feature")?;
-let committed = feature
-    .put_object("docs/feature.txt", b"ready for review".to_vec())
+feature
+    .put_object("documents/feature.txt", b"feature\n".to_vec())
     .await?;
 
-let release = client.create_tag("release-2026-08", committed.id).await?;
-assert_eq!(client.tag("release-2026-08").await?, release);
-assert_eq!(feature_head.target, main);
-```
-
-Delete operations require the target you observed. A concurrent branch move
-or tag replacement therefore fails instead of deleting newer state.
-
-```rust
-client.delete_tag("release-2026-08", release.target).await?;
-client.delete_branch("feature", committed.id).await?;
-```
-
-### Merge branches with bounded, restartable work
-
-Native-v2 merge never materializes complete snapshots or ancestor sets. The
-cursor stays constant-size while the graph frontier, changes, conflicts, and
-partially built output roots live in a job-scoped Prolly tree.
-
-```rust
-use prolly_s3_client::core::{
-    decode_canonical, encode_canonical, MergeCursorV2, MergePhaseV2,
-    MergePolicyV2,
-};
-
-let mut cursor = client
-    .start_merge(
-        "feature",
-        None,
-        MergePolicyV2::Theirs,
-        "merge reviewed feature",
-    )
+let mut merge = client
+    .start_merge("feature", None, MergePolicy::Fail, "merge feature")
     .await?;
-std::fs::write("merge.cbor", encode_canonical(&cursor)?)?;
 
-loop {
-    if cursor.phase == MergePhaseV2::AwaitingBase {
-        let page = client.merge_bases_page(&cursor, None, 100).await?;
-        let base = page
-            .bases
-            .first()
-            .copied()
-            .ok_or_else(|| std::io::Error::other("merge reported no best base"))?;
-        cursor = client.select_merge_base(&cursor, base).await?;
-        std::fs::write("merge.cbor", encode_canonical(&cursor)?)?;
-    }
-
-    if matches!(
-        cursor.phase,
-        MergePhaseV2::ReadyToPublish | MergePhaseV2::Conflicted
-    ) {
-        break;
-    }
-
-    let page = client.advance_merge(&cursor, 512).await?;
-    cursor = page.cursor;
-
-    // Save only the returned cursor. An older saved cursor is safe to replay,
-    // but may repeat already completed bounded work.
-    std::fs::write("merge.cbor", encode_canonical(&cursor)?)?;
+while merge.phase != MergePhase::ReadyToPublish {
+    merge = client.advance_merge(&merge, 1_000).await?.cursor;
 }
 
-// Another process can reopen ClientV2 and resume from the canonical cursor.
-let saved: MergeCursorV2 = decode_canonical(&std::fs::read("merge.cbor")?)?;
-cursor = saved;
-
-let mut after = None;
-loop {
-    let page = client.merge_changes_page(&cursor, after.as_ref(), 500).await?;
-    for change in &page.changes {
-        println!("change: {}", String::from_utf8_lossy(&change.key));
-    }
-    after = page.continuation;
-    if after.is_none() {
-        break;
-    }
-}
-
-let receipt = client.publish_merge(&cursor).await?;
-println!("published merge {}", receipt.id);
-
-let mut cleanup = None;
-loop {
-    let page = client.cleanup_merge(&cursor, cleanup.as_ref(), 1_000).await?;
-    cleanup = page.continuation;
-    if cleanup.is_none() {
-        break;
-    }
-}
+let page = client.merge_changes_page(&merge, None, 1_000).await?;
+println!("changes={}", page.changes.len());
+let receipt = client.publish_merge(&merge).await?;
 ```
 
-`MergePolicyV2::Fail` stops in `Conflicted`; page conflicts with
-`merge_conflicts_page`, then clean up the abandoned plan or start a new plan
-with an explicit `Ours` or `Theirs` policy. A criss-cross history can produce
-several best bases and stops in `AwaitingBase` until the caller selects one.
-Publication revalidates the target branch head and uses operation-ID
-reconciliation after an ambiguous CAS. A target move is returned as
-`RefConflict`; merge never silently rebases the completed plan.
+Merge work is immutable and restartable. Persist the canonical `MergeCursor`
+returned by each bounded advance. Use `merge_conflicts_page` before publishing
+when the policy can produce conflicts.
 
-### Page the native ref catalog
+## Cache immutable nodes
 
-The catalog is split into 16 independent shards. Listing uses point reads of
-the shard heads and nodes; it does not scan the S3 ref prefix. Ordering is
-stable by shard and then name, so persist the opaque cursor rather than
-constructing one.
+The in-memory cache is enabled through repository limits. For a persistent
+Foyer cache, enable the `foyer-cache` feature:
 
 ```rust
-let mut cursor = None;
-loop {
-    let page = client.list_branch_catalog_page(cursor, 500).await?;
-    for branch in page.branches {
-        println!("{} -> {}", branch.name, branch.target);
-    }
-    cursor = page.continuation;
-    if cursor.is_none() {
-        break;
-    }
-}
-```
-
-The catalog is derived discovery state. Resolve a chosen branch with
-`client.for_branch(name)?.head().await?` or a tag with `client.tag(name).await?`
-before acting on it. If a process crashes after publishing a ref but before
-updating its shard, run the bounded repair API from an administrative job:
-
-```rust
-let mut continuation = None;
-loop {
-    let page = client
-        .repair_branch_catalog_page(continuation, 500)
-        .await?;
-    continuation = page.continuation;
-    if continuation.is_none() {
-        break;
-    }
-}
-```
-
-Repair is intentionally the only native-v2 path that lists the authoritative
-ref namespace. It should not run in foreground request handling.
-
-### Migrate a v1 branch without dual writes
-
-Migration copies one immutable v1 branch snapshot into a new native-v2 branch
-while preserving its complete commit DAG, merge parents, commit metadata,
-object history, and delete markers. The source and destination repositories
-must use different prefixes; the destination branch must not exist.
-
-```rust
-let mut cursor = v1_client
-    .start_v2_migration(&v2_client, "imported-main")
-    .await?;
-
-loop {
-    let page = v1_client
-        .advance_v2_migration(&v2_client, &cursor, 4_096, 256)
-        .await?;
-
-    cursor = page.cursor;
-    let checkpoint = prolly_s3_client::core::encode_canonical(&cursor)?;
-    std::fs::write("v1-to-v2-migration.cbor", checkpoint)?;
-
-    if page.complete {
-        break;
-    }
-}
-
-let imported = v2_client.for_branch("imported-main")?;
-println!("native-v2 head: {}", imported.head().await?);
-```
-
-The cursor is constant-size. Its traversal stack, source-to-destination commit
-mappings, and imported node/commit-graph roots live in immutable Prolly nodes.
-Restart either process, reopen both clients with the same writer identities,
-decode the last persisted cursor, and continue. Replaying an older cursor is
-safe: payload and commit writes are content-addressed and reconcile exactly.
-
-Migration creates a non-expiring source retention pin before traversal and
-removes it only after the destination ref and complete cold-read indexes are
-durable. Clean the now-unreferenced traversal nodes afterward:
-
-```rust
-loop {
-    let cleanup = v1_client.cleanup_v2_migration(&cursor, 1_000).await?;
-    if cleanup.complete {
-        break;
-    }
-}
-```
-
-To abandon an incomplete job, call `abort_v2_migration` in bounded cleanup
-pages. It releases the source pin, unregisters the target's transient imported
-index root, and deletes traversal state. Unreachable immutable payloads and
-commits remain safe for native-v2 GC.
-
-Run one migration per source branch that must remain independently named. The
-native importer uses one target system-authority scope, so shared commits have
-stable destination identities within the same authority epoch. Before cleanup,
-resolve any source tag target and create its native tag explicitly:
-
-```rust
-for source_tag in v1_client.list_tags().await? {
-    if let Some(native_target) = v1_client
-        .v2_migration_mapping(&cursor, source_tag.target)
-        .await?
-    {
-        v2_client.create_tag(&source_tag.name, native_target).await?;
-    }
-}
-```
-
-Do not mutate both formats as a migration strategy.
-
-### Clean expired checkpoints
-
-Cleanup is bounded and resumable. Run it periodically from repository
-maintenance:
-
-```rust
-let mut cursor = None;
-loop {
-    let page = client
-        .cleanup_expired_commit_sessions(cursor, 1_000)
-        .await?;
-    cursor = page.continuation;
-    if cursor.is_none() {
-        break;
-    }
-}
-```
-
-### Observe cold-start index readiness
-
-`ClientV2` starts branch-local index maintenance and waits for the default
-branch to become readable during open. Foreground reads never replay a journal
-tail. A newly selected branch instead fails quickly with `MissingClosure` and
-retry advice until background catch-up completes.
-
-```rust
-let health = client.branch_index_health().await?;
-println!(
-    "ready={} lag={} last_error={:?}",
-    health.ready,
-    health.lag_generations,
-    health.last_error,
-);
-
-client
-    .wait_for_branch_indexes(std::time::Duration::from_secs(30))
-    .await?;
-```
-
-Maintenance is branch-local and checks only branches registered in that
-process. `background_index_maintenance(false)` is available for isolated
-request-shape probes; production clients should keep the default enabled.
-
-If health reports that lag exceeded the incremental window, run the resumable
-rebuild workflow. Persist the canonical cursor after every step in your job
-store before scheduling the next step:
-
-```rust
-let mut cursor = client.start_branch_index_rebuild().await?;
-
-loop {
-    let step = client
-        .advance_branch_index_rebuild(&cursor, 256)
-        .await?;
-
-    cursor = step.cursor;
-    let encoded_cursor = prolly_s3_client::core::encode_canonical(&cursor)?;
-    std::fs::write("journal-index-rebuild.cbor", encoded_cursor)?;
-
-    if step.complete {
-        break;
-    }
-}
-
-// The operation-ID index replays the same linked chunks after the node and
-// graph roots are complete. Persist this cursor after every bounded step too.
-let mut operation = client.start_operation_index_rebuild(&cursor).await?;
-loop {
-    let step = client
-        .advance_operation_index_rebuild(&operation, 256)
-        .await?;
-    operation = step.cursor;
-    let encoded_cursor = prolly_s3_client::core::encode_canonical(&operation)?;
-    std::fs::write("operation-index-rebuild.cbor", encoded_cursor)?;
-    if step.complete {
-        break;
-    }
-}
-
-while !client
-    .cleanup_branch_index_rebuild(&cursor, &operation, 1_000)
-    .await?
-    .complete
-{}
-```
-
-Discovery and application are independently paged. Rebuild state consists of
-immutable linked chunks and fresh Prolly roots, so restart does not rediscover
-already scanned history. Do not clean up the shared chunks until both the
-node/graph and operation-index cursors are complete.
-
-## Ingest files in batches (recommended)
-
-Use `ingest_objects` when loading more than one file. It publishes up to 100
-whole files per commit by default, reducing commit-envelope and branch-CAS
-traffic from two calls per file to two calls per batch.
-
-```rust
-use prolly_s3_client::IngestObject;
-
-let files = (0..1_000).map(|index| {
-    IngestObject::new(
-        format!("imports/file-{index:04}.json"),
-        format!(r#"{{"index":{index}}}"#).into_bytes(),
-    )
-    .content_type("application/json")
-    .metadata("source", "initial-import")
-});
-
-let report = client.ingest_objects(files).await?;
-assert_eq!(report.object_count, 1_000);
-assert_eq!(report.commits.len(), 10);
-```
-
-The default is bounded by both 100 files and the configured
-`max_staged_batch_bytes`. Use `ingest_objects_with_limit` to choose a smaller
-commit size. Use multipart upload for any single file larger than the staged
-byte limit.
-
-The current RustFS gate enforces 1.030 SDK calls/file for 10K × 64 KiB files;
-one authority point read is amortized across every 100-file commit. The prior
-pre-sharded run measured 1.083× uploaded-byte amplification. Treat these as
-local regression budgets, not AWS latency or durability claims.
-
-For interactive or independent writes, use the single-file API below.
-
-## Put and read one file
-
-The builders intentionally resemble the AWS Rust SDK:
-
-```rust
-use aws_sdk_s3::primitives::ByteStream;
-
-let written = client
-    .put_object()
-    .bucket(client.bucket())
-    .key("reports/summary.txt")
-    .body(ByteStream::from_static(b"version one\n"))
-    .content_type("text/plain")
-    .metadata("source", "quarterly-job")
-    .send()
-    .await?;
-
-println!("commit: {}", written.snapshot);
-println!("logical version: {}", written.output.version_id().unwrap_or_default());
-
-let current = client
-    .get_object()
-    .bucket(client.bucket())
-    .key("reports/summary.txt")
-    .send()
-    .await?;
-
-let bytes = current.output.body.collect().await?.into_bytes();
-assert_eq!(bytes.as_ref(), b"version one\n");
-```
-
-`written.snapshot` is the Prolly commit that made the file visible.
-`written.output.version_id()` is the logical Prolly object-version ID, not the
-provider's raw S3 `VersionId`.
-
-## Read an old snapshot
-
-Every snapshot resolves the exact physical S3 version recorded at that commit:
-
-```rust
-use aws_sdk_s3::primitives::ByteStream;
-
-let first = client
-    .put_object()
-    .bucket(client.bucket())
-    .key("config/app.toml")
-    .body(ByteStream::from_static(b"mode = 'safe'\n"))
-    .send()
-    .await?;
-
-client
-    .put_object()
-    .bucket(client.bucket())
-    .key("config/app.toml")
-    .body(ByteStream::from_static(b"mode = 'fast'\n"))
-    .send()
-    .await?;
-
-let old = client
-    .at(first.snapshot)
-    .await?
-    .get_object()
-    .bucket(client.bucket())
-    .key("config/app.toml")
-    .send()
-    .await?;
-
-let old_bytes = old.output.body.collect().await?.into_bytes();
-assert_eq!(old_bytes.as_ref(), b"mode = 'safe'\n");
-```
-
-## Publish a custom atomic change set
-
-Staged changes are invisible until `publish`. The session is intentionally
-in-memory; it is not resumable after process loss.
-
-```rust
-use aws_sdk_s3::primitives::ByteStream;
-
-let mut commit = client
-    .begin_commit()
-    .message("publish site assets")
-    .start()
-    .await?;
-
-commit
-    .put_object()
-    .bucket(client.bucket())
-    .key("site/index.html")
-    .body(ByteStream::from_static(b"<h1>Hello</h1>"))
-    .content_type("text/html")
-    .stage()
-    .await?;
-
-commit
-    .delete_object()
-    .bucket(client.bucket())
-    .key("site/old.html")
-    .stage()
-    .await?;
-
-let receipt = commit.publish().await?;
-println!("published commit: {}", receipt.id);
-```
-
-For `N` staged keys, publication uses `N + 3` foreground S3 calls. The extra
-point GET validates branch-scoped writer authority before payload mutation. Payload
-mutations are bounded and parallel. One commit envelope and one branch CAS make
-the entire batch visible. Prefer `ingest_objects` for homogeneous bulk puts;
-use a commit session when you need mixed puts and deletes or a custom message.
-
-## List, branch, and diff
-
-```rust
-let page = client
-    .list_objects_v2()
-    .bucket(client.bucket())
-    .prefix("reports/")
-    .max_keys(100)
-    .send()
-    .await?;
-
-for object in page.output.contents() {
-    println!("{}", object.key().unwrap_or_default());
-}
-
-let main_head = client.head_commit().await?;
-client.create_branch("review", Some(main_head)).await?;
-let review = client.on_branch("review")?;
-
-let (changes, more) = client.diff_page(main_head, review.head_commit().await?, None, 100).await?;
-assert!(!more);
-for change in changes {
-    println!("{:?}", change);
-}
-```
-
-Continuation tokens require a shared `HmacTokenSigner` so another reader can
-verify and resume the same immutable listing snapshot.
-
-## Conditional and idempotent writes
-
-Use `expected_head` to reject publication if the branch moved. Use a stable
-`OperationId` when a caller may retry after an ambiguous response:
-
-```rust
-use aws_sdk_s3::primitives::ByteStream;
-use prolly_s3_client::OperationId;
-
-let expected = client.head_commit().await?;
-let operation = OperationId::new();
-
-let result = client
-    .put_object()
-    .bucket(client.bucket())
-    .key("jobs/result.json")
-    .body(ByteStream::from_static(br#"{"ok":true}"#))
-    .expected_head(expected)
-    .operation_id(operation)
-    .send()
-    .await?;
-
-assert_eq!(result.commit.as_ref().unwrap().operation, operation);
-```
-
-The client does not retry logical branch conflicts. Local payload uploads may
-run concurrently. The short metadata-publication phase is serialized per
-branch, while independent branches can publish concurrently; a stale expected
-head fails explicitly.
-
-## Hand off one branch writer
-
-Writer authority is branch-scoped. Open the replacement client read-only, make
-the previous process and credentials unable to publish, then perform an
-explicit generation-checked takeover:
-
-```rust
-let mut replacement = Client::builder()
-    .aws_client(aws)
-    .bucket(bucket)
-    .writer("repository-service-b")
-    .read_only(true)
-    .provider_identity(ProviderIdentity::aws_region("us-west-2"))
-    .attestation_signer(attestation_signer)
-    .open()
-    .await?;
-
-let generation = replacement
-    .takeover_branch_writer(
-        "main",
-        "repository-service-a",
-        7,
-        "old credentials revoked and process isolated",
-    )
-    .await?;
-
-assert_eq!(generation, 8);
-```
-
-The no-target-change branch-ref CAS is the fencing barrier. After it succeeds,
-the old writer fails its authority validation before uploading payload bytes.
-Take over additional branches independently; do not use one branch handoff as
-evidence that another branch changed owner.
-
-## Add a persistent node cache
-
-Foyer keeps verified immutable Prolly nodes in bounded memory and local disk.
-Successful commits write their new nodes through to this cache. Cache hits are
-checked against the CID; corruption and cache I/O errors fail open to a
-verified S3 read.
-
-```rust
-use std::{path::PathBuf, sync::Arc, time::Duration};
-
-use prolly_s3_client::{
-    Client, FoyerNodeCache, FoyerNodeCacheConfig, HmacAttestationSigner,
-    HmacTokenSigner, ProviderIdentity,
-};
-
-let node_cache = FoyerNodeCache::open(FoyerNodeCacheConfig {
-    directory: PathBuf::from("/var/cache/prolly-s3/nodes"),
-    memory_capacity_bytes: 512 * 1024 * 1024,
-    disk_capacity_bytes: 20 * 1024 * 1024 * 1024,
-    disk_block_size_bytes: 8 * 1024 * 1024,
-    memory_shards: 16,
+use std::path::PathBuf;
+use prolly_s3_client::{FoyerNodeCache, FoyerNodeCacheConfig};
+
+let cache = FoyerNodeCache::open(FoyerNodeCacheConfig {
+    directory: PathBuf::from("./prolly-node-cache"),
+    memory_capacity_bytes: 64 * 1024 * 1024,
+    disk_capacity_bytes: 4 * 1024 * 1024 * 1024,
+    disk_block_size_bytes: 4 * 1024 * 1024,
+    memory_shards: 8,
 })
 .await?;
 
 let client = Client::builder()
-    .aws_client(aws)
-    .bucket(bucket)
-    .writer("repository-service")
-    .provider_identity(ProviderIdentity::aws_region("us-west-2"))
-    .attestation_signer(Arc::new(HmacAttestationSigner::single(
-        "provider-key-2026-01",
-        vec![0x41; 32],
-    )?))
-    .token_signer(Arc::new(HmacTokenSigner::single(
-        "cursor-key-2026-01",
-        vec![0x42; 32],
-    )?))
-    .node_cache(node_cache.clone())
-    .max_cached_node_locations(262_144)
-    .node_index_maintenance(Duration::from_secs(60), 1_000)
+    // supply the same required provider and bucket settings
+    .node_cache(cache)
     .open()
     .await?;
-
-// On a cold host, populate the cache before serving traversal-heavy reads.
-let snapshot = client.head_commit().await?;
-let warmed = client.prewarm_internal_node_cache(snapshot).await?;
-println!(
-    "warmed {} roots and {} internal nodes; skipped {} leaves",
-    warmed.roots,
-    warmed.internal_nodes,
-    warmed.leaves_skipped,
-);
 ```
 
-Use one filesystem owner per cache directory. Drop clients before calling
-`node_cache.close().await?` during graceful shutdown. Reopen the same directory
-after restart to reuse persisted immutable nodes. A new host should run
-`prewarm_internal_node_cache` before taking traversal-heavy traffic. It does
-not enumerate every object or warm leaf nodes, so cost grows with tree height
-and internal fanout rather than file count.
+Cache keys include repository identity, tree format, and immutable CID. Cached
+bytes are verified before use. Persisted caches improve cold-start traversal
+but are never authoritative.
 
-## Page through large histories and ref sets
+## Performance model
 
-Run one maintenance page immediately after bulk import; writable clients also
-advance the rebuildable indexes every 60 seconds by default.
+- A single-file write uploads one payload and publishes immutable metadata.
+- A batch uploads one payload per changed file, then amortizes tree and
+  publication requests across the batch.
+- A current or historical read resolves a ref/commit/tree path and one payload.
+- Warm immutable-node caches remove most repeated metadata reads.
+- Same-branch writers contend on one ref CAS; different branches publish
+  independently.
 
-```rust
-use prolly_s3_client::core::TraversalBudget;
-
-client.advance_scale_indexes(1_000).await?;
-
-let root = client.head_commit().await?;
-let mut history_cursor = None;
-loop {
-    let page = client
-        .log_bounded(root, history_cursor.as_ref(), 500, TraversalBudget::default())
-        .await?;
-
-    for (commit_id, commit) in page.commits {
-        println!("{} {}", commit_id, commit.message.unwrap_or_default());
-    }
-
-    history_cursor = page.continuation;
-    if history_cursor.is_none() {
-        break;
-    }
-}
-```
-
-The derived ref catalog is for enumeration only. Its response includes a scan
-epoch and update time; resolve a selected name through the authoritative ref
-before mutation.
-
-```rust
-let mut after = None;
-loop {
-    let page = client
-        .list_branch_catalog_page(after.as_deref(), 500)
-        .await?;
-
-    for branch in &page.branches {
-        println!("{} -> {}", branch.name, branch.target);
-    }
-
-    after = page.continuation;
-    if after.is_none() {
-        break;
-    }
-}
-```
-
-Use `diff_bounded` for very large comparisons. Its continuation preserves the
-structural traversal frontier, so unchanged CID subtrees stay pruned after a
-resume.
-
-## Run partitioned garbage collection
-
-GC v2 requires the writable authoritative client and complete node-index
-coverage. Each call has a 1–1,000 item budget and persists its checkpoint.
-
-```rust
-use prolly_s3_client::core::GcEpochPhaseV2;
-
-client.advance_node_index(1_000).await?;
-let mut epoch = client
-    .start_gc_epoch(Duration::from_secs(7 * 24 * 60 * 60))
-    .await?;
-
-loop {
-    match epoch.phase {
-        GcEpochPhaseV2::Ready | GcEpochPhaseV2::Sweeping => {
-            epoch = client.sweep_gc_epoch(epoch.id, 500).await?.epoch;
-        }
-        GcEpochPhaseV2::Completed => break,
-        GcEpochPhaseV2::Aborted => {
-            eprintln!("GC epoch was aborted; inspect its abort_reason");
-            break;
-        }
-        _ => {
-            // This also handles a safe root-discovery restart after a write.
-            epoch = client.advance_gc_epoch(epoch.id, 1_000).await?.epoch;
-        }
-    }
-}
-```
-
-For a large repository, call `advance_node_index` until its report says
-`completed_scan`; one 1,000-object call may be only part of an index epoch.
-
-## Use cases
-
-- Configuration, model, and artifact registries that need exact rollback.
-- Data-pipeline outputs that need atomic publication of several files.
-- Audit-friendly document stores with named snapshots and branches.
-- Versioned static assets where ordinary S3 objects remain directly operable.
-- Backup catalogs where Prolly records the logical set and S3 retains bytes.
+Measure with `s3_operation_metrics` on the provider and workload you will run.
+The repository enforces configured request-shape limits, but no universal
+latency or cost claim substitutes for AWS qualification.
 
 ## Limitations
 
-- Managed writers may run in multiple processes when each process owns a
-  distinct branch authority. A branch still has exactly one active writer, and
-  direct S3 mutations outside this client remain unsupported.
-- No repository-level deduplication, chunking, or partial-file updates.
-- Legacy `Client` commit sessions buffer bodies in memory and fail closed at
-  the configured aggregate byte limit. Native-v2 durable sessions spool
-  streams to disk and retain only verified immutable bindings.
-- Multipart restart requires the caller to persist the upload handle, each
-  part's ETag/SHA-256/size, and whole-object checksums.
-- Provider-native version IDs cannot be preserved across buckets.
-- Raw S3 listing shows physical state, not a branch or historical snapshot.
-- Legacy whole-result methods such as `list_branches`, `merge_bases`, and
-  repository-wide `fsck` are not billion-scale APIs. Native-v2 merge uses a
-  durable frontier and paged changes/conflicts; other repository-wide work
-  still requires bounded administrative APIs.
-- Production AWS scale and throttling qualification is still pending.
+- The client must be the exclusive authority for its repository prefix.
+- One file must fit the repository and provider single-object PUT limits.
+- There is no chunked or multipart file representation.
+- Concurrent writes to one branch can conflict; batch related changes.
+- Immutable unreachable payloads and nodes are not currently reclaimed by a
+  production garbage-collection API.
+- Cross-repository clone and backup/restore are not production APIs.
+- “Millions or billions” requires provider quota, cache, latency, cost,
+  throttling, and hot-branch qualification at the intended workload.
 
-The complete RustFS example is
-[examples/rustfs_versioned_bucket.rs](examples/rustfs_versioned_bucket.rs).
+See the runnable
+[`rustfs_versioned_bucket`](examples/rustfs_versioned_bucket.rs) example and
+the repository [qualification guide](../QUALIFICATION.md).

@@ -1,10 +1,6 @@
-use aws_sdk_s3::{
-    operation::put_object::PutObjectInput,
-    primitives::ByteStream,
-};
 use prolly_s3_client::{
-    Client, QualifiedClone, Result, S3OperationMetrics, S3WireAttemptInterceptor, Versioned,
-    WriteOptions,
+    core::{CommitId, CommitReceipt, ObjectData},
+    Client, Result, S3WireAttemptInterceptor,
 };
 
 pub fn compile_wire_metrics_surface(
@@ -15,32 +11,21 @@ pub fn compile_wire_metrics_surface(
 }
 
 pub fn compile_fluent_surface(client: &Client) {
-    let _layout = client.physical_layout();
     let _metrics = client.s3_operation_metrics();
-    let _put = client
-        .put_object()
-        .bucket(client.bucket())
-        .key("downstream/compile.txt")
-        .body(ByteStream::from_static(b"compile"));
-    let _get = client
-        .get_object()
-        .bucket(client.bucket())
-        .key("downstream/compile.txt");
-    let _list = client.list_objects_v2().bucket(client.bucket()).prefix("downstream/");
+    let _put = client.put_object("downstream/compile.txt", b"compile".to_vec());
+    let _get = client.get_object("downstream/compile.txt");
+    let _list = client.list_objects("downstream/", None, 100);
 }
 
-pub fn compile_clone_metrics_surface(clone: &QualifiedClone) -> S3OperationMetrics {
-    clone.target_s3_metrics
-}
-
-pub async fn compile_official_input_surface(
+pub async fn compile_surface(
     client: &Client,
-    input: PutObjectInput,
-) -> Result<Versioned<aws_sdk_s3::operation::put_object::PutObjectOutput>> {
-    client.execute_put_object(input, WriteOptions::default()).await
-}
-
-#[cfg(feature = "slatedb-index")]
-pub fn compile_slatedb_surface(index: &prolly_s3_client::SlateDbAdvisoryIndex) -> &str {
-    index.path()
+    snapshot: CommitId,
+) -> Result<(CommitReceipt, Option<ObjectData>)> {
+    let receipt = client
+        .put_object("downstream/compile.txt", b"compile".to_vec())
+        .await?;
+    let historical = client
+        .get_object_at(snapshot, "downstream/compile.txt")
+        .await?;
+    Ok((receipt, historical))
 }

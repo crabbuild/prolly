@@ -4,10 +4,10 @@ use std::{
 };
 
 use crate::{
-    decode_canonical, CommitGraphHeadV2, CompareExchange, CompareExchangeOutcome, DeleteOutcome,
-    Error, ErrorCode, JournalDerivedIndexHeadV2, ListRequest, NodeIndexHeadV2, ObjectPath,
-    ObjectPlane, OperationIndexHeadV2, PhysicalVersion, RefCatalogHeadV2, RefCatalogShardHeadV2,
-    RefValueV1, RefValueV2, Result, StorageToken,
+    decode_canonical, CommitGraphHead, CompareExchange, CompareExchangeOutcome, DeleteOutcome,
+    Error, ErrorCode, JournalDerivedIndexHead, ListRequest, NodeIndexHead, ObjectPath, ObjectPlane,
+    OperationIndexHead, PhysicalVersion, RefCatalogHead, RefCatalogShardHead, RefValue, Result,
+    StorageToken,
 };
 
 pub const DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN: usize = 100;
@@ -16,25 +16,16 @@ pub const DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN: usize = 100;
 /// Immutable data and create-once format markers deliberately have no class.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MutableControlKind {
-    WriterLeaseV1,
-    AuthorityLeaseV2,
-    MaintenanceGateV2,
-    BranchRefV1,
-    BranchRefV2,
-    TagRefV1,
-    TagRefV2,
-    RetentionPinV1,
-    NodeIndexHeadV1,
-    NodeIndexHeadV2,
-    RefCatalogHeadV2,
-    RefCatalogShardHeadV2,
-    CommitGraphHeadV2,
-    OperationIndexHeadV2,
-    GcMarkRunV1,
-    GcRunV1,
-    GcEpochV2,
-    GcCoordinatorV2,
-    JournalDerivedIndexHeadV2,
+    AuthorityLease,
+    MaintenanceGate,
+    BranchRef,
+    TagRef,
+    NodeIndexHead,
+    RefCatalogHead,
+    RefCatalogShardHead,
+    CommitGraphHead,
+    OperationIndexHead,
+    JournalDerivedIndexHead,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -119,50 +110,45 @@ impl<P: ObjectPlane> MutableControlStore<P> {
             let first_update = self.is_unseen(&request.path)?;
             let ref_interval = (self.versions_to_retain / 2).max(1) as u64;
             let scheduled = match kind {
-                MutableControlKind::BranchRefV1 => {
-                    let reference: RefValueV1 = decode_canonical(&request.bytes)?;
+                MutableControlKind::BranchRef => {
+                    let reference: RefValue = decode_canonical(&request.bytes)?;
                     first_update || reference.generation.0.is_multiple_of(ref_interval)
                 }
-                MutableControlKind::BranchRefV2 => {
-                    let reference: RefValueV2 = decode_canonical(&request.bytes)?;
-                    first_update || reference.generation.0.is_multiple_of(ref_interval)
-                }
-                MutableControlKind::NodeIndexHeadV2 => {
-                    let head: NodeIndexHeadV2 = decode_canonical(&request.bytes)?;
+                MutableControlKind::NodeIndexHead => {
+                    let head: NodeIndexHead = decode_canonical(&request.bytes)?;
                     first_update || head.generation.is_multiple_of(ref_interval)
                 }
-                MutableControlKind::RefCatalogHeadV2 => {
-                    let head: RefCatalogHeadV2 = decode_canonical(&request.bytes)?;
+                MutableControlKind::RefCatalogHead => {
+                    let head: RefCatalogHead = decode_canonical(&request.bytes)?;
                     first_update || head.generation.is_multiple_of(ref_interval)
                 }
-                MutableControlKind::RefCatalogShardHeadV2 => {
-                    let head: RefCatalogShardHeadV2 = decode_canonical(&request.bytes)?;
+                MutableControlKind::RefCatalogShardHead => {
+                    let head: RefCatalogShardHead = decode_canonical(&request.bytes)?;
                     first_update || head.generation.is_multiple_of(ref_interval)
                 }
-                MutableControlKind::CommitGraphHeadV2 => {
-                    let head: CommitGraphHeadV2 = decode_canonical(&request.bytes)?;
+                MutableControlKind::CommitGraphHead => {
+                    let head: CommitGraphHead = decode_canonical(&request.bytes)?;
                     first_update || head.generation.is_multiple_of(ref_interval)
                 }
-                MutableControlKind::OperationIndexHeadV2 => {
-                    let head: OperationIndexHeadV2 = decode_canonical(&request.bytes)?;
+                MutableControlKind::OperationIndexHead => {
+                    let head: OperationIndexHead = decode_canonical(&request.bytes)?;
                     first_update || head.generation.is_multiple_of(ref_interval)
                 }
-                MutableControlKind::JournalDerivedIndexHeadV2 => {
-                    let head: JournalDerivedIndexHeadV2 = decode_canonical(&request.bytes)?;
+                MutableControlKind::JournalDerivedIndexHead => {
+                    let head: JournalDerivedIndexHead = decode_canonical(&request.bytes)?;
                     first_update || head.generation.is_multiple_of(ref_interval)
                 }
                 _ => true,
             };
             if scheduled {
                 let target = match kind {
-                    MutableControlKind::BranchRefV1
-                    | MutableControlKind::BranchRefV2
-                    | MutableControlKind::NodeIndexHeadV2
-                    | MutableControlKind::RefCatalogHeadV2
-                    | MutableControlKind::RefCatalogShardHeadV2
-                    | MutableControlKind::CommitGraphHeadV2
-                    | MutableControlKind::OperationIndexHeadV2
-                    | MutableControlKind::JournalDerivedIndexHeadV2 => {
+                    MutableControlKind::BranchRef
+                    | MutableControlKind::NodeIndexHead
+                    | MutableControlKind::RefCatalogHead
+                    | MutableControlKind::RefCatalogShardHead
+                    | MutableControlKind::CommitGraphHead
+                    | MutableControlKind::OperationIndexHead
+                    | MutableControlKind::JournalDerivedIndexHead => {
                         (self.versions_to_retain / 2).max(1)
                     }
                     _ => self.versions_to_retain.saturating_sub(1),
@@ -363,31 +349,18 @@ pub fn classify_mutable_control_path(
         .strip_prefix('/')?;
     let parts = relative.split('/').collect::<Vec<_>>();
     match parts.as_slice() {
-        ["writers", "lease.cbor"] => Some(MutableControlKind::WriterLeaseV1),
-        ["authority", "v2", "branches" | "system", _, "lease.cbor"] => {
-            Some(MutableControlKind::AuthorityLeaseV2)
+        ["authority", "branches" | "system", _, "lease.cbor"] => {
+            Some(MutableControlKind::AuthorityLease)
         }
-        ["authority", "v2", "maintenance", "gate.cbor"] => {
-            Some(MutableControlKind::MaintenanceGateV2)
-        }
-        ["refs", "heads", _] => Some(MutableControlKind::BranchRefV1),
-        ["refs", "v2", "heads", _] => Some(MutableControlKind::BranchRefV2),
-        ["refs", "tags", _] => Some(MutableControlKind::TagRefV1),
-        ["refs", "v2", "tags", _] => Some(MutableControlKind::TagRefV2),
-        ["retention", "pins", _] => Some(MutableControlKind::RetentionPinV1),
-        ["node-index", "latest.cbor"] => Some(MutableControlKind::NodeIndexHeadV1),
-        ["node-index", "v2", "head.cbor"] => Some(MutableControlKind::NodeIndexHeadV2),
-        ["ref-catalog", "v2", "head.cbor"] => Some(MutableControlKind::RefCatalogHeadV2),
-        ["ref-catalog", "v2", "shards", _, "head.cbor"] => {
-            Some(MutableControlKind::RefCatalogShardHeadV2)
-        }
-        ["commit-graph", "v2", "head.cbor"] => Some(MutableControlKind::CommitGraphHeadV2),
-        ["operation-index", "v2", "heads", _] => Some(MutableControlKind::OperationIndexHeadV2),
-        ["gc", "mark-runs", _] => Some(MutableControlKind::GcMarkRunV1),
-        ["gc", "runs", _] => Some(MutableControlKind::GcRunV1),
-        ["gc", "v2", "epochs", _, "head.cbor"] => Some(MutableControlKind::GcEpochV2),
-        ["gc", "v2", "coordinator.cbor"] => Some(MutableControlKind::GcCoordinatorV2),
-        ["journal-index", "v2", "heads", _] => Some(MutableControlKind::JournalDerivedIndexHeadV2),
+        ["authority", "maintenance", "gate.cbor"] => Some(MutableControlKind::MaintenanceGate),
+        ["refs", "heads", _] => Some(MutableControlKind::BranchRef),
+        ["refs", "tags", _] => Some(MutableControlKind::TagRef),
+        ["node-index", "head.cbor"] => Some(MutableControlKind::NodeIndexHead),
+        ["ref-catalog", "head.cbor"] => Some(MutableControlKind::RefCatalogHead),
+        ["ref-catalog", "shards", _, "head.cbor"] => Some(MutableControlKind::RefCatalogShardHead),
+        ["commit-graph", "head.cbor"] => Some(MutableControlKind::CommitGraphHead),
+        ["operation-index", "heads", _] => Some(MutableControlKind::OperationIndexHead),
+        ["journal-index", "heads", _] => Some(MutableControlKind::JournalDerivedIndexHead),
         _ => None,
     }
 }

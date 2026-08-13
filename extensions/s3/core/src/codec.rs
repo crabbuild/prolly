@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{Error, ErrorCode, Result};
 
-/// Encode the Prolly S3 v1 wire profile.
+/// Encode the Prolly S3  wire profile.
 ///
 /// Rust field and variant names are first replaced with their stable numeric
 /// indices by serde's packed representation. The intermediate CBOR value is
@@ -45,14 +45,12 @@ where
 fn validate_wire_value(value: &Value) -> Result<()> {
     match value {
         Value::Integer(value) if *value < 0 => Err(Error::serialization(
-            "Prolly S3 v1 forbids negative CBOR integers",
+            "Prolly S3 forbids negative CBOR integers",
         )),
         Value::Float(_) => Err(Error::serialization(
-            "Prolly S3 v1 forbids CBOR floating-point values",
+            "Prolly S3 forbids CBOR floating-point values",
         )),
-        Value::Tag(_, _) => Err(Error::serialization(
-            "Prolly S3 v1 forbids CBOR semantic tags",
-        )),
+        Value::Tag(_, _) => Err(Error::serialization("Prolly S3 forbids CBOR semantic tags")),
         Value::Array(values) => {
             for value in values {
                 validate_wire_value(value)?;
@@ -67,7 +65,7 @@ fn validate_wire_value(value: &Value) -> Result<()> {
             Ok(())
         }
         Value::__Hidden => Err(Error::serialization(
-            "Prolly S3 v1 encountered an unsupported CBOR value",
+            "Prolly S3 encountered an unsupported CBOR value",
         )),
         _ => Ok(()),
     }
@@ -126,7 +124,7 @@ mod tests {
     #[test]
     fn decoder_rejects_a_different_map_order() {
         // {0: 1, 1: {"aa": [2], "z": [1]}} with the inner text keys in
-        // noncanonical order ("z" has the shorter encoded key).
+        // noncanonical order ("z"has the shorter encoded key).
         let noncanonical = hex::decode("a2000101a26261618102617a8101").unwrap();
         assert_eq!(
             decode_canonical::<Fixture>(&noncanonical).unwrap_err().code,

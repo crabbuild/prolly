@@ -10,17 +10,15 @@ use futures_util::StreamExt;
 use prolly::{AsyncStore, BatchOp, Cid};
 
 use crate::{
-    codec::sha256, CommitId, CommitIdV2, CommitObjectV1, CommitObjectV2, DeleteOutcome, Error,
-    ErrorCode, GetRequest, ImmutablePut, JournalNodeIndexEntryV2, ListRequest, NodeCache,
-    NodeCacheKey, NodeIndexEntryV1, NodePackAttachmentKindV1, NodePackAttachmentV1,
-    NodePackEntryV1, NodePackId, NodePackRefV1, NodePackV1, ObjectPath, ObjectPlane,
+    codec::sha256, CommitId, CommitObject, DeleteOutcome, Error, ErrorCode, GetRequest,
+    ImmutablePut, JournalNodeIndexEntry, NodeCache, NodeCacheKey, NodePack, NodePackAttachment,
+    NodePackAttachmentKind, NodePackEntry, NodePackId, NodePackRef, ObjectPath, ObjectPlane,
     PhysicalVersion, RepositoryId, Result, TreeFormatDigest,
 };
 
 #[derive(Clone, Copy)]
 enum PackedCommitId {
-    V1(CommitId),
-    V2(CommitIdV2),
+    Native(CommitId),
 }
 
 #[derive(Clone)]
@@ -48,7 +46,6 @@ struct PackedNodeState {
     coalesced_waits: AtomicU64,
     ranged_fetches: AtomicU64,
     locator: RwLock<Option<Arc<dyn NodeLocator>>>,
-    allow_namespace_scan: bool,
 }
 
 struct DirectNodeState {
@@ -93,10 +90,6 @@ impl BoundedNodeLocations {
             }
         }
     }
-
-    fn iter(&self) -> impl Iterator<Item = (&Cid, &PackedNodeLocation)> {
-        self.entries.iter()
-    }
 }
 
 #[async_trait::async_trait]
@@ -114,24 +107,11 @@ pub(crate) struct LocatedPackedNode {
     sha256: [u8; 32],
 }
 
-impl From<NodeIndexEntryV1> for LocatedPackedNode {
-    fn from(entry: NodeIndexEntryV1) -> Self {
+impl From<JournalNodeIndexEntry> for LocatedPackedNode {
+    fn from(entry: JournalNodeIndexEntry) -> Self {
         Self {
             cid: entry.cid,
-            container: PackedCommitId::V1(entry.container),
-            pack: entry.pack,
-            absolute_offset: entry.absolute_offset,
-            len: entry.len,
-            sha256: entry.sha256,
-        }
-    }
-}
-
-impl From<JournalNodeIndexEntryV2> for LocatedPackedNode {
-    fn from(entry: JournalNodeIndexEntryV2) -> Self {
-        Self {
-            cid: entry.cid,
-            container: PackedCommitId::V2(entry.container),
+            container: PackedCommitId::Native(entry.container),
             pack: entry.pack,
             absolute_offset: entry.absolute_offset,
             len: entry.len,
@@ -143,7 +123,6 @@ impl From<JournalNodeIndexEntryV2> for LocatedPackedNode {
 #[derive(Clone, Copy)]
 pub(crate) struct NodeCacheNamespace {
     pub(crate) repository: RepositoryId,
-    pub(crate) protocol_version: u32,
     pub(crate) tree_format: TreeFormatDigest,
 }
 
@@ -159,7 +138,7 @@ pub struct NodeCacheSnapshot {
 }
 
 struct PackedNodeCache {
-    entries: BTreeMap<NodePackId, (Arc<NodePackV1>, usize)>,
+    entries: BTreeMap<NodePackId, (Arc<NodePack>, usize)>,
     order: VecDeque<NodePackId>,
     bytes: usize,
     max_bytes: usize,
@@ -175,7 +154,7 @@ impl PackedNodeCache {
         }
     }
 
-    fn insert(&mut self, id: NodePackId, pack: Arc<NodePackV1>, bytes: usize) {
+    fn insert(&mut self, id: NodePackId, pack: Arc<NodePack>, bytes: usize) {
         if let Some((_, previous)) = self.entries.remove(&id) {
             self.bytes = self.bytes.saturating_sub(previous);
         }
@@ -197,17 +176,17 @@ impl PackedNodeCache {
 }
 
 pub(crate) struct PreparedNodePack {
-    reference: NodePackRefV1,
-    pack: NodePackV1,
+    reference: NodePackRef,
+    pack: NodePack,
     pending: BTreeMap<Cid, Vec<u8>>,
 }
 
 impl PreparedNodePack {
-    pub(crate) fn reference(&self) -> NodePackRefV1 {
+    pub(crate) fn reference(&self) -> NodePackRef {
         self.reference.clone()
     }
 
-    pub(crate) fn pack(&self) -> &NodePackV1 {
+    pub(crate) fn pack(&self) -> &NodePack {
         &self.pack
     }
 }
@@ -282,7 +261,6 @@ impl<P> ProllyObjectStore<P> {
                 coalesced_waits: AtomicU64::new(0),
                 ranged_fetches: AtomicU64::new(0),
                 locator: RwLock::new(None),
-                allow_namespace_scan: true,
             })),
             packed_pending: Some(Arc::new(RwLock::new(BTreeMap::new()))),
             direct: None,
@@ -294,7 +272,6 @@ impl<P> ProllyObjectStore<P> {
         plane: Arc<P>,
         repository_prefix: impl Into<String>,
         repository: RepositoryId,
-        protocol_version: u32,
         tree_format: TreeFormatDigest,
         node_cache: Arc<dyn NodeCache>,
     ) -> Self {
@@ -307,7 +284,6 @@ impl<P> ProllyObjectStore<P> {
                 node_cache,
                 cache_namespace: NodeCacheNamespace {
                     repository,
-                    protocol_version,
                     tree_format,
                 },
                 fetch_locks: Mutex::new(BTreeMap::new()),
@@ -344,28 +320,6 @@ impl<P> ProllyObjectStore<P> {
         store
     }
 
-    pub(crate) fn new_packed_v2_with_node_cache(
-        plane: Arc<P>,
-        repository_prefix: impl Into<String>,
-        max_cached_pack_bytes: usize,
-        max_cached_locations: usize,
-        cache_namespace: NodeCacheNamespace,
-        node_cache: Arc<dyn NodeCache>,
-    ) -> Self {
-        let mut store = Self::new_packed_with_node_cache(
-            plane,
-            repository_prefix,
-            max_cached_pack_bytes,
-            max_cached_locations,
-            cache_namespace,
-            node_cache,
-        );
-        let state = Arc::get_mut(store.packed.as_mut().expect("packed state was created"))
-            .expect("newly created packed state has one owner");
-        state.allow_namespace_scan = false;
-        store
-    }
-
     fn path_for_key(&self, key: &[u8]) -> Result<ObjectPath> {
         if key.len() != 32 {
             return Err(Error::new(
@@ -384,13 +338,10 @@ impl<P> ProllyObjectStore<P> {
     }
 
     fn commit_path(&self, id: PackedCommitId) -> Result<ObjectPath> {
-        let (version, encoded) = match id {
-            PackedCommitId::V1(id) => (None, hex::encode(id.as_bytes())),
-            PackedCommitId::V2(id) => (Some("v2"), hex::encode(id.as_bytes())),
-        };
-        let version = version.map_or_else(String::new, |version| format!("{version}/"));
+        let PackedCommitId::Native(id) = id;
+        let encoded = hex::encode(id.as_bytes());
         ObjectPath::new(format!(
-            "{}/commits/{version}sha256/{}/{}/{}",
+            "{}/commits/sha256/{}/{}/{}",
             self.repository_prefix,
             &encoded[..2],
             &encoded[2..4],
@@ -416,7 +367,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
 
     /// Read through the packed-node locator and cache while writing newly
     /// created immutable nodes to their deterministic direct CID paths. This
-    /// is used by restartable protocol-v2 builders whose intermediate roots
+    /// is used by restartable repository builders whose intermediate roots
     /// must survive process loss before a final commit envelope exists.
     pub(crate) fn durable_direct_write_session(&self) -> Self {
         let mut session = self.clone();
@@ -465,177 +416,10 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         Ok(())
     }
 
-    pub fn export_node_index(&self) -> Result<Vec<NodeIndexEntryV1>> {
-        let Some(state) = &self.packed else {
-            return Ok(Vec::new());
-        };
-        let locations = state
-            .locations
-            .read()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?;
-        locations
-            .iter()
-            .map(|(cid, location)| {
-                let container = match location.container {
-                    PackedCommitId::V1(container) => container,
-                    PackedCommitId::V2(_) => {
-                        return Err(Error::new(
-                            ErrorCode::InternalInvariant,
-                            "cannot export v2 node locations through the v1 checkpoint API",
-                        ))
-                    }
-                };
-                Ok(NodeIndexEntryV1 {
-                    cid: cid.clone(),
-                    container,
-                    pack: location.pack,
-                    absolute_offset: location.absolute_offset,
-                    len: location.len,
-                    sha256: location.sha256,
-                })
-            })
-            .collect()
-    }
-
-    pub fn import_node_index(&self, entries: &[NodeIndexEntryV1]) -> Result<()> {
-        let Some(state) = &self.packed else {
-            if entries.is_empty() {
-                return Ok(());
-            }
-            return Err(Error::new(
-                ErrorCode::InternalInvariant,
-                "cannot import a packed-node index into the direct node store",
-            ));
-        };
-        let mut locations = state
-            .locations
-            .write()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?;
-        for entry in entries {
-            if entry.len == 0 || entry.cid.as_bytes() != entry.sha256 {
-                return Err(Error::new(
-                    ErrorCode::CorruptNode,
-                    "node-index checkpoint entry is invalid",
-                ));
-            }
-            locations.insert(
-                entry.cid.clone(),
-                PackedNodeLocation {
-                    container: PackedCommitId::V1(entry.container),
-                    pack: entry.pack,
-                    absolute_offset: entry.absolute_offset,
-                    len: entry.len,
-                    sha256: entry.sha256,
-                },
-            );
-        }
-        Ok(())
-    }
-
-    pub async fn rebuild_node_index(&self) -> Result<()> {
-        if self
-            .packed
-            .as_ref()
-            .is_some_and(|state| state.allow_namespace_scan)
-        {
-            self.scan_commit_objects_for(None).await?;
-        }
-        Ok(())
-    }
-
-    /// Resolve the physical envelope that currently supplies a packed node.
-    /// GC uses this after walking reachable CIDs so shared nodes retain at
-    /// least one verified container even when that container is not in commit
-    /// ancestry.
-    pub(crate) async fn resolve_node_location(
-        &self,
-        cid: &Cid,
-    ) -> Result<Option<NodeIndexEntryV1>> {
-        let Some(state) = &self.packed else {
-            return Ok(None);
-        };
-        let lookup = || -> Result<Option<PackedNodeLocation>> {
-            Ok(state
-                .locations
-                .read()
-                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
-                .get(cid)
-                .cloned())
-        };
-        let mut location = lookup()?;
-        if location.is_none() {
-            let locator = state
-                .locator
-                .read()
-                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
-                .clone();
-            if let Some(locator) = locator {
-                if let Some(entry) = locator.locate(cid).await? {
-                    if entry.cid != *cid || entry.len == 0 || entry.cid.as_bytes() != entry.sha256 {
-                        return Err(Error::new(
-                            ErrorCode::CorruptNode,
-                            "resolved node-index entry failed validation",
-                        ));
-                    }
-                    let resolved = PackedNodeLocation {
-                        container: entry.container,
-                        pack: entry.pack,
-                        absolute_offset: entry.absolute_offset,
-                        len: entry.len,
-                        sha256: entry.sha256,
-                    };
-                    state
-                        .locations
-                        .write()
-                        .map_err(|_| {
-                            Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned")
-                        })?
-                        .insert(cid.clone(), resolved.clone());
-                    location = Some(resolved);
-                }
-            }
-        }
-        location
-            .map(|location| {
-                let PackedCommitId::V1(container) = location.container else {
-                    return Err(Error::new(
-                        ErrorCode::InternalInvariant,
-                        "cannot resolve a v2 node through the v1 checkpoint API",
-                    ));
-                };
-                Ok(NodeIndexEntryV1 {
-                    cid: cid.clone(),
-                    container,
-                    pack: location.pack,
-                    absolute_offset: location.absolute_offset,
-                    len: location.len,
-                    sha256: location.sha256,
-                })
-            })
-            .transpose()
-    }
-
-    pub(crate) fn clear_node_locations(&self) -> Result<()> {
-        let Some(state) = &self.packed else {
-            return Ok(());
-        };
-        let capacity = state
-            .locations
-            .read()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))?
-            .capacity;
-        *state
-            .locations
-            .write()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "packed-node lock poisoned"))? =
-            BoundedNodeLocations::new(capacity);
-        Ok(())
-    }
-
     pub(crate) fn prepare_node_pack(
         &self,
         format_digest: TreeFormatDigest,
-        attachments: Vec<(NodePackAttachmentKindV1, Vec<u8>)>,
+        attachments: Vec<(NodePackAttachmentKind, Vec<u8>)>,
     ) -> Result<Option<PreparedNodePack>> {
         if self.packed.is_none() {
             return Ok(None);
@@ -663,7 +447,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         for (cid, bytes) in &pending {
             let offset = payload.len() as u64;
             payload.extend_from_slice(bytes);
-            entries.push(NodePackEntryV1 {
+            entries.push(NodePackEntry {
                 cid: cid.clone(),
                 offset,
                 len: u32::try_from(bytes.len()).map_err(|_| {
@@ -676,7 +460,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         for (kind, bytes) in attachments {
             let offset = payload.len() as u64;
             payload.extend_from_slice(&bytes);
-            packed_attachments.push(NodePackAttachmentV1 {
+            packed_attachments.push(NodePackAttachment {
                 kind,
                 digest: sha256(&bytes),
                 offset,
@@ -688,7 +472,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 })?,
             });
         }
-        let pack = NodePackV1 {
+        let pack = NodePack {
             format_digest,
             entries,
             attachments: packed_attachments,
@@ -709,17 +493,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         prepared: PreparedNodePack,
         payload_offset: u64,
     ) -> Result<()> {
-        self.commit_node_pack_for(PackedCommitId::V1(container), prepared, payload_offset)
-            .await
-    }
-
-    pub(crate) async fn commit_node_pack_v2(
-        &self,
-        container: CommitIdV2,
-        prepared: PreparedNodePack,
-        payload_offset: u64,
-    ) -> Result<()> {
-        self.commit_node_pack_for(PackedCommitId::V2(container), prepared, payload_offset)
+        self.commit_node_pack_for(PackedCommitId::Native(container), prepared, payload_offset)
             .await
     }
 
@@ -777,26 +551,12 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
     pub(crate) fn register_commit_object(
         &self,
         container: CommitId,
-        object: &CommitObjectV1,
+        object: &CommitObject,
         encoded: &[u8],
     ) -> Result<()> {
-        let payload_offset = CommitObjectV1::node_payload_offset(encoded)?;
+        let payload_offset = CommitObject::node_payload_offset(encoded)?;
         self.register_node_pack(
-            PackedCommitId::V1(container),
-            object.node_pack.as_ref(),
-            payload_offset,
-        )
-    }
-
-    pub(crate) fn register_commit_object_v2(
-        &self,
-        container: CommitIdV2,
-        object: &CommitObjectV2,
-        encoded: &[u8],
-    ) -> Result<()> {
-        let payload_offset = CommitObjectV2::node_payload_offset(encoded)?;
-        self.register_node_pack(
-            PackedCommitId::V2(container),
+            PackedCommitId::Native(container),
             object.node_pack.as_ref(),
             payload_offset,
         )
@@ -805,7 +565,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
     fn register_node_pack(
         &self,
         container: PackedCommitId,
-        pack: Option<&NodePackV1>,
+        pack: Option<&NodePack>,
         payload_offset: Option<u64>,
     ) -> Result<()> {
         let Some(pack) = pack else {
@@ -851,23 +611,6 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
     }
 
     async fn get_packed(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        let allow_namespace_scan = self
-            .packed
-            .as_ref()
-            .is_some_and(|state| state.allow_namespace_scan);
-        self.get_packed_with_fallback(key, allow_namespace_scan)
-            .await
-    }
-
-    pub(crate) async fn get_indexed_packed(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        self.get_packed_with_fallback(key, false).await
-    }
-
-    async fn get_packed_with_fallback(
-        &self,
-        key: &[u8],
-        allow_namespace_scan: bool,
-    ) -> Result<Option<Vec<u8>>> {
         if key.len() != 32 {
             return Err(Error::new(
                 ErrorCode::CorruptNode,
@@ -937,13 +680,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             self.admit_node(cid.clone(), bytes.clone()).await;
             return Ok(Some(bytes));
         }
-        if allow_namespace_scan {
-            if let Some(bytes) = self.scan_commit_objects_for(Some(&cid)).await? {
-                self.admit_node(cid.clone(), bytes.clone()).await;
-                return Ok(Some(bytes));
-            }
-        }
-        // Protocol-v2 administrative builders (notably resumable merges) may
+        // Administrative builders (notably resumable merges) may
         // checkpoint immutable state nodes directly at their deterministic CID
         // paths. This point lookup is the scale-safe fallback after the
         // journal-derived packed-node index misses; it never scans a namespace.
@@ -958,7 +695,6 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         let namespace = self.packed.as_ref()?.cache_namespace?;
         Some(NodeCacheKey {
             repository: namespace.repository,
-            protocol_version: namespace.protocol_version,
             tree_format: namespace.tree_format,
             cid,
         })
@@ -1117,72 +853,10 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         Ok(Some(object.bytes))
     }
 
-    async fn scan_commit_objects_for(&self, target: Option<&Cid>) -> Result<Option<Vec<u8>>> {
-        self.packed.as_ref().ok_or_else(|| {
-            Error::new(ErrorCode::InternalInvariant, "packed node state is absent")
-        })?;
-        let prefix = format!("{}/commits/sha256/", self.repository_prefix);
-        let mut continuation = None;
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: prefix.clone(),
-                    continuation,
-                    limit: 1_000,
-                    include_versions: false,
-                })
-                .await?;
-            for listed in page.entries {
-                let encoded = listed.path.as_str().rsplit('/').next().unwrap_or_default();
-                let raw = hex::decode(encoded).map_err(|_| {
-                    Error::new(ErrorCode::CorruptCommit, "commit path has an invalid ID")
-                })?;
-                let id = CommitId::from_hash(raw.try_into().map_err(|_| {
-                    Error::new(ErrorCode::CorruptCommit, "commit ID has the wrong length")
-                })?);
-                let stored = self
-                    .plane
-                    .get(GetRequest {
-                        path: listed.path.clone(),
-                        range: None,
-                        physical_version: None,
-                    })
-                    .await?
-                    .ok_or_else(|| {
-                        Error::new(ErrorCode::MissingClosure, "listed commit disappeared")
-                    })?;
-                if stored.bytes.len() as u64 != listed.metadata.len {
-                    return Err(Error::new(
-                        ErrorCode::CorruptCommit,
-                        "commit object length disagrees with its listing metadata",
-                    ));
-                }
-                let object = CommitObjectV1::decode_object(&stored.bytes)?;
-                if object.commit.id()? != id {
-                    return Err(Error::new(ErrorCode::CorruptCommit, "commit ID mismatch"));
-                }
-                let target_bytes = match (target, object.node_pack.as_ref()) {
-                    (Some(target), Some(pack)) => pack.node(target)?.map(ToOwned::to_owned),
-                    _ => None,
-                };
-                self.register_commit_object(id, &object, &stored.bytes)?;
-                if target_bytes.is_some() {
-                    return Ok(target_bytes);
-                }
-            }
-            continuation = page.continuation;
-            if continuation.is_none() {
-                return Ok(None);
-            }
-        }
-    }
-
     fn direct_cache_key(&self, cid: Cid) -> Option<NodeCacheKey> {
         let namespace = self.direct.as_ref()?.cache_namespace;
         Some(NodeCacheKey {
             repository: namespace.repository,
-            protocol_version: namespace.protocol_version,
             tree_format: namespace.tree_format,
             cid,
         })
