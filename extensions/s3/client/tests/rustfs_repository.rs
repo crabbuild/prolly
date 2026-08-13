@@ -1105,6 +1105,241 @@ async fn rustfs_warm_reads_and_cursor_listing_meet_scale_slos() {
     assert_eq!(list_metrics.put_object, 0, "foreground listing wrote data");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+#[ignore = "20K branch, structural-diff, and merge performance release gate"]
+async fn rustfs_20k_branch_diff_merge_meets_amplification_slos() {
+    assert!(rustfs_enabled(), "set PROLLY_S3_RUSTFS=1 to run");
+    const FILES: usize = 20_000;
+    const CHANGES: usize = 100;
+    let (aws, bucket) = rustfs_client().await;
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("20k-branch-diff-merge"))
+        .writer("rustfs-20k-branch-diff-merge-writer")
+        .authority_lease_duration(Duration::from_secs(600))
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .background_index_maintenance(false)
+        .initialize()
+        .await
+        .unwrap();
+    let make_input = |index: usize, value: &'static str| PutObjectInput {
+        key: format!("scale/{index:05}.txt"),
+        bytes: format!("{index:016x}-{value}").into_bytes(),
+        headers: Default::default(),
+        user_metadata: Default::default(),
+    };
+    let receipts = client
+        .put_object_stream(
+            stream::iter((0..FILES).map(|index| Ok(make_input(index, "base")))),
+            BulkWriteOptions::default(),
+        )
+        .await
+        .unwrap();
+    client.advance_branch_indexes().await.unwrap();
+    let baseline = receipts.last().unwrap().id;
+
+    let sample = (0..100)
+        .map(|index| index * (FILES / 100))
+        .collect::<Vec<_>>();
+    for index in &sample {
+        client
+            .get_object(format!("scale/{index:05}.txt"))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+    client.reset_s3_operation_metrics();
+    let read_started = std::time::Instant::now();
+    let mut read_latencies = stream::iter(sample)
+        .map(|index| {
+            let client = client.clone();
+            async move {
+                let started = std::time::Instant::now();
+                client
+                    .get_object(format!("scale/{index:05}.txt"))
+                    .await
+                    .unwrap()
+                    .unwrap();
+                started.elapsed()
+            }
+        })
+        .buffer_unordered(32)
+        .collect::<Vec<_>>()
+        .await;
+    read_latencies.sort_unstable();
+    let read_p99 = read_latencies[(read_latencies.len() * 99).div_ceil(100) - 1];
+    let read_metrics = client.reset_s3_operation_metrics();
+    eprintln!(
+        "RUSTFS_20K_READ wall_ms={:.2} p99_ms={:.2} downloaded_bytes={} bytes_per_read={:.2} s3_calls={}",
+        read_started.elapsed().as_secs_f64() * 1_000.0,
+        read_p99.as_secs_f64() * 1_000.0,
+        read_metrics.downloaded_body_bytes,
+        read_metrics.downloaded_body_bytes as f64 / 100.0,
+        read_metrics.total_calls(),
+    );
+    assert!(read_p99 < Duration::from_millis(100));
+    assert!(read_metrics.downloaded_body_bytes < 4 * 1024 * 1024);
+
+    client.reset_s3_operation_metrics();
+    let list_started = std::time::Instant::now();
+    let listed = client
+        .stream_objects("scale/", 1_000)
+        .collect::<Vec<_>>()
+        .await;
+    assert_eq!(listed.len(), FILES);
+    assert!(listed.iter().all(Result::is_ok));
+    let list_elapsed = list_started.elapsed();
+    let list_throughput = FILES as f64 / list_elapsed.as_secs_f64();
+    let list_metrics = client.reset_s3_operation_metrics();
+    eprintln!(
+        "RUSTFS_20K_LIST wall_ms={:.2} entries_per_second={list_throughput:.2} downloaded_bytes={} s3_calls={} put_calls={}",
+        list_elapsed.as_secs_f64() * 1_000.0,
+        list_metrics.downloaded_body_bytes,
+        list_metrics.total_calls(),
+        list_metrics.put_object,
+    );
+    assert!(list_throughput > 10_000.0);
+    assert_eq!(list_metrics.put_object, 0);
+
+    client.reset_s3_operation_metrics();
+    let branch_started = std::time::Instant::now();
+    client
+        .create_branch("feature", Some(baseline))
+        .await
+        .unwrap();
+    let branch_elapsed = branch_started.elapsed();
+    let branch_metrics = client.reset_s3_operation_metrics();
+    eprintln!(
+        "RUSTFS_20K_BRANCH wall_ms={:.2} downloaded_bytes={} s3_calls={}",
+        branch_elapsed.as_secs_f64() * 1_000.0,
+        branch_metrics.downloaded_body_bytes,
+        branch_metrics.total_calls(),
+    );
+    assert!(branch_elapsed < Duration::from_millis(500));
+    assert!(branch_metrics.downloaded_body_bytes < 512 * 1024);
+
+    let feature = client.checkout("feature").await.unwrap();
+    client
+        .put_object_stream(
+            stream::iter((0..CHANGES).map(|index| Ok(make_input(index, "main")))),
+            BulkWriteOptions::default(),
+        )
+        .await
+        .unwrap();
+    client.advance_branch_indexes().await.unwrap();
+    let main_head = client.head().await.unwrap();
+    feature
+        .put_object_stream(
+            stream::iter((CHANGES..CHANGES * 2).map(|index| Ok(make_input(index, "feature")))),
+            BulkWriteOptions::default(),
+        )
+        .await
+        .unwrap();
+    feature.advance_branch_indexes().await.unwrap();
+    let feature_head = feature.head().await.unwrap();
+
+    for (label, checkout, head) in [
+        ("main", &client, main_head),
+        ("feature", &feature, feature_head),
+    ] {
+        checkout.reset_s3_operation_metrics();
+        let started = std::time::Instant::now();
+        let page = checkout
+            .diff_bounded(baseline, head, None, 1_000)
+            .await
+            .unwrap();
+        let elapsed = started.elapsed();
+        let metrics = checkout.reset_s3_operation_metrics();
+        eprintln!(
+            "RUSTFS_20K_DIFF branch={label} wall_ms={:.2} changes={} compared_nodes={} reused_subtrees={} downloaded_bytes={} s3_calls={}",
+            elapsed.as_secs_f64() * 1_000.0,
+            page.changes.len(), page.compared_nodes, page.reused_subtrees,
+            metrics.downloaded_body_bytes, metrics.total_calls(),
+        );
+        assert_eq!(page.changes.len(), CHANGES);
+        assert!(page.continuation.is_none());
+        assert!(elapsed < Duration::from_millis(500));
+        assert!(metrics.downloaded_body_bytes < 1024 * 1024);
+    }
+
+    client.reset_s3_operation_metrics();
+    let plan_started = std::time::Instant::now();
+    let mut merge = client
+        .start_merge("feature", None, MergePolicy::Fail, "20K sparse merge")
+        .await
+        .unwrap();
+    let start_metrics = client.reset_s3_operation_metrics();
+    let mut plan_downloaded = start_metrics.downloaded_body_bytes;
+    let mut plan_calls = start_metrics.total_calls();
+    eprintln!(
+        "RUSTFS_20K_MERGE_STEP step=start phase={:?} downloaded_bytes={} s3_calls={}",
+        merge.phase,
+        start_metrics.downloaded_body_bytes,
+        start_metrics.total_calls(),
+    );
+    let mut processed = 0_usize;
+    let mut pages = 0_usize;
+    while merge.phase != MergePhase::ReadyToPublish {
+        let before = merge.phase;
+        let cache_before = client.node_cache_snapshot();
+        let page = client.advance_merge(&merge, 256).await.unwrap();
+        let cache_after = client.node_cache_snapshot();
+        let step_metrics = client.reset_s3_operation_metrics();
+        plan_downloaded = plan_downloaded.saturating_add(step_metrics.downloaded_body_bytes);
+        plan_calls = plan_calls.saturating_add(step_metrics.total_calls());
+        eprintln!(
+            "RUSTFS_20K_MERGE_STEP step=advance before={before:?} after={:?} processed={} downloaded_bytes={} node_fetched_bytes={} node_avoided_bytes={} ranged_fetches={} s3_calls={}",
+            page.cursor.phase, page.processed,
+            step_metrics.downloaded_body_bytes,
+            cache_after.fetched_bytes.saturating_sub(cache_before.fetched_bytes),
+            cache_after.avoided_bytes.saturating_sub(cache_before.avoided_bytes),
+            cache_after.ranged_fetches.saturating_sub(cache_before.ranged_fetches),
+            step_metrics.total_calls(),
+        );
+        processed += page.processed;
+        pages += 1;
+        merge = page.cursor;
+    }
+    let plan_elapsed = plan_started.elapsed();
+    eprintln!(
+        "RUSTFS_20K_MERGE_PLAN wall_ms={:.2} pages={pages} processed={processed} changes={} conflicts={} downloaded_bytes={} s3_calls={}",
+        plan_elapsed.as_secs_f64() * 1_000.0,
+        merge.planned_changes, merge.conflicts,
+        plan_downloaded, plan_calls,
+    );
+    assert_eq!(merge.planned_changes, CHANGES as u64);
+    assert_eq!(merge.conflicts, 0);
+    assert!(plan_elapsed < Duration::from_secs(1));
+    assert!(plan_downloaded < 2 * 1024 * 1024);
+
+    client.reset_s3_operation_metrics();
+    let publish_started = std::time::Instant::now();
+    let merged = client.publish_merge(&merge).await.unwrap();
+    let publish_elapsed = publish_started.elapsed();
+    let publish_metrics = client.reset_s3_operation_metrics();
+    eprintln!(
+        "RUSTFS_20K_MERGE_PUBLISH wall_ms={:.2} changes={} downloaded_bytes={} s3_calls={}",
+        publish_elapsed.as_secs_f64() * 1_000.0,
+        merged.changed_keys,
+        publish_metrics.downloaded_body_bytes,
+        publish_metrics.total_calls(),
+    );
+    assert_eq!(merged.changed_keys, CHANGES as u64);
+    assert!(publish_elapsed < Duration::from_millis(250));
+    assert_eq!(
+        client
+            .get_object(format!("scale/{CHANGES:05}.txt"))
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        make_input(CHANGES, "feature").bytes,
+    );
+}
+
 /// Reproducible release gate for the same-branch publication lane.
 ///
 /// This is intentionally ignored because it creates exactly 10,000 commits

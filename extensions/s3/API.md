@@ -134,9 +134,16 @@ failure, call `resume_commit` with the batch ID; verified payload bindings are r
 Expired durable sessions are removed in bounded pages with
 `cleanup_expired_commit_sessions`.
 
+Commit descriptors remain bounded as batches grow. Deltas of up to 128 logical
+changes are embedded directly; larger deltas are stored in a content-addressed
+Prolly tree and referenced by root and count. Resume, reconciliation, diff, and
+publication preserve the same atomic semantics for both representations.
+
 ## Branches, tags, and retention
 
-- `create_branch` creates a branch at an explicit commit or current head.
+- `create_branch` creates a branch at an explicit commit or current head. It
+  inherits immutable node-location and commit-graph roots from the checked-out
+  source branch, so branch creation does not download or rebuild the snapshot.
 - `delete_branch` requires the expected head.
 - `create_tag`, `tag`, and `delete_tag` manage immutable-history names.
 - `create_retention_pin`, `retention_pin`, `delete_retention_pin`, and
@@ -150,7 +157,8 @@ Branch and tag catalogs are derived, bounded indexes. Enumerate them with
 - `commit` loads and validates one immutable commit.
 - `log` and `diff` are convenience APIs for small bounded results.
 - `log_bounded` accepts `TraversalBudget`; `diff_bounded` uses an opaque
-  structural cursor and prunes identical subtrees.
+  structural cursor and prunes identical subtrees. Diff resolves compact commit
+  descriptors and fetches only nodes on the structural frontier.
 - `open_reflog` captures a stable immutable journal snapshot;
   `read_reflog_page` reads newest-to-oldest pages from it.
 - `reset_branch` is a CAS-protected administrative ref move.
@@ -166,6 +174,10 @@ Call `start_merge`, persist the returned cursor, and repeatedly call
 `merge_changes_page` and `merge_conflicts_page`. Only `publish_merge` moves the
 target branch. `cleanup_merge` exact-deletes job-scoped plan data in bounded
 pages after publication or abandonment.
+
+Merge planning shares the immutable node cache with foreground reads and
+advances structural-diff frontiers in bounded batches. Unchanged subtrees are
+pruned without loading full commit node packs.
 
 ## Integrity and garbage collection
 
@@ -232,6 +244,10 @@ These methods are operational controls, not normal foreground request paths:
 
 Metrics are process-local. Export them before process termination and correlate
 them with provider request IDs and service-side metrics.
+
+Journal-derived node indexes are built from compact commit descriptors and
+node-pack tables of contents. Payload sections are range-fetched only when a
+referenced node is actually read.
 
 ## Error and consistency model
 

@@ -515,6 +515,11 @@ bytes, and admission rejections.
   the batch.
 - A current or historical read resolves a ref/commit/tree path and one payload.
 - Warm immutable-node caches remove most repeated metadata reads.
+- Branch creation inherits immutable derived-index roots from its source and is
+  independent of snapshot size. Sparse diff and merge fetch compact commit
+  descriptors and only the node ranges on their traversal frontier.
+- Large commit deltas are external Prolly trees, keeping commit descriptors and
+  restart metadata bounded independently of batch size.
 - Same-branch writers contend on one ref CAS; different branches publish
   independently.
 

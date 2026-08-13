@@ -4,14 +4,14 @@ use prolly::{AsyncProlly, Config, Mutation, RuntimeConfig, Tree, TreeFormat};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    decode_canonical, encode_canonical, tree_format_digest, CommitId, CommitObject,
+    decode_canonical, encode_canonical, tree_format_digest, BucketCommit, CommitId,
     CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode, GetRequest,
     ImmutablePut, ImmutablePutOutcome, JournalCommitGraphEntry, JournalDerivedIndexHead,
     JournalIndexRebuildChunk, JournalIndexRebuildChunkId, JournalNodeIndexEntry, ListRequest,
-    MemoryNodeCache, MutableControlStore, NodeCache, ObjectPath, ObjectPlane, OperationId,
-    PhysicalVersion, ProllyObjectStore, PublicationEventId, PublicationJournalCursor,
-    RefGeneration, RepositoryId, Result, RetryAdvice, RootManifest, ShardedBranchPublisher,
-    StorageToken, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+    LoadedRef, MemoryNodeCache, MutableControlStore, NodeCache, NodePackToc, ObjectPath,
+    ObjectPlane, OperationId, PhysicalVersion, ProllyObjectStore, PublicationEventId,
+    PublicationJournalCursor, RefGeneration, RepositoryId, Result, RetryAdvice, RootManifest,
+    ShardedBranchPublisher, StorageToken, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 
 pub const DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS: usize = 4_096;
@@ -285,15 +285,17 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
             {
                 continue;
             }
-            let object = publisher.load_commit_object(event.new_target).await?;
+            let object = publisher.load_commit_index(event.new_target).await?;
             self.index_node_pack(
                 &mut node_tree,
                 event.new_target,
-                &object,
+                object.commit.node_pack.as_ref().map(|pack| pack.id),
+                object.toc.as_ref(),
+                object.payload_offset,
                 &mut indexed_nodes,
             )
             .await?;
-            self.index_commit_graph(&mut graph_tree, event.new_target, object)
+            self.index_commit_graph(&mut graph_tree, event.new_target, object.commit)
                 .await?;
             indexed_commits += 1;
         }
@@ -394,6 +396,86 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
             indexed_nodes,
             initialized,
         })
+    }
+
+    /// Initialize a newly created branch by reusing immutable repository-wide
+    /// node-location and commit-graph roots from the source branch. The roots
+    /// are safe supersets: entries are content-addressed and never encode
+    /// branch-local authority.
+    pub async fn initialize_branch_from(
+        &self,
+        source_branch: &str,
+        branch: &str,
+        reference: &LoadedRef,
+        now_millis: u64,
+    ) -> Result<()> {
+        crate::repository::validate_branch(source_branch)?;
+        crate::repository::validate_branch(branch)?;
+        let source = self
+            .require_branch_covers(source_branch, reference.value.target)
+            .await?;
+        let digest = tree_format_digest(&self.format)?;
+        let next = JournalDerivedIndexHead {
+            repository: self.repository,
+            branch: branch.to_string(),
+            checkpoint: reference.value.publication,
+            checkpoint_generation: reference.value.generation,
+            target: reference.value.target,
+            node_root: source.node_root,
+            commit_graph_root: source.commit_graph_root,
+            generation: 0,
+            indexed_publications: 1,
+            indexed_commits: source.indexed_commits,
+            updated_at_millis: now_millis,
+        };
+        next.validate(self.repository, branch, digest)?;
+        let bytes = encode_canonical(&next)?;
+        let path = self.head_path(branch)?;
+        match self
+            .controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected: None,
+                bytes: bytes.clone(),
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(()),
+            CompareExchangeOutcome::Conflict(Some(current)) if current.bytes == bytes => Ok(()),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "new branch derived indexes were initialized concurrently",
+            )),
+        }
+    }
+
+    /// Return the source branch's immutable derived roots only when they cover
+    /// `target`. Callers use this preflight before publishing a new branch ref.
+    pub async fn require_branch_covers(
+        &self,
+        source_branch: &str,
+        target: CommitId,
+    ) -> Result<JournalDerivedIndexHead> {
+        crate::repository::validate_branch(source_branch)?;
+        let source = self.load_head(source_branch).await?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::PreconditionFailed,
+                "source branch derived indexes are not initialized",
+            )
+        })?;
+        let graph = self.tree_from_root(&source.value.commit_graph_root);
+        if self
+            .graph_engine
+            .get(&graph, target.as_bytes())
+            .await?
+            .is_none()
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "source branch indexes do not cover the requested branch point",
+            ));
+        }
+        Ok(source.value)
     }
 
     pub async fn start_rebuild(
@@ -561,15 +643,17 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
             {
                 continue;
             }
-            let object = publisher.load_commit_object(event.new_target).await?;
+            let object = publisher.load_commit_index(event.new_target).await?;
             self.index_node_pack(
                 &mut node_tree,
                 event.new_target,
-                &object,
+                object.commit.node_pack.as_ref().map(|pack| pack.id),
+                object.toc.as_ref(),
+                object.payload_offset,
                 &mut indexed_nodes,
             )
             .await?;
-            self.index_commit_graph(&mut graph_tree, event.new_target, object)
+            self.index_commit_graph(&mut graph_tree, event.new_target, object.commit)
                 .await?;
             indexed_commits += 1;
         }
@@ -959,22 +1043,28 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
         &self,
         tree: &mut Tree,
         commit: CommitId,
-        object: &CommitObject,
+        pack_id: Option<crate::NodePackId>,
+        toc: Option<&NodePackToc>,
+        payload_offset: Option<u64>,
         indexed_nodes: &mut usize,
     ) -> Result<()> {
-        let Some(pack) = object.node_pack.as_ref() else {
+        let Some(toc) = toc else {
             return Ok(());
         };
-        let encoded = object.encode_object()?;
-        let payload_offset = CommitObject::node_payload_offset(&encoded)?.ok_or_else(|| {
+        let pack_id = pack_id.ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "journal-indexed node pack has no logical reference",
+            )
+        })?;
+        let payload_offset = payload_offset.ok_or_else(|| {
             Error::new(
                 ErrorCode::CorruptCommit,
                 "journal-indexed node pack has no payload offset",
             )
         })?;
-        let pack_id = pack.reference()?.id;
-        let mut mutations = Vec::with_capacity(pack.entries.len());
-        for entry in &pack.entries {
+        let mut mutations = Vec::with_capacity(toc.entries.len());
+        for entry in &toc.entries {
             let absolute_offset = payload_offset.checked_add(entry.offset).ok_or_else(|| {
                 Error::new(ErrorCode::CorruptNode, "journal node offset overflow")
             })?;
@@ -1003,10 +1093,10 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
         &self,
         tree: &mut Tree,
         id: CommitId,
-        object: CommitObject,
+        commit: BucketCommit,
     ) -> Result<()> {
         let mut jumps = Vec::new();
-        if let Some(first_parent) = object.commit.parents.first().copied() {
+        if let Some(first_parent) = commit.parents.first().copied() {
             jumps.push(first_parent);
             for level in 1..64usize {
                 let ancestor = jumps[level - 1];
@@ -1022,8 +1112,8 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
         }
         let entry = JournalCommitGraphEntry {
             commit: id,
-            generation: object.commit.generation,
-            parents: object.commit.parents,
+            generation: commit.generation,
+            parents: commit.parents,
             first_parent_jumps: jumps,
         };
         *tree = self

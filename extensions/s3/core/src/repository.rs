@@ -45,6 +45,11 @@ use crate::{
     TakeoverRequest,
 };
 
+/// Keep ordinary commit descriptors small enough for one bounded metadata
+/// range read. Larger transition sets live in the same immutable Prolly node
+/// pack as the state roots and remain content-addressed by the commit.
+const INLINE_COMMIT_DELTA_LIMIT: usize = 128;
+
 #[derive(Clone)]
 pub struct RepositoryOptions {
     pub repository_prefix: String,
@@ -692,6 +697,7 @@ pub struct Repository<P: ObjectPlane> {
     options: RepositoryOptions,
     format: RepositoryFormat,
     node_store: ProllyObjectStore<P>,
+    node_cache: Arc<dyn NodeCache>,
     authority: Arc<ShardWriterAuthority<P>>,
     publisher: ShardedBranchPublisher<P>,
     payloads: ImmutablePayloadStore<P>,
@@ -974,7 +980,7 @@ impl<P: ObjectPlane> Repository<P> {
             options.repository_prefix.clone(),
             format.repository_id,
             format.state_tree_format.clone(),
-            node_cache,
+            node_cache.clone(),
             options.journal_index_max_unindexed_events,
             options.mutable_control_versions_to_retain,
         )?);
@@ -990,6 +996,7 @@ impl<P: ObjectPlane> Repository<P> {
             options,
             format,
             node_store,
+            node_cache,
             authority,
             publisher,
             payloads,
@@ -1075,9 +1082,24 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub async fn create_branch(&self, name: &str, from: CommitId) -> Result<BranchHead> {
+        self.create_branch_from(&self.options.default_branch, name, from)
+            .await
+    }
+
+    pub async fn create_branch_from(
+        &self,
+        source_branch: &str,
+        name: &str,
+        from: CommitId,
+    ) -> Result<BranchHead> {
         crate::repository::validate_branch(name)?;
+        crate::repository::validate_branch(source_branch)?;
+        self.locator.register(source_branch)?;
+        self.advance_branch_indexes(source_branch).await?;
+        self.journal_indexes
+            .require_branch_covers(source_branch, from)
+            .await?;
         let _lane = self.lock_branch(name).await;
-        self.load_commit_object(from).await?;
         let now = self.options.clock.now_millis()?;
         let permit = self.active_permit(name, now).await?;
         let reference = self
@@ -1092,6 +1114,9 @@ impl<P: ObjectPlane> Repository<P> {
             )
             .await?;
         self.locator.register(name)?;
+        self.journal_indexes
+            .initialize_branch_from(source_branch, name, &reference, now)
+            .await?;
         self.advance_branch_indexes(name).await?;
         Ok(BranchHead {
             name: name.to_string(),
@@ -1137,7 +1162,7 @@ impl<P: ObjectPlane> Repository<P> {
     pub async fn create_tag(&self, name: &str, target: CommitId) -> Result<Tag> {
         crate::repository::validate_branch(name)?;
         let _lane = self.lock_branch(&format!("tag:{name}")).await;
-        self.load_commit_object(target).await?;
+        self.load_commit_metadata(target).await?;
         let now = self.options.clock.now_millis()?;
         let permit = self.active_system_permit("tags", now).await?;
         let tag = self
@@ -1856,6 +1881,31 @@ impl<P: ObjectPlane> Repository<P> {
         }
         let objects = engine.batch(&objects, object_mutations).await?;
         let versions = engine.batch(&versions, version_mutations).await?;
+        let (inline_transitions, changes_root, change_count) =
+            if transitions.len() > INLINE_COMMIT_DELTA_LIMIT {
+                let delta = engine.create();
+                let delta = engine
+                    .batch(
+                        &delta,
+                        transitions
+                            .iter()
+                            .map(|transition| {
+                                Ok(Mutation::Upsert {
+                                    key: transition.key.clone(),
+                                    val: encode_canonical(transition)?,
+                                })
+                            })
+                            .collect::<Result<Vec<_>>>()?,
+                    )
+                    .await?;
+                (
+                    Vec::new(),
+                    Some(RootManifest::from_tree(&delta)?),
+                    transitions.len() as u64,
+                )
+            } else {
+                (transitions, None, 0)
+            };
         let prepared = write_store.prepare_node_pack(
             tree_format_digest(&self.format.state_tree_format)?,
             Vec::new(),
@@ -1869,9 +1919,9 @@ impl<P: ObjectPlane> Repository<P> {
             generation,
             delta: BucketDelta {
                 input_digest,
-                changes: transitions,
-                changes_root: None,
-                change_count: 0,
+                changes: inline_transitions,
+                changes_root,
+                change_count,
             },
             node_pack: prepared.as_ref().map(PreparedNodePack::reference),
             authority: permit.stamp(),
@@ -4256,8 +4306,8 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(branch)?;
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
-        let from_commit = self.load_commit_object(from).await?.commit;
-        let to_commit = self.load_commit_object(to).await?.commit;
+        let from_commit = self.load_commit_metadata(from).await?;
+        let to_commit = self.load_commit_metadata(to).await?;
         let from_tree = self.tree_from_root(&from_commit.state.objects)?;
         let to_tree = self.tree_from_root(&to_commit.state.objects)?;
         self.engine(self.node_store.clone())
@@ -4299,8 +4349,8 @@ impl<P: ObjectPlane> Repository<P> {
         }
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
-        let from_commit = self.load_commit_object(from).await?.commit;
-        let to_commit = self.load_commit_object(to).await?.commit;
+        let from_commit = self.load_commit_metadata(from).await?;
+        let to_commit = self.load_commit_metadata(to).await?;
         let from_tree = self.tree_from_root(&from_commit.state.objects)?;
         let to_tree = self.tree_from_root(&to_commit.state.objects)?;
         let page = self
@@ -4945,8 +4995,8 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let permit = self.active_permit(&cursor.target_branch, now).await?;
-        let ours = self.load_commit_object(cursor.ours).await?.commit;
-        let theirs = self.load_commit_object(cursor.theirs).await?.commit;
+        let ours = self.load_commit_metadata(cursor.ours).await?;
+        let theirs = self.load_commit_metadata(cursor.theirs).await?;
         let generation = CommitGeneration(
             ours.generation
                 .0
@@ -5453,7 +5503,7 @@ impl<P: ObjectPlane> Repository<P> {
             operation,
             branch: branch.to_string(),
             parents: commit.parents,
-            changed_keys: commit.delta.changes.len() as u64,
+            changed_keys: commit.delta.logical_change_count(),
             object_versions: commit
                 .delta
                 .changes
@@ -6889,12 +6939,15 @@ impl<P: ObjectPlane> Repository<P> {
                 "merge job ID is nil",
             ));
         }
-        Ok(self.engine(ProllyObjectStore::new(
+        Ok(self.engine(ProllyObjectStore::new_cached_direct(
             self.plane.clone(),
             format!(
                 "{}/administration/merge/{job}/plan",
                 self.options.repository_prefix
             ),
+            self.format.repository_id,
+            tree_format_digest(&self.format.state_tree_format)?,
+            self.node_cache.clone(),
         )))
     }
 
@@ -6914,6 +6967,12 @@ impl<P: ObjectPlane> Repository<P> {
     async fn validate_merge_cursor(&self, cursor: &MergeCursor) -> Result<()> {
         crate::repository::validate_branch(&cursor.target_branch)?;
         crate::repository::validate_branch(&cursor.source_branch)?;
+        self.locator.register(&cursor.target_branch)?;
+        self.locator.register(&cursor.source_branch)?;
+        self.require_branch_indexes_ready(&cursor.target_branch)
+            .await?;
+        self.require_branch_indexes_ready(&cursor.source_branch)
+            .await?;
         self.tree_from_merge_root(&cursor.plan_root)?;
         if cursor.repository != self.format.repository_id
             || cursor.job.is_nil()
@@ -7015,11 +7074,11 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(entry);
         }
-        let commit_object = self.load_commit_object(commit).await?.commit;
+        let commit_object = self.load_commit_metadata(commit).await?;
         Ok(JournalCommitGraphEntry {
             commit,
             generation: commit_object.generation,
-            parents: commit_object.parents,
+            parents: commit_object.parents.clone(),
             first_parent_jumps: Vec::new(),
         })
     }
@@ -7274,9 +7333,9 @@ impl<P: ObjectPlane> Repository<P> {
                 "merge plan has no selected base",
             )
         })?;
-        let base_commit = self.load_commit_object(base).await?.commit;
-        let ours_commit = self.load_commit_object(cursor.ours).await?.commit;
-        let theirs_commit = self.load_commit_object(cursor.theirs).await?.commit;
+        let base_commit = self.load_commit_metadata(base).await?;
+        let ours_commit = self.load_commit_metadata(cursor.ours).await?;
+        let theirs_commit = self.load_commit_metadata(cursor.theirs).await?;
         let base_tree = self.tree_from_root(&base_commit.state.objects)?;
         let ours_tree = self.tree_from_root(&ours_commit.state.objects)?;
         let theirs_tree = self.tree_from_root(&theirs_commit.state.objects)?;
@@ -7285,28 +7344,35 @@ impl<P: ObjectPlane> Repository<P> {
         let mut plan_tree = self.tree_from_merge_root(&cursor.plan_root)?;
         let mut processed = 0usize;
         let mut page_mutations = Vec::new();
+        let mut ours_buffer = VecDeque::new();
+        let mut theirs_buffer = VecDeque::new();
+        if let Some(pending) = cursor.ours_pending.take() {
+            ours_buffer.push_back(pending);
+        }
+        if let Some(pending) = cursor.theirs_pending.take() {
+            theirs_buffer.push_back(pending);
+        }
+        if !cursor.ours_finished {
+            let page = state_engine
+                .structural_diff_page(&base_tree, &ours_tree, cursor.ours_diff.as_ref(), max_steps)
+                .await?;
+            ours_buffer.extend(page.diffs);
+            cursor.ours_diff = page.next_cursor;
+        }
+        if !cursor.theirs_finished {
+            let page = state_engine
+                .structural_diff_page(
+                    &base_tree,
+                    &theirs_tree,
+                    cursor.theirs_diff.as_ref(),
+                    max_steps,
+                )
+                .await?;
+            theirs_buffer.extend(page.diffs);
+            cursor.theirs_diff = page.next_cursor;
+        }
         while processed < max_steps {
-            if cursor.ours_pending.is_none() && !cursor.ours_finished {
-                let page = state_engine
-                    .structural_diff_page(&base_tree, &ours_tree, cursor.ours_diff.as_ref(), 1)
-                    .await?;
-                cursor.ours_pending = page.diffs.into_iter().next();
-                cursor.ours_diff = page.next_cursor;
-                if cursor.ours_diff.is_none() {
-                    cursor.ours_finished = true;
-                }
-            }
-            if cursor.theirs_pending.is_none() && !cursor.theirs_finished {
-                let page = state_engine
-                    .structural_diff_page(&base_tree, &theirs_tree, cursor.theirs_diff.as_ref(), 1)
-                    .await?;
-                cursor.theirs_pending = page.diffs.into_iter().next();
-                cursor.theirs_diff = page.next_cursor;
-                if cursor.theirs_diff.is_none() {
-                    cursor.theirs_finished = true;
-                }
-            }
-            let key_order = match (&cursor.ours_pending, &cursor.theirs_pending) {
+            let key_order = match (ours_buffer.front(), theirs_buffer.front()) {
                 (None, None) => break,
                 (Some(_), None) => std::cmp::Ordering::Less,
                 (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -7314,24 +7380,18 @@ impl<P: ObjectPlane> Repository<P> {
             };
             let (key, base_value, ours_value, theirs_value) = match key_order {
                 std::cmp::Ordering::Less => {
-                    let ours = cursor.ours_pending.take().expect("matched pending ours");
+                    let ours = ours_buffer.pop_front().expect("matched pending ours");
                     let (key, base, ours) = merge_diff_values(ours);
                     (key, base.clone(), ours, base)
                 }
                 std::cmp::Ordering::Greater => {
-                    let theirs = cursor
-                        .theirs_pending
-                        .take()
-                        .expect("matched pending theirs");
+                    let theirs = theirs_buffer.pop_front().expect("matched pending theirs");
                     let (key, base, theirs) = merge_diff_values(theirs);
                     (key, base.clone(), base, theirs)
                 }
                 std::cmp::Ordering::Equal => {
-                    let ours = cursor.ours_pending.take().expect("matched pending ours");
-                    let theirs = cursor
-                        .theirs_pending
-                        .take()
-                        .expect("matched pending theirs");
+                    let ours = ours_buffer.pop_front().expect("matched pending ours");
+                    let theirs = theirs_buffer.pop_front().expect("matched pending theirs");
                     let (key, ours_base, ours_value) = merge_diff_values(ours);
                     let (theirs_key, theirs_base, theirs_value) = merge_diff_values(theirs);
                     if key != theirs_key || ours_base != theirs_base {
@@ -7394,6 +7454,20 @@ impl<P: ObjectPlane> Repository<P> {
             }
             processed += 1;
         }
+        cursor.ours_diff = structural_cursor_with_pending(
+            cursor.ours_diff.take(),
+            &base_tree,
+            &ours_tree,
+            ours_buffer.into(),
+        );
+        cursor.theirs_diff = structural_cursor_with_pending(
+            cursor.theirs_diff.take(),
+            &base_tree,
+            &theirs_tree,
+            theirs_buffer.into(),
+        );
+        cursor.ours_finished = cursor.ours_diff.is_none();
+        cursor.theirs_finished = cursor.theirs_diff.is_none();
         if !page_mutations.is_empty() {
             plan_tree = plan_engine.batch(&plan_tree, page_mutations).await?;
             cursor.plan_root = RootManifest::from_tree(&plan_tree)?;
@@ -7406,8 +7480,8 @@ impl<P: ObjectPlane> Repository<P> {
             if cursor.policy == MergePolicy::Fail && cursor.conflicts != 0 {
                 cursor.phase = MergePhase::Conflicted;
             } else {
-                cursor.final_objects = Some(ours_commit.state.objects);
-                cursor.final_versions = Some(ours_commit.state.versions);
+                cursor.final_objects = Some(ours_commit.state.objects.clone());
+                cursor.final_versions = Some(ours_commit.state.versions.clone());
                 let empty_delta = self.merge_state_engine().create();
                 cursor.delta_root = Some(RootManifest::from_tree(&empty_delta)?);
                 cursor.phase = MergePhase::BuildingVersions;
@@ -7421,8 +7495,8 @@ impl<P: ObjectPlane> Repository<P> {
         cursor: &mut MergeCursor,
         max_steps: usize,
     ) -> Result<usize> {
-        let ours_commit = self.load_commit_object(cursor.ours).await?.commit;
-        let theirs_commit = self.load_commit_object(cursor.theirs).await?.commit;
+        let ours_commit = self.load_commit_metadata(cursor.ours).await?;
+        let theirs_commit = self.load_commit_metadata(cursor.theirs).await?;
         let ours_versions = self.tree_from_root(&ours_commit.state.versions)?;
         let theirs_versions = self.tree_from_root(&theirs_commit.state.versions)?;
         let read_engine = self.engine(self.node_store.clone());
@@ -7513,8 +7587,8 @@ impl<P: ObjectPlane> Repository<P> {
             cursor.phase = MergePhase::ReadyToPublish;
             return Ok(0);
         }
-        let ours = self.load_commit_object(cursor.ours).await?.commit;
-        let theirs = self.load_commit_object(cursor.theirs).await?.commit;
+        let ours = self.load_commit_metadata(cursor.ours).await?;
+        let theirs = self.load_commit_metadata(cursor.theirs).await?;
         let generation = CommitGeneration(
             ours.generation
                 .0
@@ -8041,6 +8115,27 @@ fn merge_diff_values(diff: Diff) -> (Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>) 
         Diff::Removed { key, val } => (key, Some(val), None),
         Diff::Changed { key, old, new } => (key, Some(old), Some(new)),
     }
+}
+
+fn structural_cursor_with_pending(
+    cursor: Option<prolly::StructuralDiffCursor>,
+    base: &Tree,
+    other: &Tree,
+    pending: Vec<Diff>,
+) -> Option<prolly::StructuralDiffCursor> {
+    if pending.is_empty() {
+        return cursor;
+    }
+    let mut cursor = cursor.unwrap_or_else(|| prolly::StructuralDiffCursor {
+        base_root: base.root.clone(),
+        other_root: other.root.clone(),
+        markers: Vec::new(),
+        pending: Vec::new(),
+    });
+    let mut combined = pending;
+    combined.append(&mut cursor.pending);
+    cursor.pending = combined;
+    Some(cursor)
 }
 
 fn object_diff_from_prolly(diff: Diff) -> Result<ObjectDiff> {

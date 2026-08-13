@@ -288,7 +288,9 @@ impl Client {
             Some(from) => from,
             None => self.head().await?,
         };
-        self.repository.create_branch(name.as_ref(), from).await
+        self.repository
+            .create_branch_from(self.attached_branch()?, name.as_ref(), from)
+            .await
     }
 
     pub async fn delete_branch(&self, name: impl AsRef<str>, expected: CommitId) -> Result<()> {

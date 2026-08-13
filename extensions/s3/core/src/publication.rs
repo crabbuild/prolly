@@ -5,16 +5,24 @@ use serde::{Deserialize, Serialize};
 use crate::{
     encode_canonical, AuthorityPermit, AuthorityScope, BranchRefBarrier, BucketCommit, CommitId,
     CommitObject, CompareExchange, CompareExchangeOutcome, Error, ErrorCode, GetRequest,
-    ImmutablePut, MutableControlObserver, MutableControlStore, NodePack, ObjectPath, ObjectPlane,
-    OperationId, PendingAuthority, PublicationEvent, PublicationEventId, RefGeneration, RefValue,
-    ReflogEntry, RepositoryId, Result, RetryAdvice, ShardWriterAuthority, StorageToken,
-    DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+    ImmutablePut, MutableControlObserver, MutableControlStore, NodePack, NodePackToc, ObjectPath,
+    ObjectPlane, OperationId, PendingAuthority, PublicationEvent, PublicationEventId,
+    RefGeneration, RefValue, ReflogEntry, RepositoryId, Result, RetryAdvice, ShardWriterAuthority,
+    StorageToken, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 
 #[derive(Clone, Debug)]
 pub struct LoadedRef {
     pub value: RefValue,
     pub token: StorageToken,
+}
+
+/// Commit data needed by derived indexes without downloading the immutable
+/// node-pack payload. Every node remains independently CID-verified when read.
+pub(crate) struct CommitIndexView {
+    pub(crate) commit: BucketCommit,
+    pub(crate) toc: Option<NodePackToc>,
+    pub(crate) payload_offset: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -198,7 +206,7 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
                 name: branch.to_string(),
             },
         )?;
-        self.load_commit_object(target).await?;
+        self.load_commit(target).await?;
         let existing = match self.load_including_tombstone(branch).await {
             Ok(existing) if !existing.value.tombstone => {
                 return Err(Error::new(ErrorCode::RefConflict, "branch already exists"));
@@ -832,6 +840,121 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
             ));
         }
         Ok(commit)
+    }
+
+    pub(crate) async fn load_commit_index(&self, id: CommitId) -> Result<CommitIndexView> {
+        let path = self.commit_path(id)?;
+        let header_len = CommitObject::commit_object_header_len();
+        let header = self
+            .plane
+            .get(GetRequest {
+                path: path.clone(),
+                range: Some(0..=header_len as u64 - 1),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "parent commit is missing"))?
+            .bytes;
+        let commit_len = CommitObject::commit_len_from_header(&header)?;
+        let pack_len = CommitObject::pack_len_from_header(&header)?;
+        let commit_end = header_len
+            .checked_add(commit_len)
+            .ok_or_else(|| Error::new(ErrorCode::CorruptCommit, "commit length overflow"))?;
+        let body = self
+            .plane
+            .get(GetRequest {
+                path: path.clone(),
+                range: Some(header_len as u64..=commit_end as u64 - 1),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "parent commit is missing"))?
+            .bytes;
+        let mut encoded = header;
+        encoded.extend_from_slice(&body);
+        let commit = CommitObject::decode_commit_metadata(&encoded)?;
+        if commit.id()? != id {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "parent commit ID does not match its path",
+            ));
+        }
+        let Some(expected) = commit.node_pack.as_ref() else {
+            if pack_len != 0 {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "commit has an unreferenced node pack",
+                ));
+            }
+            return Ok(CommitIndexView {
+                commit,
+                toc: None,
+                payload_offset: None,
+            });
+        };
+        if pack_len != expected.object_len {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit node-pack length disagrees with its reference",
+            ));
+        }
+        let pack_start = u64::try_from(commit_end)
+            .map_err(|_| Error::new(ErrorCode::CorruptCommit, "commit offset overflow"))?;
+        let pack_header_len = NodePack::object_header_len();
+        let pack_header_end = pack_start
+            .checked_add(pack_header_len as u64)
+            .ok_or_else(|| Error::new(ErrorCode::CorruptNode, "node-pack header overflow"))?;
+        let pack_header = self
+            .plane
+            .get(GetRequest {
+                path: path.clone(),
+                range: Some(pack_start..=pack_header_end - 1),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "commit node pack is missing"))?
+            .bytes;
+        let toc_len = NodePack::toc_len_from_header(&pack_header)?;
+        if toc_len == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node-pack TOC cannot be empty",
+            ));
+        }
+        let toc_start = pack_header_end;
+        let toc_end = toc_start
+            .checked_add(toc_len as u64)
+            .ok_or_else(|| Error::new(ErrorCode::CorruptNode, "node-pack TOC overflow"))?;
+        let toc_bytes = self
+            .plane
+            .get(GetRequest {
+                path,
+                range: Some(toc_start..=toc_end - 1),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| {
+                Error::new(ErrorCode::MissingClosure, "commit node-pack TOC is missing")
+            })?
+            .bytes;
+        let toc = NodePack::decode_toc(&toc_bytes)?;
+        let encoded_pack_len = (pack_header_len as u64)
+            .checked_add(toc_len as u64)
+            .and_then(|value| value.checked_add(toc.payload_len))
+            .ok_or_else(|| Error::new(ErrorCode::CorruptNode, "node-pack length overflow"))?;
+        if encoded_pack_len != expected.object_len
+            || toc.entries.len() != expected.node_count as usize
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node-pack TOC disagrees with its commit reference",
+            ));
+        }
+        Ok(CommitIndexView {
+            commit,
+            toc: Some(toc),
+            payload_offset: Some(toc_end),
+        })
     }
 
     async fn cas_ref(
