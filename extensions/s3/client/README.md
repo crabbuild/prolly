@@ -125,6 +125,25 @@ let receipt = commit.publish().await?;
 For a disposable job, add `.ephemeral()`. That removes checkpoint requests
 but cannot recover process-local staged metadata after a crash.
 
+For a collection already in memory, `ingest_objects` creates durable batches
+for you:
+
+```rust
+use prolly_s3_client::IngestObject;
+
+let receipts = client
+    .ingest_objects(
+        vec![IngestObject {
+            key: "incoming/0004.json".into(),
+            bytes: fourth_body,
+            headers: Default::default(),
+            user_metadata: Default::default(),
+        }],
+        1_000,
+    )
+    .await?;
+```
+
 ## List files and versions
 
 ```rust
@@ -177,6 +196,102 @@ Merge work is immutable and restartable. Persist the canonical `MergeCursor`
 returned by each bounded advance. Use `merge_conflicts_page` before publishing
 when the policy can produce conflicts.
 
+## History, diff, and recovery
+
+History and diff cursors keep traversal state bounded:
+
+```rust
+use prolly_s3_client::core::TraversalBudget;
+
+let head = client.head().await?;
+let log = client
+    .log_bounded(head, None, 100, TraversalBudget::default())
+    .await?;
+
+let changes = client.diff_bounded(older, head, None, 1_000).await?;
+for change in changes.changes {
+    println!("{}", String::from_utf8_lossy(&change.key));
+}
+```
+
+`open_reflog` captures a stable immutable journal snapshot. `reset_branch`
+moves a ref directly and records the move. `start_restore` instead creates new
+commits with fresh logical versions while reusing immutable payloads:
+
+```rust
+let expected = client.head().await?;
+let mut restore = client
+    .start_restore(older, expected, "restore known-good snapshot")
+    .await?;
+
+while !restore.complete {
+    restore = client.advance_restore(&restore, 1_000).await?.cursor;
+}
+```
+
+Persist the returned cursor after each page. Restores larger than the canonical
+commit limit are split into multiple atomic commits.
+
+## Integrity, repair, and backup verification
+
+Metadata fsck validates commits, node packs, trees, logical versions, and
+payload metadata. Deep mode also downloads and hashes payload bytes:
+
+```rust
+let mut fsck = client.start_fsck(true).await?;
+while fsck.phase != prolly_s3_client::core::FsckPhase::Complete {
+    fsck = client.advance_fsck(&fsck, 1_000).await?.cursor;
+}
+println!("verified {} commits", fsck.report.commits);
+```
+
+Cross-provider repair is logical. It does not copy provider version IDs. It
+downloads verified source payloads, rebinds them at the destination, preserves
+logical metadata, and removes destination-only keys:
+
+```rust
+let source_snapshot = source.head().await?;
+let destination_head = destination.head().await?;
+let mut repair = destination
+    .start_repair_from(
+        &source,
+        source_snapshot,
+        destination_head,
+        "repair from primary",
+    )
+    .await?;
+
+loop {
+    let page = destination.advance_repair_from(&source, &repair, 1_000).await?;
+    repair = page.cursor;
+    if page.complete { break; }
+}
+
+let mut verify = source
+    .start_backup_verification(
+        &destination,
+        source_snapshot,
+        repair.expected_head,
+    )
+    .await?;
+while !verify.complete {
+    verify = source
+        .advance_backup_verification(&destination, &verify, 1_000)
+        .await?
+        .cursor;
+}
+```
+
+`start_clone_from`, `start_fetch_from`, and `start_push_to` use this same
+restartable logical-snapshot transfer. They intentionally do not claim to copy
+the source commit DAG.
+
+Retention pins are durable tag-backed roots:
+
+```rust
+client.create_retention_pin("quarter-close", head).await?;
+```
+
 ## Cache immutable nodes
 
 The in-memory cache is enabled through repository limits. For a persistent
@@ -206,6 +321,10 @@ Cache keys include repository identity, tree format, and immutable CID. Cached
 bytes are verified before use. Persisted caches improve cold-start traversal
 but are never authoritative.
 
+Use `prewarm_node_cache(snapshot)` during startup to traverse both state trees.
+Use `node_cache_snapshot()` before and after to observe hits, misses,
+insertions, corruptions, coalesced waits, and ranged fetches.
+
 ## Performance model
 
 - A single-file write uploads one payload and publishes immutable metadata.
@@ -226,9 +345,10 @@ latency or cost claim substitutes for AWS qualification.
 - One file must fit the repository and provider single-object PUT limits.
 - There is no chunked or multipart file representation.
 - Concurrent writes to one branch can conflict; batch related changes.
-- Immutable unreachable payloads and nodes are not currently reclaimed by a
-  production garbage-collection API.
-- Cross-repository clone and backup/restore are not production APIs.
+- Retention pins exist, but an online immutable-object sweep still requires a
+  publication-epoch barrier; no unsafe concurrent GC sweep is exposed.
+- Cross-repository clone/fetch/push currently transfers and verifies logical
+  snapshots, not the source commit DAG or reflog identity.
 - “Millions or billions” requires provider quota, cache, latency, cost,
   throttling, and hot-branch qualification at the intended workload.
 

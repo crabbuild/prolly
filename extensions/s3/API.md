@@ -8,14 +8,24 @@ The application-facing type is `prolly_s3_client::Client`.
 | Reopen a repository | `Client::builder().open().await` |
 | Write one file | `put_object`, `put_object_with_operation` |
 | Read current or historical data | `get_object`, `get_object_at` |
-| Delete a file | `delete_object` |
-| List current or historical data | `list_objects`, `list_objects_at` |
+| Read metadata or a byte range | `head_object`, `get_object_range` |
+| Copy without uploading the payload | `copy_object` |
+| Delete one or many files | `delete_object`, `delete_objects` |
+| List data and common prefixes | `list_objects`, `list_objects_at`, `list_objects_delimited` |
 | Inspect one file's history | `list_object_versions` |
-| Atomically ingest many files | `begin_commit`, `resume_commit` |
+| Atomically ingest many files | `ingest_objects`, `begin_commit`, `resume_commit` |
 | Work on another branch | `create_branch`, `for_branch`, `delete_branch` |
 | Pin a commit | `create_tag`, `tag`, `delete_tag` |
+| Add a GC retention root | `create_retention_pin`, `delete_retention_pin` |
+| Read history or compare snapshots | `log_bounded`, `diff_bounded` |
+| Inspect or recover ref movement | `open_reflog`, `read_reflog_page`, `recover_branch` |
+| Reset or restore | `reset_branch`, `start_restore`, `advance_restore` |
 | Merge branches | `start_merge`, `advance_merge`, `publish_merge` |
 | Inspect a merge | `merge_bases_page`, `merge_changes_page`, `merge_conflicts_page` |
+| Check repository integrity | `start_fsck`, `advance_fsck` |
+| Repair or transfer a snapshot | `start_repair_from`, `start_fetch_from`, `start_push_to` |
+| Verify a logical backup | `start_backup_verification`, `advance_backup_verification` |
+| Prewarm/inspect node caching | `prewarm_node_cache`, `node_cache_snapshot` |
 | Check index health | `branch_index_health`, `wait_for_branch_indexes` |
 | Observe S3 requests | `s3_operation_metrics`, `reset_s3_operation_metrics` |
 
