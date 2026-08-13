@@ -165,7 +165,7 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .unwrap_or_default();
         let content_length = output.content_length();
         let delete_marker = output.delete_marker().unwrap_or(false);
-        let user_metadata = output
+        let user_metadata: BTreeMap<String, String> = output
             .metadata()
             .cloned()
             .unwrap_or_default()
@@ -181,13 +181,23 @@ impl ObjectPlane for AwsS3ObjectPlane {
             .downloaded_body_bytes
             .fetch_add(bytes.len() as u64, Ordering::Relaxed);
         let digest: [u8; 32] = Sha256::digest(&bytes).into();
+        // A ranged GET contains only the requested bytes, so `digest` is not
+        // the checksum of the immutable object. Immutable writes persist the
+        // whole-object digest as user metadata; retain that logical metadata
+        // on both full and ranged responses. Full reads still hash and verify
+        // the returned body in `PayloadStore::get`.
+        let sha256 = user_metadata
+            .get("prolly-sha256")
+            .and_then(|encoded| hex::decode(encoded).ok())
+            .and_then(|bytes| bytes.try_into().ok())
+            .unwrap_or(digest);
         Ok(Some(StoredObject {
             metadata: StoredMetadata {
                 token: StorageToken { etag, version_id },
                 len: content_length
                     .and_then(|value| u64::try_from(value).ok())
                     .unwrap_or(bytes.len() as u64),
-                sha256: digest,
+                sha256,
                 last_modified_millis,
                 delete_marker,
                 user_metadata,

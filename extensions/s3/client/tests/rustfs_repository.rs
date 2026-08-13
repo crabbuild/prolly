@@ -121,6 +121,12 @@ async fn rustfs_client_uses_immutable_payloads_and_fences_takeover() {
         .unwrap()
         .unwrap();
     assert_eq!(stored.bytes, b"before takeover");
+    let range = old_writer
+        .get_object_range(first.id, "docs/history.txt", 1..=6)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(range.bytes, b"efore ");
     assert!(stored
         .version
         .binding

@@ -29,15 +29,15 @@ must not mutate repository data behind it.
 - [Cache and scale design](CACHE-AND-SCALE-DESIGN.md)
 - [Operations](OPERATIONS.md)
 - [Qualification](QUALIFICATION.md)
+- [Enterprise-readiness audit](ENTERPRISE-READINESS-AUDIT.md)
 - [Durable paths](spec/prolly-s3/paths.md)
 - [State machines](spec/prolly-s3/state-machines.md)
 
-Run the RustFS example:
+Run the complete RustFS scenario suite:
 
 ```bash
 docker compose -f extensions/s3/docker-compose.rustfs.yml up -d
-cargo run --manifest-path extensions/s3/Cargo.toml \
-  -p prolly-s3-client --example rustfs_versioned_bucket
+extensions/s3/scripts/run_rustfs_examples.sh
 ```
 
 ## Boundaries

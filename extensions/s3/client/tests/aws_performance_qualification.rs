@@ -14,11 +14,13 @@ fn enabled() -> bool {
     std::env::var("PROLLY_S3_AWS_PERF").as_deref() == Ok("1")
 }
 
-fn required<T: std::str::FromStr>(name: &str) -> T
+fn required_alias<T: std::str::FromStr>(name: &str, legacy: &str) -> T
 where
     T::Err: std::fmt::Display,
 {
-    let value = std::env::var(name).unwrap_or_else(|_| panic!("{name} is required"));
+    let value = std::env::var(name)
+        .or_else(|_| std::env::var(legacy))
+        .unwrap_or_else(|_| panic!("{name} is required"));
     value
         .parse()
         .unwrap_or_else(|error| panic!("invalid {name}={value:?}: {error}"))
@@ -36,13 +38,28 @@ async fn aws_hot_branch_performance_release_gate() {
         "set PROLLY_S3_AWS_PERF=1 plus the documented AWS performance variables to run"
     );
 
-    let region_name = std::env::var("PROLLY_AWS_REGION").expect("PROLLY_AWS_REGION is required");
-    let bucket = std::env::var("PROLLY_AWS_BUCKET_VERSIONED")
-        .expect("PROLLY_AWS_BUCKET_VERSIONED is required");
-    let writes_per_tier: usize = required("PROLLY_AWS_PERF_WRITES_PER_TIER");
-    let max_p99_millis: u128 = required("PROLLY_AWS_PERF_MAX_P99_MS");
-    let min_writes_per_second: f64 = required("PROLLY_AWS_PERF_MIN_WRITES_PER_SECOND");
-    let max_calls_per_write: u64 = required("PROLLY_AWS_PERF_MAX_CALLS_PER_WRITE");
+    let region_name = std::env::var("PROLLY_S3_AWS_REGION")
+        .or_else(|_| std::env::var("PROLLY_AWS_REGION"))
+        .expect("PROLLY_S3_AWS_REGION is required");
+    let bucket = std::env::var("PROLLY_S3_AWS_BUCKET")
+        .or_else(|_| std::env::var("PROLLY_AWS_BUCKET_VERSIONED"))
+        .expect("PROLLY_S3_AWS_BUCKET is required");
+    let writes_per_tier: usize = required_alias(
+        "PROLLY_S3_AWS_PERF_WRITES_PER_TIER",
+        "PROLLY_AWS_PERF_WRITES_PER_TIER",
+    );
+    let max_p99_millis: u128 = required_alias(
+        "PROLLY_S3_AWS_PERF_MAX_P99_MS",
+        "PROLLY_AWS_PERF_MAX_P99_MS",
+    );
+    let min_writes_per_second: f64 = required_alias(
+        "PROLLY_S3_AWS_PERF_MIN_WRITES_PER_SECOND",
+        "PROLLY_AWS_PERF_MIN_WRITES_PER_SECOND",
+    );
+    let max_calls_per_write: u64 = required_alias(
+        "PROLLY_S3_AWS_PERF_MAX_CALLS_PER_WRITE",
+        "PROLLY_AWS_PERF_MAX_CALLS_PER_WRITE",
+    );
 
     let shared = aws_config::defaults(BehaviorVersion::latest())
         .region(Region::new(region_name.clone()))
