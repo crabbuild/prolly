@@ -895,6 +895,78 @@ async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
 }
 
 #[tokio::test]
+async fn large_commit_delta_is_external_and_survives_toc_only_reopen() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = RepositoryOptions {
+        repository_prefix: ".tests/repository-external-delta".to_string(),
+        writer: "external-delta-writer".to_string(),
+        provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    let base = repository.head("main").await.unwrap();
+    let session = repository
+        .begin_commit_session("main", "external delta", 60_000)
+        .await
+        .unwrap();
+    let staged = repository
+        .stage_commit_session_put_batch(
+            &session,
+            (0..129)
+                .map(|index| {
+                    (
+                        format!("external/{index:03}").into_bytes(),
+                        vec![index as u8],
+                        ObjectHeaders::default(),
+                        BTreeMap::new(),
+                    )
+                })
+                .collect(),
+            8,
+        )
+        .await
+        .unwrap();
+    let receipt = repository
+        .publish_commit_session(session, staged)
+        .await
+        .unwrap();
+    assert_eq!(receipt.changed_keys, 129);
+    let commit = repository.commit(receipt.id).await.unwrap();
+    assert!(commit.delta.changes.is_empty());
+    assert!(commit.delta.changes_root.is_some());
+    assert_eq!(commit.delta.change_count, 129);
+    repository.advance_branch_indexes("main").await.unwrap();
+    drop(repository);
+
+    let reopened = Repository::open(
+        plane,
+        RepositoryOptions {
+            read_only: true,
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    let page = reopened
+        .diff_page_bounded("main", base, receipt.id, None, 1_000)
+        .await
+        .unwrap();
+    assert_eq!(page.changes.len(), 129);
+    assert!(page.continuation.is_none());
+    assert_eq!(
+        reopened
+            .get_object("main", b"external/128")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        vec![128]
+    );
+}
+
+#[tokio::test]
 async fn repository_durable_session_resumes_after_process_authority_reacquisition() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let clock = Arc::new(FixedClock::new(70_000));

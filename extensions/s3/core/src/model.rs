@@ -721,6 +721,20 @@ impl CommitGraphHead {
 }
 
 impl NodePack {
+    pub(crate) const fn object_header_len() -> usize {
+        12
+    }
+
+    pub(crate) fn toc_len_from_header(header: &[u8]) -> Result<usize> {
+        if header.len() != Self::object_header_len() || &header[..8] != NODE_PACK_MAGIC {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "node pack has an invalid wire header",
+            ));
+        }
+        Ok(u32::from_be_bytes(header[8..12].try_into().expect("fixed range")) as usize)
+    }
+
     /// Encode a range-readable pack: fixed magic and header length, canonical
     /// CBOR table of contents, then the raw concatenated payload.
     pub fn encode_object(&self) -> Result<Vec<u8>> {
@@ -1419,6 +1433,13 @@ impl CommitObject {
             ));
         }
         Ok(u32::from_be_bytes(header[8..12].try_into().expect("fixed range")) as usize)
+    }
+
+    pub(crate) fn pack_len_from_header(header: &[u8]) -> Result<u64> {
+        Self::commit_len_from_header(header)?;
+        Ok(u64::from_be_bytes(
+            header[12..20].try_into().expect("fixed range"),
+        ))
     }
 
     pub(crate) fn decode_commit_metadata(encoded: &[u8]) -> Result<BucketCommit> {

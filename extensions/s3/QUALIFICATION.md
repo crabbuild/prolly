@@ -72,6 +72,21 @@ PROLLY_S3_RUSTFS=1 PROLLY_S3_10K_CONCURRENCY=32 \
   rustfs_10k_concurrent_commit_regression_gate -- --ignored --nocapture
 ```
 
+Run the 20K point-read, full-list, branch, sparse-diff, and merge gate with:
+
+```bash
+PROLLY_S3_RUSTFS=1 \
+  cargo test --release --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --test rustfs_repository \
+  rustfs_20k_branch_diff_merge_meets_amplification_slos \
+  -- --ignored --exact --nocapture
+```
+
+The release gate requires warm read p99 below 100 ms, listing above 10K
+entries/s, branch creation below 500 ms and 512 KiB downloaded, each 100-key
+sparse diff below 500 ms and 1 MiB, and merge planning below one second and
+2 MiB. It also verifies merge publication and merged object content.
+
 ## AWS qualification
 
 Run the ignored AWS tests only against an isolated versioned bucket:

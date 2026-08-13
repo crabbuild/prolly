@@ -49,7 +49,7 @@ fn parse_stages() -> BenchResult<Vec<usize>> {
             .collect::<Result<Vec<_>, _>>()?,
         None => DEFAULT_STAGES.to_vec(),
     };
-    if stages.is_empty() || stages.iter().any(|stage| *stage == 0) {
+    if stages.is_empty() || stages.contains(&0) {
         return Err("benchmark stages must be non-empty positive integers".into());
     }
     stages.sort_unstable();
@@ -140,8 +140,8 @@ async fn ensure_versioned_bucket(aws: &aws_sdk_s3::Client, bucket: &str) -> Benc
 #[tokio::main(flavor = "multi_thread", worker_threads = 12)]
 async fn main() -> BenchResult {
     let endpoint = env("PROLLY_RUSTFS_ENDPOINT", "http://127.0.0.1:9000");
-    let access_key = env("PROLLY_RUSTFS_ACCESS_KEY", "prolly");
-    let secret_key = env("PROLLY_RUSTFS_SECRET_KEY", "prolly");
+    let access_key = env("PROLLY_RUSTFS_ACCESS_KEY", "prollyadmin");
+    let secret_key = env("PROLLY_RUSTFS_SECRET_KEY", "prolly-local-secret-change-me");
     let bucket = env("PROLLY_RUSTFS_BUCKET", "prolly");
     let read_sample_size = env("PROLLY_RUSTFS_PERF_READ_SAMPLES", "1000").parse::<usize>()?;
     let read_concurrency = env("PROLLY_RUSTFS_PERF_READ_CONCURRENCY", "32").parse::<usize>()?;
