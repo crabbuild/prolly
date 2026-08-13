@@ -78,8 +78,9 @@ cargo run --release --locked --manifest-path extensions/s3/Cargo.toml \
 ```
 
 Use `PROLLY_RUSTFS_PERF_STAGES=10000,20000` for a shorter run. RustFS defaults
-to the `prolly` bucket and `prolly/prolly` local credentials; all values remain
-overridable with the `PROLLY_RUSTFS_*` environment variables.
+to the `prolly` bucket and the repository's standard local credentials
+(`prollyadmin` / `prolly-local-secret-change-me`); all values remain overridable
+with the `PROLLY_RUSTFS_*` environment variables.
 
 | Example | Demonstrates |
 |---|---|

@@ -15,8 +15,8 @@ services:
       RUSTFS_ADDRESS: 0.0.0.0:9000
       RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
       RUSTFS_CONSOLE_ENABLE: "true"
-      RUSTFS_ACCESS_KEY: ${PROLLY_RUSTFS_ACCESS_KEY:-prolly}
-      RUSTFS_SECRET_KEY: ${PROLLY_RUSTFS_SECRET_KEY:-prolly}
+      RUSTFS_ACCESS_KEY: ${PROLLY_RUSTFS_ACCESS_KEY:-prollyadmin}
+      RUSTFS_SECRET_KEY: ${PROLLY_RUSTFS_SECRET_KEY:-prolly-local-secret-change-me}
       RUSTFS_RPC_SECRET: ${PROLLY_RUSTFS_RPC_SECRET:-prolly-local-rpc-secret-change-me}
       RUSTFS_OBS_LOGGER_LEVEL: ${PROLLY_RUSTFS_LOG_LEVEL:-info}
     volumes:
