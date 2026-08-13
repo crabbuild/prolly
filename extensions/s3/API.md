@@ -98,7 +98,8 @@ the direct representation.
 - `list_objects_delimited` returns objects plus S3-style common prefixes.
 - `list_objects_page` returns a snapshot-bound opaque cursor and resumes with a
   direct tree seek; `stream_objects` lazily consumes those pages with bounded
-  memory.
+  memory. On detached tag or commit checkouts, page one is seeded from that
+  immutable target rather than the branch's current head.
 - `list_object_versions` lists versions for one logical key.
 - `list_versions_prefix` and `list_versions_at` scan version history across a
   logical key prefix.

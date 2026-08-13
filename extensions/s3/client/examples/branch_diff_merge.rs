@@ -3,6 +3,7 @@
 mod common;
 
 use common::ExampleResult;
+use futures_util::StreamExt;
 use prolly_s3_client::core::{MergePhase, MergePolicy};
 
 #[tokio::main]
@@ -19,8 +20,16 @@ async fn main() -> ExampleResult {
 
     // Branches publish through independent ref lanes. Here each branch changes
     // a different key, so Fail policy can merge without resolving conflicts.
-    let feature_head = feature
+    feature
         .put_object("features/search.txt", b"enabled\n".to_vec())
+        .await?;
+    let selected_feature = feature
+        .put_object("features/filters.txt", b"enabled\n".to_vec())
+        .await?
+        .id;
+    let historical_feature = feature.checkout(selected_feature).await?;
+    let feature_head = feature
+        .put_object("features/post-snapshot.txt", b"not historical\n".to_vec())
         .await?
         .id;
     let main_head = main
@@ -28,8 +37,46 @@ async fn main() -> ExampleResult {
         .await?
         .id;
 
+    // Detached pagination and streaming remain pinned to the selected commit
+    // even after the source branch advances. The checkout retains `feature`
+    // as its branch-derived node-index context for efficient node resolution.
+    let first_historical_page = historical_feature
+        .list_objects_page("features/", None, 1)
+        .await?;
+    assert_eq!(first_historical_page.snapshot, selected_feature);
+    let second_historical_page = historical_feature
+        .list_objects_page(
+            "features/",
+            first_historical_page.continuation.as_deref(),
+            1,
+        )
+        .await?;
+    let paged_historical = first_historical_page
+        .objects
+        .into_iter()
+        .chain(second_historical_page.objects)
+        .map(|object| object.key)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        paged_historical,
+        vec![
+            b"features/filters.txt".to_vec(),
+            b"features/search.txt".to_vec(),
+        ]
+    );
+    assert!(second_historical_page.continuation.is_none());
+
+    let historical_stream = historical_feature.stream_objects("features/", 1);
+    futures_util::pin_mut!(historical_stream);
+    let mut streamed_historical = Vec::new();
+    while let Some(object) = historical_stream.next().await {
+        streamed_historical.push(object?.key);
+    }
+    assert_eq!(streamed_historical, paged_historical);
+
     let diff = feature.diff_bounded(base, feature_head, None, 100).await?;
     println!("feature_changed_keys={}", diff.changes.len());
+    println!("historical_listed_keys={}", paged_historical.len());
 
     // Merge construction is restartable. Persist the returned cursor after
     // every page for large repositories or long-running merge workers.

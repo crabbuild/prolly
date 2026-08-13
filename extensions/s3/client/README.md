@@ -248,6 +248,23 @@ while let Some(object) = objects.next().await {
 }
 ```
 
+Paged and streamed listings honor the selected revision. For efficient
+historical traversal, detach from the branch handle that contains the commit;
+the clone retains that branch's derived node index as its lookup context:
+
+```rust
+let feature = client.checkout("feature").await?;
+let historical = feature.checkout(commit_id).await?;
+
+let first = historical.list_objects_page("incoming/", None, 1_000).await?;
+assert_eq!(first.snapshot, commit_id);
+
+let mut objects = historical.stream_objects("incoming/", 1_000);
+while let Some(object) = objects.next().await {
+    consume(object?);
+}
+```
+
 `list_objects_page` returns an opaque continuation that seeks directly into the
 same immutable snapshot. A continuation is bound to its repository, branch,
 and prefix and cannot be reused for another query. Hold a retention pin on the
