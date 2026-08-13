@@ -1092,12 +1092,23 @@ async fn large_commit_delta_is_external_and_survives_toc_only_reopen() {
     )
     .await
     .unwrap();
-    let page = reopened
-        .diff_page_bounded("main", base, receipt.id, None, 1_000)
-        .await
-        .unwrap();
-    assert_eq!(page.changes.len(), 129);
-    assert!(page.continuation.is_none());
+    let mut continuation = None;
+    let mut changes = Vec::new();
+    loop {
+        let page = reopened
+            .diff_page_bounded("main", base, receipt.id, continuation.as_ref(), 32)
+            .await
+            .unwrap();
+        assert_eq!(page.compared_nodes, 0);
+        changes.extend(page.changes);
+        continuation = page.continuation;
+        if continuation.is_none() {
+            break;
+        }
+    }
+    assert_eq!(changes.len(), 129);
+    assert_eq!(changes.first().unwrap().key, b"external/000");
+    assert_eq!(changes.last().unwrap().key, b"external/128");
     assert_eq!(
         reopened
             .get_object("main", b"external/128")

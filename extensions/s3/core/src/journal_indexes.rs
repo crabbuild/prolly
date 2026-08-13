@@ -1106,10 +1106,16 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
             })
             .collect::<Vec<_>>();
         let loaded = stream::iter(missing.into_iter().map(|event| async move {
-            publisher
-                .load_commit_index(event.new_target)
-                .await
-                .map(|object| (event, object))
+            let object = publisher.load_commit_index(event.new_target).await?;
+            // A merge may publish roots containing nodes introduced by a
+            // secondary parent. Import those immutable pack locations into
+            // the target branch index with the merge event so the merged
+            // snapshot remains readable after source-branch deletion/reopen.
+            let mut secondary_parents = Vec::new();
+            for parent in object.commit.parents.iter().skip(1).copied() {
+                secondary_parents.push((parent, publisher.load_commit_index(parent).await?));
+            }
+            Ok::<_, Error>((event, object, secondary_parents))
         }))
         .buffered(COMMIT_INDEX_LOAD_CONCURRENCY)
         .collect::<Vec<_>>()
@@ -1120,13 +1126,21 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
         let mut pending = BTreeMap::new();
         let mut indexed_commits = 0usize;
         for loaded in loaded {
-            let (event, object) = loaded?;
+            let (event, object, secondary_parents) = loaded?;
             node_mutations.extend(self.node_pack_mutations(
                 event.new_target,
                 object.commit.node_pack.as_ref().map(|pack| pack.id),
                 object.toc.as_ref(),
                 object.payload_offset,
             )?);
+            for (parent, parent_index) in secondary_parents {
+                node_mutations.extend(self.node_pack_mutations(
+                    parent,
+                    parent_index.commit.node_pack.as_ref().map(|pack| pack.id),
+                    parent_index.toc.as_ref(),
+                    parent_index.payload_offset,
+                )?);
+            }
             let entry = self
                 .build_commit_graph_entry(graph_tree, &pending, event.new_target, object.commit)
                 .await?;

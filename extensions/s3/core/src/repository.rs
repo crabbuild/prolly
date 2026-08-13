@@ -34,15 +34,15 @@ use crate::{
     LogicalObjectVersionBody, LogicalObjectVersionKind, MemoryNodeCache, MergeAdvancePage,
     MergeBaseCursor, MergeBasePage, MergeChange, MergeChangeCursor, MergeChangePage,
     MergeCleanupCursor, MergeCleanupPage, MergeConflict, MergeConflictCursor, MergeConflictPage,
-    MergeCursor, MergePhase, MergePolicy, MergeReceipt, MutableControlKind, MutableControlObserver,
-    MutableControlStore, MutationIdentity, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
-    ObjectTransition, ObjectVersion, ObjectVersionId, ObjectVersionOrder, OperationId,
-    OperationIndexAdvanceReport, OperationIndexRebuildCursor, OperationIndexRebuildStep,
-    PendingHistoryTransferCommit, PhysicalVersion, ProllyObjectStore, ProviderPerKeyVersionLimit,
-    RandomIdSource, RefCatalogCursor, RefGeneration, RefKind, RepositoryFormat, Result,
-    RootManifest, SegmentedOperationIndex, ShardWriterAuthority, ShardedBranchPublisher,
-    ShardedRefCatalog, StagedMutation, StagedMutationBody, StagedPut, SystemClock, TagStore,
-    TakeoverRequest,
+    MergeCursor, MergeDiffCursor, MergePhase, MergePolicy, MergeReceipt, MutableControlKind,
+    MutableControlObserver, MutableControlStore, MutationIdentity, NodeCache, ObjectHeaders,
+    ObjectPath, ObjectPlane, ObjectTransition, ObjectVersion, ObjectVersionId, ObjectVersionOrder,
+    OperationId, OperationIndexAdvanceReport, OperationIndexRebuildCursor,
+    OperationIndexRebuildStep, PendingHistoryTransferCommit, PhysicalVersion, ProllyObjectStore,
+    ProviderPerKeyVersionLimit, RandomIdSource, RefCatalogCursor, RefGeneration, RefKind,
+    RepositoryFormat, Result, RootManifest, SegmentedOperationIndex, ShardWriterAuthority,
+    ShardedBranchPublisher, ShardedRefCatalog, StagedMutation, StagedMutationBody, StagedPut,
+    SystemClock, TagStore, TakeoverRequest,
 };
 
 /// Keep ordinary commit descriptors small enough for one bounded metadata
@@ -237,7 +237,13 @@ pub struct ObjectDiffCursor {
     branch: String,
     from: CommitId,
     to: CommitId,
-    traversal: prolly::StructuralDiffCursor,
+    traversal: ObjectDiffTraversal,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+enum ObjectDiffTraversal {
+    Structural(prolly::StructuralDiffCursor),
+    Delta { after: Vec<u8> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3928,8 +3934,8 @@ impl<P: ObjectPlane> Repository<P> {
         let stats_engine = self.payload_pack_stats_engine(cursor.job)?;
         let mut seen = self.tree_from_root(&cursor.seen)?;
         let mut mutations = Vec::new();
-        let mut pending_physical = BTreeSet::new();
-        let mut pending_extents = BTreeSet::new();
+        let mut pending_physical = BTreeMap::new();
+        let mut pending_extents: BTreeMap<Vec<u8>, BTreeSet<(u64, u64)>> = BTreeMap::new();
         let mut next = cursor.clone();
         let mut processed = 0usize;
         while processed < max_objects {
@@ -3971,74 +3977,116 @@ impl<P: ObjectPlane> Repository<P> {
             }
 
             let physical_key = payload_pack_physical_key(binding);
-            if pending_physical.insert(physical_key.clone())
-                && stats_engine.get(&seen, &physical_key).await?.is_none()
-            {
-                let metadata = self.plane.head(&binding.path).await?.ok_or_else(|| {
-                    Error::new(ErrorCode::MissingClosure, "payload-pack object is missing")
-                })?;
-                if metadata.sha256 != binding.physical_checksum_sha256()
-                    || metadata.token.etag != binding.provider_etag
-                    || metadata.token.version_id != binding.provider_version_id
-                {
+            pending_physical
+                .entry(physical_key)
+                .or_insert_with(|| binding.clone());
+            if let Some((start, end)) = binding.pack_range {
+                if end < start {
                     return Err(Error::new(
-                        ErrorCode::ChecksumMismatch,
-                        "payload-pack physical metadata does not match its binding",
+                        ErrorCode::CorruptContent,
+                        "payload-pack extent is invalid",
                     ));
                 }
-                next.report.unique_physical_objects = checked_pack_add(
-                    next.report.unique_physical_objects,
-                    1,
-                    "unique physical object",
-                )?;
-                next.report.unique_physical_bytes = checked_pack_add(
-                    next.report.unique_physical_bytes,
-                    metadata.len,
-                    "unique physical byte",
-                )?;
-                if binding.is_packed() {
-                    next.report.unique_pack_objects =
-                        checked_pack_add(next.report.unique_pack_objects, 1, "unique pack object")?;
-                    next.report.unique_pack_bytes = checked_pack_add(
-                        next.report.unique_pack_bytes,
-                        metadata.len,
-                        "unique pack byte",
-                    )?;
-                }
-                mutations.push(Mutation::Upsert {
-                    key: physical_key,
-                    val: metadata.len.to_be_bytes().to_vec(),
-                });
-            }
-            if let Some((start, end)) = binding.pack_range {
-                let extent_key = payload_pack_extent_key(binding, start, end);
-                if pending_extents.insert(extent_key.clone())
-                    && stats_engine.get(&seen, &extent_key).await?.is_none()
-                {
-                    let extent_bytes = end
-                        .checked_sub(start)
-                        .and_then(|length| length.checked_add(1))
-                        .ok_or_else(|| {
-                            Error::new(ErrorCode::CorruptContent, "payload-pack extent is invalid")
-                        })?;
-                    next.report.unique_packed_extents = checked_pack_add(
-                        next.report.unique_packed_extents,
-                        1,
-                        "unique packed extent",
-                    )?;
-                    next.report.unique_packed_extent_bytes = checked_pack_add(
-                        next.report.unique_packed_extent_bytes,
-                        extent_bytes,
-                        "unique packed extent byte",
-                    )?;
-                    mutations.push(Mutation::Upsert {
-                        key: extent_key,
-                        val: Vec::new(),
-                    });
-                }
+                pending_extents
+                    .entry(payload_pack_extent_summary_key(binding))
+                    .or_default()
+                    .insert((start, end));
             }
             next.after = Some(key);
             processed += 1;
+        }
+        let physical_keys = pending_physical.keys().cloned().collect::<Vec<_>>();
+        let extent_keys = pending_extents.keys().cloned().collect::<Vec<_>>();
+        let (physical_seen, extent_seen) = futures_util::try_join!(
+            stats_engine.get_many(&seen, &physical_keys),
+            stats_engine.get_many(&seen, &extent_keys),
+        )?;
+        let missing_physical = pending_physical
+            .into_iter()
+            .zip(physical_seen)
+            .filter_map(|((key, binding), seen)| seen.is_none().then_some((key, binding)))
+            .collect::<Vec<_>>();
+        let loaded_physical = stream::iter(missing_physical.into_iter().map(
+            |(key, binding)| async move {
+                let metadata = self.plane.head(&binding.path).await?.ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "payload-pack object is missing")
+                })?;
+                Ok::<_, Error>((key, binding, metadata))
+            },
+        ))
+        .buffered(32)
+        .collect::<Vec<_>>()
+        .await;
+        for loaded in loaded_physical {
+            let (key, binding, metadata) = loaded?;
+            if metadata.sha256 != binding.physical_checksum_sha256()
+                || metadata.token.etag != binding.provider_etag
+                || metadata.token.version_id != binding.provider_version_id
+            {
+                return Err(Error::new(
+                    ErrorCode::ChecksumMismatch,
+                    "payload-pack physical metadata does not match its binding",
+                ));
+            }
+            next.report.unique_physical_objects = checked_pack_add(
+                next.report.unique_physical_objects,
+                1,
+                "unique physical object",
+            )?;
+            next.report.unique_physical_bytes = checked_pack_add(
+                next.report.unique_physical_bytes,
+                metadata.len,
+                "unique physical byte",
+            )?;
+            if binding.is_packed() {
+                next.report.unique_pack_objects =
+                    checked_pack_add(next.report.unique_pack_objects, 1, "unique pack object")?;
+                next.report.unique_pack_bytes = checked_pack_add(
+                    next.report.unique_pack_bytes,
+                    metadata.len,
+                    "unique pack byte",
+                )?;
+            }
+            mutations.push(Mutation::Upsert {
+                key,
+                val: metadata.len.to_be_bytes().to_vec(),
+            });
+        }
+        for ((key, extents), seen) in pending_extents.into_iter().zip(extent_seen) {
+            let mut accumulated = seen
+                .as_deref()
+                .map(decode_canonical::<Vec<(u64, u64)>>)
+                .transpose()?
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            let mut changed = false;
+            for (start, end) in extents {
+                if !accumulated.insert((start, end)) {
+                    continue;
+                }
+                let extent_bytes = end
+                    .checked_sub(start)
+                    .and_then(|length| length.checked_add(1))
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::CorruptContent, "payload-pack extent is invalid")
+                    })?;
+                next.report.unique_packed_extents =
+                    checked_pack_add(next.report.unique_packed_extents, 1, "unique packed extent")?;
+                next.report.unique_packed_extent_bytes = checked_pack_add(
+                    next.report.unique_packed_extent_bytes,
+                    extent_bytes,
+                    "unique packed extent byte",
+                )?;
+                changed = true;
+            }
+            if !changed {
+                continue;
+            }
+            mutations.push(Mutation::Upsert {
+                key,
+                val: encode_canonical(&accumulated.into_iter().collect::<Vec<_>>())?,
+            });
         }
         if !mutations.is_empty() {
             seen = stats_engine.batch(&seen, mutations).await?;
@@ -4745,6 +4793,14 @@ impl<P: ObjectPlane> Repository<P> {
         self.require_branch_indexes_ready(branch).await?;
         let from_commit = self.load_commit_metadata(from).await?;
         let to_commit = self.load_commit_metadata(to).await?;
+        if to_commit.parents.first() == Some(&from) && to_commit.delta.changes_root.is_none() {
+            return to_commit
+                .delta
+                .changes
+                .iter()
+                .map(object_diff_from_transition)
+                .collect();
+        }
         let from_tree = self.tree_from_root(&from_commit.state.objects)?;
         let to_tree = self.tree_from_root(&to_commit.state.objects)?;
         self.engine(self.node_store.clone())
@@ -4788,6 +4844,39 @@ impl<P: ObjectPlane> Repository<P> {
         self.require_branch_indexes_ready(branch).await?;
         let from_commit = self.load_commit_metadata(from).await?;
         let to_commit = self.load_commit_metadata(to).await?;
+        // Direct children carry an exact logical transition stream, inline or
+        // in an immutable delta tree. Page that stream instead of comparing
+        // snapshot structure; tree boundary churn is irrelevant to this path.
+        if to_commit.parents.first() == Some(&from)
+            && !matches!(
+                cursor.map(|cursor| &cursor.traversal),
+                Some(ObjectDiffTraversal::Structural(_))
+            )
+        {
+            let after = match cursor.map(|cursor| &cursor.traversal) {
+                Some(ObjectDiffTraversal::Delta { after }) => Some(after.as_slice()),
+                None => None,
+                Some(ObjectDiffTraversal::Structural(_)) => unreachable!("excluded above"),
+            };
+            let (transitions, next_after) =
+                self.commit_delta_page(&to_commit, after, limit).await?;
+            let changes = transitions
+                .iter()
+                .map(object_diff_from_transition)
+                .collect::<Result<Vec<_>>>()?;
+            return Ok(ObjectDiffPage {
+                changes,
+                continuation: next_after.map(|after| ObjectDiffCursor {
+                    repository: self.format.repository_id,
+                    branch: branch.to_string(),
+                    from,
+                    to,
+                    traversal: ObjectDiffTraversal::Delta { after },
+                }),
+                compared_nodes: 0,
+                reused_subtrees: 0,
+            });
+        }
         let from_tree = self.tree_from_root(&from_commit.state.objects)?;
         let to_tree = self.tree_from_root(&to_commit.state.objects)?;
         let page = self
@@ -4795,7 +4884,10 @@ impl<P: ObjectPlane> Repository<P> {
             .structural_diff_page(
                 &from_tree,
                 &to_tree,
-                cursor.map(|cursor| &cursor.traversal),
+                cursor.map(|cursor| match &cursor.traversal {
+                    ObjectDiffTraversal::Structural(traversal) => traversal,
+                    ObjectDiffTraversal::Delta { .. } => unreachable!("handled direct delta"),
+                }),
                 limit,
             )
             .await?;
@@ -4811,7 +4903,7 @@ impl<P: ObjectPlane> Repository<P> {
                 branch: branch.to_string(),
                 from,
                 to,
-                traversal,
+                traversal: ObjectDiffTraversal::Structural(traversal),
             }),
             compared_nodes: page.stats.compared_nodes,
             reused_subtrees: page.stats.reused_subtrees,
@@ -7865,6 +7957,9 @@ impl<P: ObjectPlane> Repository<P> {
         let mut plan_tree = self.tree_from_merge_root(&cursor.plan_root)?;
         let mut processed = 0usize;
         let mut page_mutations = Vec::new();
+        let direct_external_promotion = cursor.ours == base
+            && theirs_commit.parents.first() == Some(&base)
+            && theirs_commit.delta.changes_root.is_some();
         let mut ours_buffer = VecDeque::new();
         let mut theirs_buffer = VecDeque::new();
         if let Some(pending) = cursor.ours_pending.take() {
@@ -7873,24 +7968,83 @@ impl<P: ObjectPlane> Repository<P> {
         if let Some(pending) = cursor.theirs_pending.take() {
             theirs_buffer.push_back(pending);
         }
+        let mut theirs_delta_page = false;
+        if !cursor.ours_finished && cursor.ours_diff.is_none() {
+            if base == cursor.ours {
+                cursor.ours_finished = true;
+            } else if let Some(diffs) = self
+                .direct_parent_diffs(base, &base_commit, &ours_commit)
+                .await?
+            {
+                cursor.ours_diff =
+                    structural_cursor_with_pending(None, &base_tree, &ours_tree, diffs)
+                        .map(MergeDiffCursor::Structural);
+                cursor.ours_finished = cursor.ours_diff.is_none();
+            }
+        }
+        if !cursor.theirs_finished && cursor.theirs_diff.is_none() {
+            if base == cursor.theirs {
+                cursor.theirs_finished = true;
+            } else if let Some(diffs) = self
+                .direct_parent_diffs(base, &base_commit, &theirs_commit)
+                .await?
+            {
+                cursor.theirs_diff =
+                    structural_cursor_with_pending(None, &base_tree, &theirs_tree, diffs)
+                        .map(MergeDiffCursor::Structural);
+                cursor.theirs_finished = cursor.theirs_diff.is_none();
+            }
+        }
+        // The overwhelmingly common high-throughput merge has the target at
+        // the selected base and one direct source child. Its exact delta tree
+        // is already an ordered, restartable merge stream.
+        if cursor.ours_finished
+            && !cursor.theirs_finished
+            && theirs_commit.parents.first() == Some(&base)
+            && !matches!(cursor.theirs_diff, Some(MergeDiffCursor::Structural(_)))
+        {
+            let after = match cursor.theirs_diff.as_ref() {
+                Some(MergeDiffCursor::Delta { after }) => Some(after.as_slice()),
+                None => None,
+                Some(MergeDiffCursor::Structural(_)) => unreachable!("excluded above"),
+            };
+            let (diffs, next_after) = self
+                .direct_parent_diff_page(&base_commit, &theirs_commit, after, max_steps)
+                .await?;
+            theirs_buffer.extend(diffs);
+            cursor.theirs_diff = next_after.map(|after| MergeDiffCursor::Delta { after });
+            cursor.theirs_finished = cursor.theirs_diff.is_none();
+            theirs_delta_page = true;
+        }
         if !cursor.ours_finished {
             let page = state_engine
-                .structural_diff_page(&base_tree, &ours_tree, cursor.ours_diff.as_ref(), max_steps)
+                .structural_diff_page(
+                    &base_tree,
+                    &ours_tree,
+                    cursor.ours_diff.as_ref().map(|cursor| match cursor {
+                        MergeDiffCursor::Structural(cursor) => cursor,
+                        MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+                    }),
+                    max_steps,
+                )
                 .await?;
             ours_buffer.extend(page.diffs);
-            cursor.ours_diff = page.next_cursor;
+            cursor.ours_diff = page.next_cursor.map(MergeDiffCursor::Structural);
         }
-        if !cursor.theirs_finished {
+        if !cursor.theirs_finished && !theirs_delta_page {
             let page = state_engine
                 .structural_diff_page(
                     &base_tree,
                     &theirs_tree,
-                    cursor.theirs_diff.as_ref(),
+                    cursor.theirs_diff.as_ref().map(|cursor| match cursor {
+                        MergeDiffCursor::Structural(cursor) => cursor,
+                        MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+                    }),
                     max_steps,
                 )
                 .await?;
             theirs_buffer.extend(page.diffs);
-            cursor.theirs_diff = page.next_cursor;
+            cursor.theirs_diff = page.next_cursor.map(MergeDiffCursor::Structural);
         }
         while processed < max_steps {
             let key_order = match (ours_buffer.front(), theirs_buffer.front()) {
@@ -7948,10 +8102,12 @@ impl<P: ObjectPlane> Repository<P> {
                 conflict,
             };
             if selected != ours_value {
-                page_mutations.push(Mutation::Upsert {
-                    key: merge_change_key(&key),
-                    val: encode_canonical(&record)?,
-                });
+                if !direct_external_promotion {
+                    page_mutations.push(Mutation::Upsert {
+                        key: merge_change_key(&key),
+                        val: encode_canonical(&record)?,
+                    });
+                }
                 let change = merge_change_from_record(&record)?;
                 emitted_changes.push(change);
                 cursor.planned_changes =
@@ -7976,17 +8132,34 @@ impl<P: ObjectPlane> Repository<P> {
             processed += 1;
         }
         cursor.ours_diff = structural_cursor_with_pending(
-            cursor.ours_diff.take(),
+            cursor.ours_diff.take().map(|cursor| match cursor {
+                MergeDiffCursor::Structural(cursor) => cursor,
+                MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+            }),
             &base_tree,
             &ours_tree,
             ours_buffer.into(),
-        );
-        cursor.theirs_diff = structural_cursor_with_pending(
-            cursor.theirs_diff.take(),
-            &base_tree,
-            &theirs_tree,
-            theirs_buffer.into(),
-        );
+        )
+        .map(MergeDiffCursor::Structural);
+        if theirs_delta_page {
+            if !theirs_buffer.is_empty() {
+                return Err(Error::new(
+                    ErrorCode::InternalInvariant,
+                    "direct-child delta merge page was not fully consumed",
+                ));
+            }
+        } else {
+            cursor.theirs_diff = structural_cursor_with_pending(
+                cursor.theirs_diff.take().map(|cursor| match cursor {
+                    MergeDiffCursor::Structural(cursor) => cursor,
+                    MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+                }),
+                &base_tree,
+                &theirs_tree,
+                theirs_buffer.into(),
+            )
+            .map(MergeDiffCursor::Structural);
+        }
         cursor.ours_finished = cursor.ours_diff.is_none();
         cursor.theirs_finished = cursor.theirs_diff.is_none();
         if !page_mutations.is_empty() {
@@ -8000,6 +8173,13 @@ impl<P: ObjectPlane> Repository<P> {
         {
             if cursor.policy == MergePolicy::Fail && cursor.conflicts != 0 {
                 cursor.phase = MergePhase::Conflicted;
+            } else if direct_external_promotion {
+                cursor.final_objects = Some(theirs_commit.state.objects.clone());
+                cursor.final_versions = Some(theirs_commit.state.versions.clone());
+                cursor.delta_root = theirs_commit.delta.changes_root.clone();
+                cursor.built_changes = cursor.planned_changes;
+                cursor.version_diff_finished = true;
+                cursor.phase = MergePhase::ReadyToPublish;
             } else {
                 cursor.final_objects = Some(ours_commit.state.objects.clone());
                 cursor.final_versions = Some(ours_commit.state.versions.clone());
@@ -8011,6 +8191,201 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(processed)
     }
 
+    /// Materialize the exact inline delta of a direct first-parent child.
+    /// Only the changed keys are read, so merge planning remains proportional
+    /// to a sparse publication even when the surrounding snapshot is huge.
+    async fn direct_parent_diffs(
+        &self,
+        parent: CommitId,
+        parent_commit: &BucketCommit,
+        child_commit: &BucketCommit,
+    ) -> Result<Option<Vec<Diff>>> {
+        if child_commit.parents.first() != Some(&parent)
+            || child_commit.delta.changes_root.is_some()
+        {
+            return Ok(None);
+        }
+        if child_commit.delta.changes.is_empty() {
+            return Ok(Some(Vec::new()));
+        }
+        let keys = child_commit
+            .delta
+            .changes
+            .iter()
+            .map(|transition| transition.key.as_slice())
+            .collect::<Vec<_>>();
+        let engine = self.engine(self.node_store.clone());
+        let parent_tree = self.tree_from_root(&parent_commit.state.objects)?;
+        let child_tree = self.tree_from_root(&child_commit.state.objects)?;
+        let (parent_values, child_values) = futures_util::try_join!(
+            engine.get_many(&parent_tree, &keys),
+            engine.get_many(&child_tree, &keys),
+        )?;
+        let mut diffs = Vec::with_capacity(keys.len());
+        for ((transition, before), after) in child_commit
+            .delta
+            .changes
+            .iter()
+            .zip(parent_values)
+            .zip(child_values)
+        {
+            if current_id(before.as_deref())? != transition.previous
+                || (!transition.delete_marker
+                    && current_id(after.as_deref())? != Some(transition.next))
+                || (transition.delete_marker && after.is_some())
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "inline commit delta disagrees with its state roots",
+                ));
+            }
+            let diff = match (before, after) {
+                (None, Some(val)) => Diff::Added {
+                    key: transition.key.clone(),
+                    val,
+                },
+                (Some(val), None) => Diff::Removed {
+                    key: transition.key.clone(),
+                    val,
+                },
+                (Some(old), Some(new)) => Diff::Changed {
+                    key: transition.key.clone(),
+                    old,
+                    new,
+                },
+                (None, None) => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "inline commit delta records an absent-to-absent transition",
+                    ));
+                }
+            };
+            diffs.push(diff);
+        }
+        Ok(Some(diffs))
+    }
+
+    async fn direct_parent_diff_page(
+        &self,
+        parent_commit: &BucketCommit,
+        child_commit: &BucketCommit,
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(Vec<Diff>, Option<Vec<u8>>)> {
+        let (transitions, next_after) = self.commit_delta_page(child_commit, after, limit).await?;
+        if transitions.is_empty() {
+            return Ok((Vec::new(), next_after));
+        }
+        let keys = transitions
+            .iter()
+            .map(|transition| transition.key.as_slice())
+            .collect::<Vec<_>>();
+        let engine = self.engine(self.node_store.clone());
+        let parent_tree = self.tree_from_root(&parent_commit.state.objects)?;
+        let child_tree = self.tree_from_root(&child_commit.state.objects)?;
+        let (parent_values, child_values) = futures_util::try_join!(
+            engine.get_many(&parent_tree, &keys),
+            engine.get_many(&child_tree, &keys),
+        )?;
+        let mut diffs = Vec::with_capacity(keys.len());
+        for ((transition, before), after) in
+            transitions.into_iter().zip(parent_values).zip(child_values)
+        {
+            if current_id(before.as_deref())? != transition.previous
+                || (!transition.delete_marker
+                    && current_id(after.as_deref())? != Some(transition.next))
+                || (transition.delete_marker && after.is_some())
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "commit delta page disagrees with its state roots",
+                ));
+            }
+            diffs.push(match (before, after) {
+                (None, Some(val)) => Diff::Added {
+                    key: transition.key,
+                    val,
+                },
+                (Some(val), None) => Diff::Removed {
+                    key: transition.key,
+                    val,
+                },
+                (Some(old), Some(new)) => Diff::Changed {
+                    key: transition.key,
+                    old,
+                    new,
+                },
+                (None, None) => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "commit delta page records an absent-to-absent transition",
+                    ));
+                }
+            });
+        }
+        Ok((diffs, next_after))
+    }
+
+    async fn commit_delta_page(
+        &self,
+        commit: &BucketCommit,
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(Vec<ObjectTransition>, Option<Vec<u8>>)> {
+        if let Some(root) = &commit.delta.changes_root {
+            let tree = self.tree_from_root(root)?;
+            let engine = self.engine(self.node_store.clone());
+            let mut entries = match after {
+                Some(after) => engine.range_after(&tree, after, None).await?,
+                None => engine.range(&tree, b"", None).await?,
+            };
+            let mut transitions = Vec::with_capacity(limit.saturating_add(1));
+            while transitions.len() <= limit {
+                let Some(entry) = entries.next().await else {
+                    break;
+                };
+                let (key, encoded) = entry?;
+                let transition: ObjectTransition = decode_canonical(&encoded)?;
+                if transition.key != key {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "external commit delta key disagrees with its transition",
+                    ));
+                }
+                transitions.push(transition);
+            }
+            let has_more = transitions.len() > limit;
+            if has_more {
+                transitions.truncate(limit);
+            }
+            let next = has_more.then(|| {
+                transitions
+                    .last()
+                    .expect("a full delta page has a last transition")
+                    .key
+                    .clone()
+            });
+            return Ok((transitions, next));
+        }
+
+        let start = after.map_or(0, |after| {
+            commit
+                .delta
+                .changes
+                .partition_point(|transition| transition.key.as_slice() <= after)
+        });
+        let end = start.saturating_add(limit).min(commit.delta.changes.len());
+        let transitions = commit.delta.changes[start..end].to_vec();
+        let next = (end < commit.delta.changes.len()).then(|| {
+            transitions
+                .last()
+                .expect("a truncated inline delta page has a last transition")
+                .key
+                .clone()
+        });
+        Ok((transitions, next))
+    }
+
     async fn advance_merge_version_union(
         &self,
         cursor: &mut MergeCursor,
@@ -8018,6 +8393,54 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<usize> {
         let ours_commit = self.load_commit_metadata(cursor.ours).await?;
         let theirs_commit = self.load_commit_metadata(cursor.theirs).await?;
+        let base = cursor.selected_base.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "merge plan has no selected base",
+            )
+        })?;
+        if cursor.version_diff.is_none() && cursor.theirs == base {
+            cursor.version_diff_finished = true;
+            cursor.phase = MergePhase::BuildingObjects;
+            cursor.build_after = None;
+            return Ok(0);
+        }
+        if cursor.ours == base
+            && theirs_commit.parents.first() == Some(&base)
+            && !matches!(cursor.version_diff, Some(MergeDiffCursor::Structural(_)))
+        {
+            let after = match cursor.version_diff.as_ref() {
+                Some(MergeDiffCursor::Delta { after }) => Some(after.as_slice()),
+                None => None,
+                Some(MergeDiffCursor::Structural(_)) => unreachable!("excluded above"),
+            };
+            let delta_is_safe =
+                after.is_some() || !self.commit_delta_contains_delete(&theirs_commit).await?;
+            if delta_is_safe {
+                let (mutations, next_after) = self
+                    .direct_child_version_mutations_page(&theirs_commit, after, max_steps)
+                    .await?;
+                let processed = mutations.len();
+                if !mutations.is_empty() {
+                    let versions =
+                        self.tree_from_root(cursor.final_versions.as_ref().ok_or_else(|| {
+                            Error::new(ErrorCode::InternalInvariant, "merge version root is absent")
+                        })?)?;
+                    let versions = self
+                        .merge_state_engine()
+                        .batch(&versions, mutations)
+                        .await?;
+                    cursor.final_versions = Some(RootManifest::from_tree(&versions)?);
+                }
+                cursor.version_diff = next_after.map(|after| MergeDiffCursor::Delta { after });
+                if cursor.version_diff.is_none() {
+                    cursor.version_diff_finished = true;
+                    cursor.phase = MergePhase::BuildingObjects;
+                    cursor.build_after = None;
+                }
+                return Ok(processed);
+            }
+        }
         let ours_versions = self.tree_from_root(&ours_commit.state.versions)?;
         let theirs_versions = self.tree_from_root(&theirs_commit.state.versions)?;
         let read_engine = self.engine(self.node_store.clone());
@@ -8025,7 +8448,10 @@ impl<P: ObjectPlane> Repository<P> {
             .structural_diff_page(
                 &ours_versions,
                 &theirs_versions,
-                cursor.version_diff.as_ref(),
+                cursor.version_diff.as_ref().map(|cursor| match cursor {
+                    MergeDiffCursor::Structural(cursor) => cursor,
+                    MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+                }),
                 max_steps,
             )
             .await?;
@@ -8052,13 +8478,90 @@ impl<P: ObjectPlane> Repository<P> {
             let versions = state_engine.batch(&versions, mutations).await?;
             cursor.final_versions = Some(RootManifest::from_tree(&versions)?);
         }
-        cursor.version_diff = page.next_cursor;
+        cursor.version_diff = page.next_cursor.map(MergeDiffCursor::Structural);
         if cursor.version_diff.is_none() {
             cursor.version_diff_finished = true;
             cursor.phase = MergePhase::BuildingObjects;
             cursor.build_after = None;
         }
         Ok(processed)
+    }
+
+    /// Build the immutable version-tree additions for an ordinary direct
+    /// child from its current-object records. Delete markers are not present
+    /// in the current-object tree, so those commits deliberately retain the
+    /// structural union fallback.
+    async fn direct_child_version_mutations_page(
+        &self,
+        child_commit: &BucketCommit,
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(Vec<Mutation>, Option<Vec<u8>>)> {
+        let (transitions, next_after) = self.commit_delta_page(child_commit, after, limit).await?;
+        let keys = transitions
+            .iter()
+            .map(|transition| transition.key.as_slice())
+            .collect::<Vec<_>>();
+        let child_tree = self.tree_from_root(&child_commit.state.objects)?;
+        let values = self
+            .engine(self.node_store.clone())
+            .get_many(&child_tree, &keys)
+            .await?;
+        let mut mutations = Vec::with_capacity(values.len());
+        for (transition, value) in transitions.iter().zip(values) {
+            if transition.delete_marker {
+                return Err(Error::new(
+                    ErrorCode::InternalInvariant,
+                    "delete delta entered the direct version-union path",
+                ));
+            }
+            let value = value.ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "non-delete delta is absent from the child state",
+                )
+            })?;
+            let current: CurrentObject = decode_canonical(&value)?;
+            current.version.validate()?;
+            if current.version.id != transition.next {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "commit delta version disagrees with child state",
+                ));
+            }
+            mutations.push(Mutation::Upsert {
+                key: version_tree_key(
+                    &transition.key,
+                    current.version.body.order,
+                    current.version.id,
+                ),
+                val: encode_canonical(&current.version)?,
+            });
+        }
+        Ok((mutations, next_after))
+    }
+
+    async fn commit_delta_contains_delete(&self, commit: &BucketCommit) -> Result<bool> {
+        if commit.delta.changes_root.is_none() {
+            return Ok(commit
+                .delta
+                .changes
+                .iter()
+                .any(|transition| transition.delete_marker));
+        }
+        let mut after = None;
+        loop {
+            let (page, next) = self
+                .commit_delta_page(commit, after.as_deref(), 1_000)
+                .await?;
+            if page.iter().any(|transition| transition.delete_marker) {
+                return Ok(true);
+            }
+            let Some(next) = next else {
+                return Ok(false);
+            };
+            after = Some(next);
+        }
     }
 
     async fn advance_merge_object_build(
@@ -8285,6 +8788,46 @@ impl<P: ObjectPlane> Repository<P> {
                 ErrorCode::InvalidContinuationToken,
                 "merge change cursor belongs to another plan",
             ));
+        }
+        if cursor.selected_base == Some(cursor.ours) {
+            let theirs = self.load_commit_metadata(cursor.theirs).await?;
+            if theirs.parents.first() == Some(&cursor.ours)
+                && theirs.delta.changes_root.is_some()
+                && cursor.built_changes == cursor.planned_changes
+            {
+                let after = continuation
+                    .map(|continuation| {
+                        continuation
+                            .after
+                            .strip_prefix(MERGE_CHANGE_PREFIX)
+                            .ok_or_else(|| {
+                                Error::new(
+                                    ErrorCode::InvalidContinuationToken,
+                                    "direct merge change cursor has an invalid prefix",
+                                )
+                            })
+                    })
+                    .transpose()?;
+                let (transitions, next_after) =
+                    self.commit_delta_page(&theirs, after, limit).await?;
+                let changes = transitions
+                    .into_iter()
+                    .map(|transition| MergeChange {
+                        key: transition.key,
+                        from: transition.previous,
+                        to: (!transition.delete_marker).then_some(transition.next),
+                    })
+                    .collect();
+                return Ok(MergeChangePage {
+                    changes,
+                    continuation: next_after.map(|after| MergeChangeCursor {
+                        repository: cursor.repository,
+                        job: cursor.job,
+                        plan_root: cursor.plan_root.clone(),
+                        after: merge_change_key(&after),
+                    }),
+                });
+            }
         }
         let engine = self.merge_plan_engine(cursor.job)?;
         let tree = self.tree_from_merge_root(&cursor.plan_root)?;
@@ -8594,10 +9137,8 @@ fn payload_pack_physical_key(binding: &crate::PayloadBinding) -> Vec<u8> {
     key
 }
 
-fn payload_pack_extent_key(binding: &crate::PayloadBinding, start: u64, end: u64) -> Vec<u8> {
-    let mut identity = payload_pack_physical_key(binding);
-    identity.extend_from_slice(&start.to_be_bytes());
-    identity.extend_from_slice(&end.to_be_bytes());
+fn payload_pack_extent_summary_key(binding: &crate::PayloadBinding) -> Vec<u8> {
+    let identity = payload_pack_physical_key(binding);
     let mut key = b"e/".to_vec();
     key.extend_from_slice(&crate::codec::sha256(&identity));
     key
@@ -8715,6 +9256,14 @@ fn object_diff_from_prolly(diff: Diff) -> Result<ObjectDiff> {
         key,
         from: current_id(from.as_deref())?,
         to: current_id(to.as_deref())?,
+    })
+}
+
+fn object_diff_from_transition(transition: &ObjectTransition) -> Result<ObjectDiff> {
+    Ok(ObjectDiff {
+        key: transition.key.clone(),
+        from: transition.previous,
+        to: (!transition.delete_marker).then_some(transition.next),
     })
 }
 

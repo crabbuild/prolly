@@ -27,6 +27,14 @@ pub enum MergePhase {
     ReadyToPublish,
 }
 
+/// Restartable frontier for either a general structural comparison or the
+/// exact ordered transition tree of a direct child commit.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MergeDiffCursor {
+    Structural(prolly::StructuralDiffCursor),
+    Delta { after: Vec<u8> },
+}
+
 /// Constant-size handle for a restartable repository merge.
 ///
 /// The potentially unbounded graph frontier, planned changes, conflicts, and
@@ -47,13 +55,13 @@ pub struct MergeCursor {
     pub created_at_millis: u64,
     pub phase: MergePhase,
     pub plan_root: RootManifest,
-    pub ours_diff: Option<prolly::StructuralDiffCursor>,
-    pub theirs_diff: Option<prolly::StructuralDiffCursor>,
+    pub ours_diff: Option<MergeDiffCursor>,
+    pub theirs_diff: Option<MergeDiffCursor>,
     pub ours_pending: Option<prolly::Diff>,
     pub theirs_pending: Option<prolly::Diff>,
     pub ours_finished: bool,
     pub theirs_finished: bool,
-    pub version_diff: Option<prolly::StructuralDiffCursor>,
+    pub version_diff: Option<MergeDiffCursor>,
     pub version_diff_finished: bool,
     pub build_after: Option<Vec<u8>>,
     pub final_objects: Option<RootManifest>,

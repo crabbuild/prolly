@@ -23,22 +23,76 @@ this machine, not AWS SLO evidence.
 | 100K snapshot, 100-key sparse diff | 214 ms, 2.52 MB downloaded |
 | 100K snapshot, 100-key merge | 1.148 s, 48.3 MB downloaded |
 | 500K files, 50 grouped commits | 142.0 s, 3,521 files/s, 7,416 S3 calls |
-| 500K full list | failed with a RustFS `GetObject` body streaming error |
+| 500K full list, opaque snapshot cursor (clean runs) | 26.3–29.1 s, 17.2K–19.0K entries/s, page p99 97–178 ms, 343.8 MB downloaded |
+| 500K full list, opaque snapshot cursor (contended runs) | 61.8–75.5 s, 6.6K–8.1K entries/s, page p99 423–631 ms |
+| 500K random reads (100 samples, restart-cold process) | 441–545 reads/s, p99 89–105 ms, 15.4–15.7 MB downloaded |
+| 500K full list, 512 MiB in-process warm cache | 9.21 s, 54.3K entries/s, page p99 28.4 ms, 607 KB downloaded, 391 MiB RSS |
+| 500K random reads, 512 MiB in-process warm cache (1K samples) | 1,469 reads/s, p99 38.6 ms, 1.23 MB downloaded |
+| 500K full list, reopened 128 MiB + 2 GiB Foyer cache | 10.59 s, 47.2K entries/s, page p99 31.4 ms, 602 KB downloaded, 168 MiB RSS after list |
+| 500K random reads, reopened Foyer cache (1K samples) | 1,467 reads/s, p99 37.2 ms, 1.21 MB downloaded, 192 MiB RSS |
+| 500K branch creation | 72–120 ms in clean runs |
+| 500K snapshot, 100-key direct-child diff, before / after | 7.42 s, 659 MB, 7,284 calls / 9–12 ms, 22 KB, 4 calls |
+| 500K snapshot, 100-key merge, before / after | 17.28 s, 1.37 GB / 474 ms, 88.9 KB |
+| 500K snapshot, 10K-key external-delta diff | 83–208 ms, 12.9 KB, 22 calls |
+| 500K snapshot, 10K-key external-delta merge, before / after promotion | 29.6 s, 60.4 MB, 879 calls / 8.38 s, 3.53 MB, 232 calls |
+| 500K → 1M extension, 50 grouped commits | 220.3 s, 2,270 files/s, 16,075 calls, 2.68 GB uploaded, 763 MB downloaded, 480 MiB peak observed RSS |
+| 1M full list, indexed-head barrier + persistent-warm Foyer | 20.92 s, 47.8K entries/s, page p99 33.2 ms, 1.19 MB downloaded, 2,027 GETs, zero PUTs |
+| 1M random reads, persistent-warm Foyer (1K samples) | 936 reads/s, p99 76.7 ms, 1.21 MB downloaded |
+| 1M branch / 100-key direct diff / merge | 87.7 ms / 8.24 ms / 582 ms |
+| 1.01M-object exact payload-pack inventory | 298.4 s, 1,011 restartable pages, 1,004 physical packs, 99.99% utilization |
 | 65 MiB streamed multipart object | 3.78 s; multipart upload and historical range read passed |
 
+The original 500K list failure used the compatibility API that rebuilt a
+key-based traversal on every page. The benchmark now uses one immutable,
+opaque snapshot cursor and completes all 500 pages without retries. Clean runs
+clear the 10K entries/s throughput goal; Docker/host contention can still cut
+throughput below that goal and materially widen p99. The traversal downloads
+343.8 MB and performs about 8.6K GETs, so request and byte amplification remain
+the next listing/cache target.
+
+A restartable branch-index rebuild over 56 publications and 12,404 indexed
+nodes completed in 1.42 seconds. The 512 MiB memory-cache pass had 5,231 node
+hits and zero misses on its second full traversal. A separately reopened Foyer
+process retained the same 5,231 hits and zero misses, reducing metadata download
+from 340.3 MB cold to 0.60 MB persistent-warm. Point reads still perform about
+three provider GETs each for mutable/ref and payload metadata even when every
+Prolly node hits cache; that is now the dominant warm-read request cost.
+
+The 1M extension completed every foreground functional phase. Its first list
+overlapped background index catch-up (150 PUTs), so the benchmark now executes
+and reports an explicit indexed-head barrier before resetting foreground list
+metrics. The clean rerun found zero lag in 15.3 ms, then listed 1M entries with
+2,027 GETs and zero PUTs. Peak observed RSS was 213 MiB during the read/branch
+phases of that reopened 128 MiB-memory Foyer process.
+
+The pack inventory covered 1,010,100 live logical objects (the 1M file set plus
+10,100 accumulated branch-probe objects), 35,190,680 logical bytes, and 1,004
+physical immutable packs totaling 35,192,387 bytes. All objects were packed;
+the 1,010,100 unique extents accounted for 35,190,680 live bytes, yielding
+9,999 basis points utilization. The first exact implementation used a durable
+seen-tree entry per extent and did not reach 100K objects in several minutes.
+The revised cursor stores one sorted extent summary per physical pack and
+completed in 298.4 seconds. That is bounded and restartable but still an offline
+maintenance operation; pack manifests should eventually carry pre-aggregated
+live-range summaries so inventory scales with packs without repeatedly decoding
+all logical objects.
+
 The 500K grouped ingest uploaded 2.56 GB for 17.5 MB of logical content, about
-146x byte amplification. The 100K list meets the 10K entries/s throughput goal
-but misses the 100 ms page-p99 goal. Sparse diff and especially merge exceed
-their byte-amplification targets at 100K.
+146x byte amplification. Direct-child diff now pages the exact commit delta
+rather than allowing tree boundary shifts to trigger a collected structural
+fallback. Merge uses the same restartable delta frontier and promotes an
+external direct-child state/delta without rebuilding identical object and
+version trees.
 
 ## Supported envelope
 
-- Reliability semantics and bounded-memory grouped ingestion are exercised at
-  500K files, but complete 500K traversal did not pass. Do not claim 500K or 1M
-  production support from this run.
-- The measured efficient local envelope is 100K current objects with grouped
-  commits. Reads, ingestion, branching, and list throughput remain useful;
-  list p99 and sparse diff/merge amplification require more work.
+- Reliability semantics, bounded-memory grouped ingestion, complete listing,
+  restart-cold reads, branch creation, and 100/10K-key direct-child diff/merge
+  are exercised at 500K files. This is a qualified local functional envelope,
+  not yet a 500K production SLO: cache-cold reads and listings remain sensitive
+  to host contention and transfer hundreds of megabytes.
+- Do not claim 1M production support until the full cold/warm/persistent-cache,
+  restart, rebuild, fsck, GC, RSS, and provider-cost matrix passes.
 - One-file-per-commit history is reliable through 10K and repeated authority
   renewal, but 13.44 commits/s and 33.94 calls/commit make it unsuitable for
   bulk ingest.
@@ -49,10 +103,11 @@ their byte-amplification targets at 100K.
 
 1. Repeat 100K, 500K, and 1M on AWS with cold/warm/Foyer-cache matrices and
    provider cost/throttling data.
-2. Reduce listing page p99 and remove foreground index-maintenance PUTs during
-   traversal.
-3. Reduce 100K sparse diff below 1 MiB and merge planning below 2 MiB through
-   smaller range-addressable node packs or a sparse commit-state index.
+2. Reduce listing GET/byte amplification, stabilize page p99 under contention,
+   remove foreground index-maintenance PUTs during traversal, and avoid the
+   remaining two mutable/control GETs per warm page.
+3. Keep delta-driven diff/merge for direct children; add an equivalent bounded
+   change index for arbitrary non-parent snapshot pairs and divergent merges.
 4. Add resumable multipart manifests, streaming chunk encryption, parallel
    ranged download, and chunk-level deduplication. Multipart currently uses a
    bounded disk spool.

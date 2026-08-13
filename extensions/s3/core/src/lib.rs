@@ -42,7 +42,7 @@ pub use journal_indexes::{
 pub use merge::{
     MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChange, MergeChangeCursor,
     MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflict, MergeConflictCursor,
-    MergeConflictPage, MergeCursor, MergePhase, MergePolicy, MergeReceipt,
+    MergeConflictPage, MergeCursor, MergeDiffCursor, MergePhase, MergePolicy, MergeReceipt,
 };
 pub use model::*;
 pub use object_plane::*;
