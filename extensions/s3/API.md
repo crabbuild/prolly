@@ -26,6 +26,7 @@ operations from administrative maintenance.
 | Move a branch administratively | `reset_branch` |
 | Merge branches | `start_merge`, `advance_merge`, `publish_merge` |
 | Check repository integrity | `start_fsck`, `advance_fsck` |
+| Inspect/repack small-payload storage | `start_payload_pack_stats`, `advance_payload_pack_stats`, `repack_payloads_page` |
 | Reclaim unreachable immutable data | `start_gc`, `advance_gc`, `sweep_gc` |
 | Synchronize only one logical snapshot | `start_repair_from`, `start_clone_from`, `start_fetch_from`, `start_push_to` |
 | Preserve a complete source commit DAG | `start_history_clone_from`, `start_history_fetch_from`, `start_history_push_to` |
@@ -117,6 +118,10 @@ accepts a fallible `Stream` plus `BulkWriteOptions` for bounded-memory ingestion
 from an unbounded source. Completed checkpoint windows remain resumable after
 cancellation or a source/object failure.
 
+Streamed commit-session objects use multipart upload at 64 MiB and above. Part
+size is derived from the object length (up to the 5 TiB repository limit), with
+eight parts in flight and abort cleanup if staging fails or is cancelled.
+
 For explicit control, call `begin_commit`. `CommitSessionBuilder` supports:
 
 - `message` for the audited commit description;
@@ -189,6 +194,12 @@ pruned without loading full commit node packs.
 Advance either mode with `advance_fsck`, persisting the cursor after every
 page.
 
+`FsckReport` separates packed logical references and bytes. For unique physical
+pack counts, referenced extents, and utilization, page
+`start_payload_pack_stats` with `advance_payload_pack_stats`. Low-utilization
+serving layouts can be compacted with `repack_payloads_page`; repacking creates
+ordinary versioned commits and does not invalidate historical reads.
+
 ### GC
 
 Start with `start_gc(grace_millis)`, advance marking and discovery with
@@ -196,8 +207,10 @@ Start with `start_gc(grace_millis)`, advance marking and discovery with
 Retention pins are roots. The grace period must exceed the longest possible
 unpublished upload, commit session, merge, repair, or transfer.
 
-Concurrent GC coordinates all writer handles inside the authoritative process.
-Quiesce separately running writer processes before GC.
+GC closes durable repository-wide publication admission. Branch and tag CAS
+operations in every process hold expiring publication tickets; marking starts
+only after all pre-maintenance tickets finish or expire. New publications fail
+with `PreconditionFailed` until GC cleanup reopens admission.
 
 ## Repair, clone, fetch, push, and backup
 
@@ -245,6 +258,8 @@ These methods are operational controls, not normal foreground request paths:
 
 Metrics are process-local. Export them before process termination and correlate
 them with provider request IDs and service-side metrics.
+Multipart create, part, complete, abort, and transferred-byte counters are
+reported separately from single `PutObject` calls.
 
 Journal-derived node indexes are built from compact commit descriptors and
 node-pack tables of contents. Payload sections are range-fetched only when a

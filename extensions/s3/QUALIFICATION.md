@@ -58,6 +58,10 @@ Run ignored scale tests explicitly and record:
 - cold, prewarmed, and persistent-cache reads;
 - sparse diff and merge at 10K+ keys;
 - restart during staging, merge, index rebuild, and publication response loss.
+- multipart create/part/complete/abort behavior for streamed objects above
+  64 MiB;
+- cross-process publication fencing throughout a complete GC epoch;
+- payload-pack utilization before and after bounded repack pages.
 
 Results must include p50/p95/p99 latency, S3 calls by operation, bytes
 transferred, CAS retries, cache hit ratio, index lag, wall time, provider
@@ -142,3 +146,14 @@ Promote only when:
 Million- or billion-object claims require measurements at representative
 cardinality and traffic. Passing a 10K test is a regression gate, not proof of
 unbounded production capacity.
+
+The staged benchmark defaults to 10K, 20K, 50K, 100K, 500K, and 1M objects and
+now records streaming ingest, point reads, full listing, branch creation,
+sparse diff, and merge for every stage:
+
+```bash
+PROLLY_RUSTFS_PERF_STAGES=100000,500000,1000000 \
+PROLLY_RUSTFS_PERF_WRITE_CONCURRENCY=32 \
+  cargo run --release --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --example rustfs_small_files_benchmark
+```

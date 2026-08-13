@@ -77,10 +77,13 @@ immutable commit, direct-node, and payload versions. Persist the cursor after
 every page. Set the grace period longer than the maximum duration of any
 unpublished commit, merge, repair, or transfer. Retention pins are GC roots.
 
-GC journals branch/tag changes and fences deletion batches against concurrent
-publication in the authoritative process. Quiesce separately running writer
-processes before GC. Never delete payload, commit, node, publication, index, or
-administration keys manually.
+GC closes a durable repository-wide publication-admission epoch. Every branch
+or tag CAS owns an expiring publication ticket, including writers in separate
+processes. Marking waits for pre-epoch tickets to finish or expire; new
+publications receive `PreconditionFailed` until cleanup reopens admission.
+Alert on tickets that approach the authority-lease duration. Never delete
+payload, commit, node, publication, index, ticket, or administration keys
+manually.
 
 Expired mutable commit-session checkpoints can be removed through
 `cleanup_expired_commit_sessions`.

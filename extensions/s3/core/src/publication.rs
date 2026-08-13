@@ -975,6 +975,7 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
             })
             .await;
         match outcome {
+            Err(error) if error.code == ErrorCode::PreconditionFailed => Err(error),
             Err(error) => {
                 if let Some(current) = self.plane.load_mutable(&path).await? {
                     if current.bytes == bytes {

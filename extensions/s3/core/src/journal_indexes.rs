@@ -1,5 +1,9 @@
-use std::sync::Arc;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
+use futures_util::{stream, StreamExt};
 use prolly::{AsyncProlly, Config, Mutation, RuntimeConfig, Tree, TreeFormat};
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +19,7 @@ use crate::{
 };
 
 pub const DEFAULT_JOURNAL_INDEX_MAX_UNINDEXED_EVENTS: usize = 4_096;
+const COMMIT_INDEX_LOAD_CONCURRENCY: usize = 32;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct JournalIndexAdvanceReport {
@@ -274,31 +279,9 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
                 runtime: RuntimeConfig::default(),
             },
         };
-        let mut indexed_commits = 0usize;
-        let mut indexed_nodes = 0usize;
-        for event in events {
-            if self
-                .graph_engine
-                .get(&graph_tree, event.new_target.as_bytes())
-                .await?
-                .is_some()
-            {
-                continue;
-            }
-            let object = publisher.load_commit_index(event.new_target).await?;
-            self.index_node_pack(
-                &mut node_tree,
-                event.new_target,
-                object.commit.node_pack.as_ref().map(|pack| pack.id),
-                object.toc.as_ref(),
-                object.payload_offset,
-                &mut indexed_nodes,
-            )
+        let (indexed_commits, indexed_nodes) = self
+            .index_events(publisher, &mut node_tree, &mut graph_tree, events)
             .await?;
-            self.index_commit_graph(&mut graph_tree, event.new_target, object.commit)
-                .await?;
-            indexed_commits += 1;
-        }
 
         let next = JournalDerivedIndexHead {
             repository: self.repository,
@@ -632,31 +615,14 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
         }
         let mut node_tree = self.tree_from_root(&cursor.node_root);
         let mut graph_tree = self.tree_from_root(&cursor.commit_graph_root);
-        let mut indexed_commits = 0usize;
-        let mut indexed_nodes = 0usize;
-        for event in chunk.events.iter().rev() {
-            if self
-                .graph_engine
-                .get(&graph_tree, event.new_target.as_bytes())
-                .await?
-                .is_some()
-            {
-                continue;
-            }
-            let object = publisher.load_commit_index(event.new_target).await?;
-            self.index_node_pack(
+        let (indexed_commits, indexed_nodes) = self
+            .index_events(
+                publisher,
                 &mut node_tree,
-                event.new_target,
-                object.commit.node_pack.as_ref().map(|pack| pack.id),
-                object.toc.as_ref(),
-                object.payload_offset,
-                &mut indexed_nodes,
+                &mut graph_tree,
+                chunk.events.iter().rev().cloned().collect(),
             )
             .await?;
-            self.index_commit_graph(&mut graph_tree, event.new_target, object.commit)
-                .await?;
-            indexed_commits += 1;
-        }
         let mut next = cursor.clone();
         next.node_root.root = node_tree.root;
         next.commit_graph_root.root = graph_tree.root;
@@ -1039,17 +1005,15 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
         ))
     }
 
-    async fn index_node_pack(
+    fn node_pack_mutations(
         &self,
-        tree: &mut Tree,
         commit: CommitId,
         pack_id: Option<crate::NodePackId>,
         toc: Option<&NodePackToc>,
         payload_offset: Option<u64>,
-        indexed_nodes: &mut usize,
-    ) -> Result<()> {
+    ) -> Result<Vec<Mutation>> {
         let Some(toc) = toc else {
-            return Ok(());
+            return Ok(Vec::new());
         };
         let pack_id = pack_id.ok_or_else(|| {
             Error::new(
@@ -1080,53 +1044,112 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
                 })?,
             });
         }
-        *indexed_nodes = indexed_nodes.checked_add(mutations.len()).ok_or_else(|| {
-            Error::new(ErrorCode::InternalInvariant, "indexed node count overflow")
-        })?;
-        if !mutations.is_empty() {
-            *tree = self.node_engine.batch(tree, mutations).await?;
-        }
-        Ok(())
+        Ok(mutations)
     }
 
-    async fn index_commit_graph(
+    async fn build_commit_graph_entry(
         &self,
-        tree: &mut Tree,
+        tree: &Tree,
+        pending: &BTreeMap<CommitId, JournalCommitGraphEntry>,
         id: CommitId,
         commit: BucketCommit,
-    ) -> Result<()> {
+    ) -> Result<JournalCommitGraphEntry> {
         let mut jumps = Vec::new();
         if let Some(first_parent) = commit.parents.first().copied() {
             jumps.push(first_parent);
             for level in 1..64usize {
                 let ancestor = jumps[level - 1];
-                let Some(encoded) = self.graph_engine.get(tree, ancestor.as_bytes()).await? else {
-                    break;
+                let entry = if let Some(entry) = pending.get(&ancestor) {
+                    entry.clone()
+                } else {
+                    let Some(encoded) = self.graph_engine.get(tree, ancestor.as_bytes()).await?
+                    else {
+                        break;
+                    };
+                    decode_canonical(&encoded)?
                 };
-                let entry: JournalCommitGraphEntry = decode_canonical(&encoded)?;
                 let Some(next) = entry.first_parent_jumps.get(level - 1).copied() else {
                     break;
                 };
                 jumps.push(next);
             }
         }
-        let entry = JournalCommitGraphEntry {
+        Ok(JournalCommitGraphEntry {
             commit: id,
             generation: commit.generation,
             parents: commit.parents,
             first_parent_jumps: jumps,
-        };
-        *tree = self
-            .graph_engine
-            .batch(
-                tree,
-                vec![Mutation::Upsert {
-                    key: id.as_bytes().to_vec(),
-                    val: encode_canonical(&entry)?,
-                }],
-            )
-            .await?;
-        Ok(())
+        })
+    }
+
+    /// Apply a chronological journal page with one tree rewrite per derived
+    /// index. Newly calculated graph entries remain available in memory while
+    /// later entries build their binary-lifting skip pointers.
+    async fn index_events(
+        &self,
+        publisher: &ShardedBranchPublisher<P>,
+        node_tree: &mut Tree,
+        graph_tree: &mut Tree,
+        events: Vec<crate::PublicationEvent>,
+    ) -> Result<(usize, usize)> {
+        let keys = events
+            .iter()
+            .map(|event| event.new_target.as_bytes().to_vec())
+            .collect::<Vec<_>>();
+        let existing = self.graph_engine.get_many(graph_tree, &keys).await?;
+        let mut scheduled = BTreeSet::new();
+        let missing = events
+            .into_iter()
+            .zip(existing)
+            .filter_map(|(event, existing)| {
+                (existing.is_none() && scheduled.insert(event.new_target)).then_some(event)
+            })
+            .collect::<Vec<_>>();
+        let loaded = stream::iter(missing.into_iter().map(|event| async move {
+            publisher
+                .load_commit_index(event.new_target)
+                .await
+                .map(|object| (event, object))
+        }))
+        .buffered(COMMIT_INDEX_LOAD_CONCURRENCY)
+        .collect::<Vec<_>>()
+        .await;
+
+        let mut node_mutations = Vec::new();
+        let mut graph_mutations = Vec::new();
+        let mut pending = BTreeMap::new();
+        let mut indexed_commits = 0usize;
+        for loaded in loaded {
+            let (event, object) = loaded?;
+            node_mutations.extend(self.node_pack_mutations(
+                event.new_target,
+                object.commit.node_pack.as_ref().map(|pack| pack.id),
+                object.toc.as_ref(),
+                object.payload_offset,
+            )?);
+            let entry = self
+                .build_commit_graph_entry(graph_tree, &pending, event.new_target, object.commit)
+                .await?;
+            graph_mutations.push(Mutation::Upsert {
+                key: event.new_target.as_bytes().to_vec(),
+                val: encode_canonical(&entry)?,
+            });
+            pending.insert(event.new_target, entry);
+            indexed_commits = indexed_commits.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "indexed commit count overflow",
+                )
+            })?;
+        }
+        let indexed_nodes = node_mutations.len();
+        if !node_mutations.is_empty() {
+            *node_tree = self.node_engine.batch(node_tree, node_mutations).await?;
+        }
+        if !graph_mutations.is_empty() {
+            *graph_tree = self.graph_engine.batch(graph_tree, graph_mutations).await?;
+        }
+        Ok((indexed_commits, indexed_nodes))
     }
 
     async fn collect_unindexed_events(

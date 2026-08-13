@@ -206,6 +206,9 @@ pub struct MemoryObjectPlane {
     versioned: bool,
     requests: Arc<MemoryRequestCounters>,
     conflict_after_next_compare_exchange: Arc<AtomicBool>,
+    immutable_put_delay_millis: Arc<AtomicU64>,
+    immutable_put_in_flight: Arc<AtomicU64>,
+    immutable_put_max_in_flight: Arc<AtomicU64>,
     compare_exchange_delay_millis: Arc<AtomicU64>,
     compare_exchange_in_flight: Arc<AtomicU64>,
     compare_exchange_max_in_flight: Arc<AtomicU64>,
@@ -269,10 +272,28 @@ impl MemoryObjectPlane {
             versioned,
             requests: Arc::new(MemoryRequestCounters::default()),
             conflict_after_next_compare_exchange: Arc::new(AtomicBool::new(false)),
+            immutable_put_delay_millis: Arc::new(AtomicU64::new(0)),
+            immutable_put_in_flight: Arc::new(AtomicU64::new(0)),
+            immutable_put_max_in_flight: Arc::new(AtomicU64::new(0)),
             compare_exchange_delay_millis: Arc::new(AtomicU64::new(0)),
             compare_exchange_in_flight: Arc::new(AtomicU64::new(0)),
             compare_exchange_max_in_flight: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// Test hook for proving immutable payload preparation overlaps before an
+    /// ordered publication lane.
+    pub fn set_immutable_put_delay_millis(&self, delay_millis: u64) {
+        self.immutable_put_delay_millis
+            .store(delay_millis, Ordering::Relaxed);
+    }
+
+    pub fn max_immutable_puts_in_flight(&self) -> u64 {
+        self.immutable_put_max_in_flight.load(Ordering::Relaxed)
+    }
+
+    pub fn reset_immutable_put_concurrency(&self) {
+        self.immutable_put_max_in_flight.store(0, Ordering::Relaxed);
     }
 
     /// Test hook for proving independent mutable-object publications overlap.
@@ -416,6 +437,14 @@ impl ObjectPlane for MemoryObjectPlane {
 
     async fn put_immutable(&self, request: ImmutablePut) -> Result<ImmutablePutOutcome> {
         self.requests.immutable_put.fetch_add(1, Ordering::Relaxed);
+        let in_flight = self.immutable_put_in_flight.fetch_add(1, Ordering::Relaxed) + 1;
+        self.immutable_put_max_in_flight
+            .fetch_max(in_flight, Ordering::Relaxed);
+        let _in_flight = InFlightGuard(self.immutable_put_in_flight.clone());
+        let delay = self.immutable_put_delay_millis.load(Ordering::Relaxed);
+        if delay > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+        }
         if sha256(&request.bytes) != request.expected_sha256 {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,

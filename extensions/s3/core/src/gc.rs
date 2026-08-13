@@ -31,6 +31,8 @@ pub struct GcCursor {
     pub dirty_sequence: u64,
     pub dirty_target_sequence: u64,
     pub initial_scan_complete: bool,
+    #[serde(default)]
+    pub publication_barrier_drained: bool,
     pub sweep_after: Option<Vec<u8>>,
     pub report: GcReport,
 }
@@ -65,7 +67,17 @@ pub(crate) struct GcCoordinator {
     pub repository: RepositoryId,
     pub generation: u64,
     pub active_epoch: Option<OperationId>,
+    #[serde(default)]
+    pub admission_closed: bool,
     pub updated_at_millis: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct GcPublicationTicket {
+    pub repository: RepositoryId,
+    pub instance: OperationId,
+    pub request_digest: [u8; 32],
+    pub expires_at_millis: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

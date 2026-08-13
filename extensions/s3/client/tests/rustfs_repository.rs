@@ -1,5 +1,8 @@
 use std::{
-    sync::Arc,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -1470,16 +1473,26 @@ async fn rustfs_10k_concurrent_commit_regression_gate() {
 
     client.reset_s3_operation_metrics();
     let started = std::time::Instant::now();
+    let completed = Arc::new(AtomicUsize::new(0));
     let results = stream::iter(0..COMMITS)
         .map(|index| {
             let client = client.clone();
+            let completed = completed.clone();
             async move {
-                client
+                let receipt = client
                     .put_object(
                         format!("concurrent/{index:05}.bin"),
                         index.to_be_bytes().to_vec(),
                     )
-                    .await
+                    .await?;
+                let count = completed.fetch_add(1, Ordering::Relaxed) + 1;
+                if count.is_multiple_of(1_000) {
+                    eprintln!(
+                        "RUSTFS_10K_PROGRESS completed={count} wall_ms={}",
+                        started.elapsed().as_millis()
+                    );
+                }
+                Ok::<_, Error>(receipt)
             }
         })
         .buffer_unordered(concurrency)
@@ -1513,4 +1526,57 @@ async fn rustfs_10k_concurrent_commit_regression_gate() {
         metrics.total_calls(),
         metrics.total_calls() as f64 / COMMITS as f64,
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 12)]
+#[ignore = "uploads a 65 MiB multipart payload to live RustFS"]
+async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
+    assert!(
+        rustfs_enabled(),
+        "set PROLLY_S3_RUSTFS=1 to run the multipart RustFS gate"
+    );
+    const SIZE: usize = 65 * 1_024 * 1_024;
+    let (aws, bucket) = rustfs_client().await;
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("multipart-stream"))
+        .writer("rustfs-multipart-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+
+    client.reset_s3_operation_metrics();
+    let mut session = client
+        .begin_commit()
+        .message("multipart stream")
+        .start()
+        .await
+        .unwrap();
+    session
+        .put_stream("large/payload.bin", ByteStream::from(vec![0x5a; SIZE]))
+        .await
+        .unwrap();
+    let receipt = session.publish().await.unwrap();
+    let metrics = client.reset_s3_operation_metrics();
+    assert_eq!(metrics.create_multipart_upload, 1);
+    assert!(metrics.upload_part >= 2);
+    assert_eq!(metrics.complete_multipart_upload, 1);
+    assert_eq!(metrics.abort_multipart_upload, 0);
+    assert!(metrics.uploaded_body_bytes >= SIZE as u64);
+    assert!(metrics.uploaded_body_bytes < SIZE as u64 + 1024 * 1024);
+
+    let tail = client
+        .get_object_range(
+            receipt.id,
+            "large/payload.bin",
+            (SIZE as u64 - 32)..=(SIZE as u64 - 1),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(tail.bytes, vec![0x5a; 32]);
 }

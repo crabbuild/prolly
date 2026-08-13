@@ -7,7 +7,7 @@ use prolly_s3_core::{
 use sha2::{Digest, Sha256};
 
 #[tokio::test]
-async fn concurrent_gc_retains_dirty_and_pinned_roots_and_deletes_exact_orphans() {
+async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let options = RepositoryOptions {
         repository_prefix: ".tests/gc".to_string(),
@@ -52,17 +52,24 @@ async fn concurrent_gc_retains_dirty_and_pinned_roots_and_deletes_exact_orphans(
         .unwrap();
     tokio::time::sleep(Duration::from_millis(5)).await;
 
+    let external_writer = Repository::open(plane.clone(), options.clone())
+        .await
+        .unwrap();
     let mut gc = repository.start_gc(1).await.unwrap();
-    repository
+    let during_gc = external_writer
         .put_object(
             "main",
             b"during-gc.txt".to_vec(),
-            b"published while marking".to_vec(),
+            b"must be fenced".to_vec(),
             ObjectHeaders::default(),
             BTreeMap::new(),
         )
         .await
-        .unwrap();
+        .unwrap_err();
+    assert_eq!(
+        during_gc.code,
+        prolly_s3_core::ErrorCode::PreconditionFailed
+    );
     for _ in 0..10_000 {
         if gc.phase == GcPhase::Ready {
             break;
@@ -70,23 +77,23 @@ async fn concurrent_gc_retains_dirty_and_pinned_roots_and_deletes_exact_orphans(
         gc = repository.advance_gc(&gc, 1).await.unwrap().cursor;
     }
     assert_eq!(gc.phase, GcPhase::Ready);
-    assert!(gc.report.dirty_roots >= 1);
+    assert_eq!(gc.report.dirty_roots, 0);
     assert!(gc.report.candidates >= 1);
 
-    repository
+    let before_sweep = external_writer
         .put_object(
             "main",
             b"before-sweep.txt".to_vec(),
-            b"forces dirty-root catch-up".to_vec(),
+            b"must also be fenced".to_vec(),
             ObjectHeaders::default(),
             BTreeMap::new(),
         )
         .await
-        .unwrap();
-    let restarted = repository.sweep_gc(&gc, 1).await.unwrap();
-    assert!(restarted.restarted_for_new_roots);
-    assert_eq!(restarted.cursor.phase, GcPhase::CatchUpDirtyRoots);
-    gc = restarted.cursor;
+        .unwrap_err();
+    assert_eq!(
+        before_sweep.code,
+        prolly_s3_core::ErrorCode::PreconditionFailed
+    );
     let persisted = encode_canonical(&gc).unwrap();
     drop(repository);
     let repository = Repository::open(plane.clone(), options).await.unwrap();
@@ -102,15 +109,25 @@ async fn concurrent_gc_retains_dirty_and_pinned_roots_and_deletes_exact_orphans(
     assert_eq!(gc.phase, GcPhase::Complete);
     assert!(gc.report.deleted_versions >= 1);
     assert!(plane.head(&orphan_path).await.unwrap().is_none());
+    repository
+        .put_object(
+            "main",
+            b"after-gc.txt".to_vec(),
+            b"publication admission reopened".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
     repository.advance_branch_indexes("main").await.unwrap();
     assert_eq!(
         repository
-            .get_object("main", b"during-gc.txt")
+            .get_object("main", b"after-gc.txt")
             .await
             .unwrap()
             .unwrap()
             .bytes,
-        b"published while marking"
+        b"publication admission reopened"
     );
     repository.commit(pinned).await.unwrap();
 }

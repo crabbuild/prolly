@@ -15,16 +15,16 @@ use prolly_s3_core::{
     CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCursor, FsckPage, GcCursor,
     GcPage, HistoryCursor, HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage,
     JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
-    ListObjectsPage, MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor,
-    MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage,
-    MergeCursor, MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff,
-    ObjectDiffCursor, ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion,
-    OperationId, OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
-    ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
-    PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
-    RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
-    RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
-    VersionSummary,
+    ListObjectsPage, LogicalObjectVersionKind, MergeAdvancePage, MergeBaseCursor, MergeBasePage,
+    MergeChangeCursor, MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor,
+    MergeConflictPage, MergeCursor, MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData,
+    ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary,
+    ObjectVersion, OperationId, OperationIndexRebuildCursor, OperationIndexRebuildStep,
+    PayloadPackStatsCursor, PayloadPackStatsPage, ProviderAttestation, ProviderPerKeyVersionLimit,
+    ProviderProfileId, PublicationJournalCursor, PublicationJournalPage, RefCatalogCursor,
+    RefCatalogRepairPage, RefKind, RefMoveReceipt, RepairCursor, RepairPage, Repository,
+    RepositoryOptions, RestoreCursor, RestorePage, Result, RetentionPin, RetentionPinPage,
+    StagedMutation, Tag, TagCatalogPage, TraversalBudget, VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -94,6 +94,35 @@ pub struct BulkWriteOptions {
     pub concurrency: usize,
     /// Successfully staged mutations durably checkpointed as one window.
     pub checkpoint_every: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PayloadRepackOptions {
+    pub page_size: usize,
+    pub max_object_bytes: u64,
+    pub max_batch_bytes: u64,
+    pub concurrency: usize,
+}
+
+impl Default for PayloadRepackOptions {
+    fn default() -> Self {
+        Self {
+            page_size: 1_000,
+            max_object_bytes: 4 * 1_024,
+            max_batch_bytes: 4 * 1_024 * 1_024,
+            concurrency: 32,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PayloadRepackPage {
+    pub snapshot: CommitId,
+    pub scanned_objects: usize,
+    pub repacked_objects: usize,
+    pub repacked_bytes: u64,
+    pub receipt: Option<CommitReceipt>,
+    pub continuation: Option<String>,
 }
 
 impl Default for BulkWriteOptions {
@@ -461,6 +490,132 @@ impl Client {
         self.ensure_provider_qualified()?;
         self.attached_branch()?;
         self.repository.advance_fsck(cursor, max_steps).await
+    }
+
+    pub async fn start_payload_pack_stats(&self) -> Result<PayloadPackStatsCursor> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .start_payload_pack_stats(self.attached_branch()?)
+            .await
+    }
+
+    pub async fn advance_payload_pack_stats(
+        &self,
+        cursor: &PayloadPackStatsCursor,
+        max_objects: usize,
+    ) -> Result<PayloadPackStatsPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .advance_payload_pack_stats(cursor, max_objects)
+            .await
+    }
+
+    /// Repack one snapshot-bound page of direct payloads no larger than the
+    /// configured threshold. Each page publishes one deterministic commit;
+    /// historical versions remain readable until ordinary retention/GC makes
+    /// their physical payloads unreachable.
+    pub async fn repack_payloads_page(
+        &self,
+        prefix: impl AsRef<str>,
+        continuation: Option<&str>,
+        options: PayloadRepackOptions,
+    ) -> Result<PayloadRepackPage> {
+        self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
+        if !(1..=1_000).contains(&options.page_size)
+            || options.max_object_bytes == 0
+            || options.max_object_bytes > 4 * 1_024
+            || options.concurrency == 0
+            || options.concurrency > 1_024
+            || options
+                .max_object_bytes
+                .checked_mul(options.page_size as u64)
+                .is_none_or(|maximum| maximum > options.max_batch_bytes)
+        {
+            return Err(invalid("payload repack resource limits are invalid"));
+        }
+        let page = self
+            .repository
+            .list_objects_page(
+                branch,
+                prefix.as_ref().as_bytes(),
+                continuation,
+                options.page_size,
+            )
+            .await?;
+        let selected = page
+            .objects
+            .iter()
+            .filter_map(|object| {
+                let LogicalObjectVersionKind::Live { size, .. } = &object.version.body.kind else {
+                    return None;
+                };
+                let binding = object.version.binding.as_ref()?;
+                (!binding.is_packed() && *size <= options.max_object_bytes)
+                    .then(|| object.key.clone())
+            })
+            .collect::<Vec<_>>();
+        let loaded = stream::iter(selected)
+            .map(|key| async move {
+                self.repository
+                    .get_object_at(branch, page.snapshot, &key)
+                    .await?
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::MissingClosure,
+                            "repack snapshot object disappeared",
+                        )
+                    })
+            })
+            .buffer_unordered(options.concurrency)
+            .collect::<Vec<_>>()
+            .await
+            .into_iter()
+            .collect::<Result<Vec<_>>>()?;
+        let mut inputs = Vec::with_capacity(loaded.len());
+        let mut repacked_bytes = 0_u64;
+        for object in loaded {
+            let LogicalObjectVersionKind::Live {
+                size,
+                headers,
+                user_metadata,
+                tags,
+                ..
+            } = object.version.body.kind
+            else {
+                return Err(invalid("repack selected a non-live object"));
+            };
+            repacked_bytes = repacked_bytes
+                .checked_add(size)
+                .ok_or_else(|| invalid("payload repack byte count overflow"))?;
+            inputs.push((object.key, object.bytes, headers, user_metadata, tags));
+        }
+        let repacked_objects = inputs.len();
+        let receipt = if inputs.is_empty() {
+            None
+        } else {
+            let mut session = self
+                .begin_commit()
+                .message("payload pack maintenance")
+                .start()
+                .await?;
+            let staged = self
+                .repository
+                .stage_commit_session_repack_batch(&session.manifest, inputs, options.concurrency)
+                .await?;
+            for mutation in staged {
+                session.insert_staged(mutation);
+            }
+            Some(session.publish().await?)
+        };
+        Ok(PayloadRepackPage {
+            snapshot: page.snapshot,
+            scanned_objects: page.objects.len(),
+            repacked_objects,
+            repacked_bytes,
+            receipt,
+            continuation: page.continuation,
+        })
     }
 
     pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {

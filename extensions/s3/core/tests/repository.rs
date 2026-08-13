@@ -140,6 +140,57 @@ async fn repository_put_read_replay_and_reopen_use_only_authority() {
     assert_eq!(plane.request_snapshot().list, 0);
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn concurrent_puts_prepare_payloads_before_the_ordered_publication_lane() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Arc::new(
+        Repository::initialize(
+            plane.clone(),
+            RepositoryOptions {
+                repository_prefix: ".tests/concurrent-payload-preparation".to_string(),
+                writer: "concurrent-payload-writer".to_string(),
+                provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+                ..RepositoryOptions::default()
+            },
+        )
+        .await
+        .unwrap(),
+    );
+    plane.set_immutable_put_delay_millis(25);
+    plane.reset_immutable_put_concurrency();
+
+    let mut writes = Vec::new();
+    for index in 0..8_u8 {
+        let repository = repository.clone();
+        writes.push(tokio::spawn(async move {
+            repository
+                .put_object(
+                    "main",
+                    format!("parallel/{index}.bin").into_bytes(),
+                    vec![index; 32],
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                )
+                .await
+        }));
+    }
+    for write in writes {
+        write.await.unwrap().unwrap();
+    }
+
+    assert!(
+        plane.max_immutable_puts_in_flight() >= 4,
+        "payload preparation remained serialized: max_in_flight={}",
+        plane.max_immutable_puts_in_flight()
+    );
+    let (_, objects, truncated) = repository
+        .list_objects("main", b"parallel/", None, 16)
+        .await
+        .unwrap();
+    assert!(!truncated);
+    assert_eq!(objects.len(), 8);
+}
+
 #[tokio::test]
 async fn repository_history_listing_delete_markers_and_payload_dedup_are_stable() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
@@ -915,6 +966,75 @@ async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
         .unwrap();
     assert_eq!(range.bytes, b"same");
     assert_eq!(range.range, 0..=3);
+
+    let mut stats = repository.start_payload_pack_stats("main").await.unwrap();
+    while !stats.complete {
+        stats = repository
+            .advance_payload_pack_stats(&stats, 2)
+            .await
+            .unwrap()
+            .cursor;
+    }
+    assert_eq!(stats.report.current_objects, 3);
+    assert_eq!(stats.report.packed_objects, 3);
+    assert_eq!(stats.report.direct_objects, 0);
+    assert_eq!(stats.report.unique_physical_objects, 1);
+    assert_eq!(stats.report.unique_pack_objects, 1);
+    assert_eq!(stats.report.unique_pack_bytes, 8);
+    assert_eq!(stats.report.unique_packed_extents, 2);
+    assert_eq!(stats.report.unique_packed_extent_bytes, 8);
+    assert_eq!(stats.report.pack_utilization_basis_points(), 10_000);
+
+    let mut fsck = repository.start_fsck("main", true).await.unwrap();
+    while fsck.phase != prolly_s3_core::FsckPhase::Complete {
+        fsck = repository.advance_fsck(&fsck, 100).await.unwrap().cursor;
+    }
+    assert_eq!(fsck.report.packed_payloads_verified, 6);
+    assert_eq!(fsck.report.packed_logical_bytes_verified, 24);
+
+    repository
+        .put_object(
+            "main",
+            b"pack/direct".to_vec(),
+            b"tiny".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    let repack = repository
+        .begin_commit_session("main", "repack direct payload", 60_000)
+        .await
+        .unwrap();
+    let staged = repository
+        .stage_commit_session_repack_batch(
+            &repack,
+            vec![(
+                b"pack/direct".to_vec(),
+                b"tiny".to_vec(),
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+                BTreeMap::from([("retention".to_string(), "hot".to_string())]),
+            )],
+            2,
+        )
+        .await
+        .unwrap();
+    let repacked = repository
+        .publish_commit_session(repack, staged)
+        .await
+        .unwrap();
+    let summary = repository
+        .head_object_at("main", repacked.id, b"pack/direct")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(summary.version.binding.unwrap().is_packed());
+    let prolly_s3_core::LogicalObjectVersionKind::Live { tags, .. } = summary.version.body.kind
+    else {
+        panic!("repacked object must remain live");
+    };
+    assert_eq!(tags.get("retention").map(String::as_str), Some("hot"));
 }
 
 #[tokio::test]

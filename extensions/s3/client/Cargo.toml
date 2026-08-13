@@ -28,7 +28,7 @@ prolly-s3-core = { path = "../core", version = "0.1.0" }
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10"
 tempfile = "3.23"
-tokio = { version = "1.45", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1.45", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 
 [dev-dependencies]
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }

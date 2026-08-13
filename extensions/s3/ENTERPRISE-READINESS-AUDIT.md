@@ -1,6 +1,6 @@
 # Prolly S3 enterprise-readiness audit
 
-Audit date: 2026-08-12
+Audit date: 2026-08-13
 
 Baseline: `ff6beb10` (`origin/main` at audit start)
 
@@ -31,7 +31,7 @@ contract, update `API.md`, and add runnable scenario examples.
 | Writer fencing | Ready with runbook | Branch-scoped leases, renewal, takeover barrier, fenced-branch reporting |
 | History and merge | Ready | Bounded log/diff/reflog, restartable restore and structural merge, DAG-preserving transfer |
 | Integrity and repair | Ready | Metadata/deep fsck, logical repair, downloaded-content backup verification |
-| Garbage collection | Conditional | Bounded exact-version sweep and dirty roots; separately running writers must be quiesced |
+| Garbage collection | Ready pending live fault injection | Bounded exact-version sweep plus durable cross-process publication admission and expiring tickets |
 | Local provider compatibility | Ready | Eight live RustFS integration tests and all six runnable examples passed against the pinned image |
 | AWS compatibility | Not yet evidenced here | Operator-owned general-purpose versioned bucket qualification is required |
 | Performance and scale | Not generally qualified | 10K and AWS SLO gates exist but require recorded workload-specific runs |
@@ -133,14 +133,14 @@ read so the memory provider can no longer mask this behavior.
    passed, but the 10K RustFS commit and 4K graph gates did not complete inside
    this audit's 15-minute limit. Even passing those regression tests would not
    prove millions or billions of files, commits, or refs.
-3. **GC does not fence separate operating-system processes.** It coordinates
-   writer handles in the authoritative process. A production runbook must
-   quiesce or revoke other writers before GC, or the protocol must gain a
-   durable cross-process publication barrier.
-4. **Large-file behavior is deliberately limited.** One logical file must fit
-   the repository limit, the provider's single `PutObject` limit, and local
-   spool capacity for streamed sessions. There is no multipart logical-file
-   representation.
+3. **Cross-process GC needs provider fault evidence.** The protocol now closes
+   durable publication admission and drains expiring per-publication tickets,
+   but crash/timeout races still require live multi-process fault injection on
+   every supported provider.
+4. **Large-file multipart needs provider evidence.** Streamed files at or above
+   64 MiB now use bounded multipart upload through the 5 TiB repository limit,
+   but abort cleanup, retry cost, and throughput must be qualified on RustFS
+   and AWS before promotion.
 5. **Disaster recovery needs provider-level drills.** History transfer and
    logical verification do not prove that bucket replication, lifecycle,
    encryption-key recovery, retention, or regional failover are configured

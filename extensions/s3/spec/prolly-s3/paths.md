@@ -11,6 +11,7 @@ repository format.
 | branch ref | `P/refs/heads/N` |
 | tag ref | `P/refs/tags/N` |
 | immutable payload | `P/payloads/R/sha256/H0/H1/H` |
+| immutable payload pack | `P/payload-packs/R/sha256/H0/H1/H` |
 | immutable commit | `P/commits/sha256/H0/H1/H` |
 | publication event | `P/publications/sha256/H0/H1/H` |
 | commit-session state | `P/staging/R/B/...` |
@@ -23,6 +24,8 @@ repository format.
 | ref-catalog tree | `P/ref-catalog/tree/...` |
 | index-rebuild chunk | `P/administration/index-rebuild/N/E/chunks/sha256/...` |
 | merge plan | `P/administration/merge/E/plan/...` |
+| GC coordinator | `P/gc/coordinator.cbor` |
+| publication admission ticket | `P/gc/publications/R/E/H` |
 
 `R` is the repository identity. `N` is the canonical encoded ref name. `S` is
 an encoded authority scope. `B` is a commit-session ID. `E` is an administration
@@ -42,5 +45,7 @@ byte pairs. `SS` is a two-digit ref-catalog shard.
 - Ordinary reads and index maintenance must not discover nodes by namespace
   listing.
 - Mutable control records retain a bounded number of provider versions.
+- Branch/tag publication tickets are immutable, instance-scoped, and removed
+  by exact version after the ref CAS resolves. GC may remove expired tickets.
 - There are no alternative versioned path families and no format migration
   namespace.
