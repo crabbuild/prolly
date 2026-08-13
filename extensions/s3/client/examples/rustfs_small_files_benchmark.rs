@@ -49,7 +49,7 @@ fn parse_stages() -> BenchResult<Vec<usize>> {
             .collect::<Result<Vec<_>, _>>()?,
         None => DEFAULT_STAGES.to_vec(),
     };
-    if stages.is_empty() || stages.iter().any(|stage| *stage == 0) {
+    if stages.is_empty() || stages.contains(&0) {
         return Err("benchmark stages must be non-empty positive integers".into());
     }
     stages.sort_unstable();
