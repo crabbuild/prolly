@@ -68,6 +68,19 @@ cargo run --locked --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --example branch_diff_merge
 ```
 
+Run the staged tiny-file performance benchmark (10K through 1M files by
+default). The repository grows cumulatively and reports write, publication,
+full-list, and sampled-read latency and throughput after every stage:
+
+```bash
+cargo run --release --locked --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --example rustfs_small_files_benchmark
+```
+
+Use `PROLLY_RUSTFS_PERF_STAGES=10000,20000` for a shorter run. RustFS defaults
+to the `prolly` bucket and `prolly/prolly` local credentials; all values remain
+overridable with the `PROLLY_RUSTFS_*` environment variables.
+
 | Example | Demonstrates |
 |---|---|
 | [`basic_object_workflow.rs`](examples/basic_object_workflow.rs) | Metadata, ranges, copy, listing, and historical reads |
