@@ -269,6 +269,28 @@ pub struct RefMoveReceipt {
     pub generation: RefGeneration,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RestoreCursor {
+    pub repository: crate::RepositoryId,
+    pub branch: String,
+    pub source: CommitId,
+    pub original_head: CommitId,
+    pub expected_head: CommitId,
+    pub batch: crate::BatchId,
+    pub checkpoint_sequence: u64,
+    pub diff: Option<ObjectDiffCursor>,
+    pub message: String,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RestorePage {
+    pub cursor: RestoreCursor,
+    pub processed: usize,
+    pub receipt: Option<CommitReceipt>,
+    pub complete: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchHead {
     pub name: String,
@@ -2898,6 +2920,231 @@ impl<P: ObjectPlane> Repository<P> {
         })?;
         self.reset_branch(branch, target, expected_head, reason)
             .await
+    }
+
+    /// Start a restartable snapshot restore. Changed keys reuse immutable
+    /// payload bindings, receive fresh logical versions, and are published in
+    /// bounded atomic commits while preserving the branch's existing history.
+    pub async fn start_restore(
+        &self,
+        branch: &str,
+        source: CommitId,
+        expected_head: CommitId,
+        message: impl Into<String>,
+    ) -> Result<RestoreCursor> {
+        validate_branch(branch)?;
+        let message = message.into();
+        if message.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "restore message must not be empty",
+            ));
+        }
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        self.load_commit_object(source).await?;
+        if self.head(branch).await? != expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch head does not match restore expectation",
+            ));
+        }
+        let checkpoint = self
+            .begin_durable_commit_session(branch, message.clone(), 24 * 60 * 60 * 1_000)
+            .await?;
+        Ok(RestoreCursor {
+            repository: self.format.repository_id,
+            branch: branch.to_string(),
+            source,
+            original_head: expected_head,
+            expected_head,
+            batch: checkpoint.session.id,
+            checkpoint_sequence: checkpoint.sequence,
+            diff: None,
+            message,
+            complete: false,
+        })
+    }
+
+    /// Advance a restore by one structural-diff page. A full atomic batch is
+    /// published as soon as it reaches the canonical mutation limit; larger
+    /// restores continue in subsequent commits from the same diff cursor.
+    pub async fn advance_restore(
+        &self,
+        cursor: &RestoreCursor,
+        max_steps: usize,
+    ) -> Result<RestorePage> {
+        if cursor.complete {
+            return Ok(RestorePage {
+                cursor: cursor.clone(),
+                processed: 0,
+                receipt: None,
+                complete: true,
+            });
+        }
+        if cursor.repository != self.format.repository_id {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "restore cursor belongs to another repository",
+            ));
+        }
+        validate_branch(&cursor.branch)?;
+        if max_steps == 0 || max_steps > self.format.canonical_limits.max_list_page as usize {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "restore page size exceeds the canonical list limit",
+            ));
+        }
+        if self.head(&cursor.branch).await? != cursor.expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch moved while restore was in progress",
+            ));
+        }
+        let checkpoint = self.resume_commit_session(cursor.batch).await?;
+        if checkpoint.sequence != cursor.checkpoint_sequence
+            || checkpoint.session.base_commit != cursor.expected_head
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "restore cursor is stale relative to its durable checkpoint",
+            ));
+        }
+        let remaining = (self.format.canonical_limits.max_mutations_per_commit as usize)
+            .checked_sub(checkpoint.mutations.len())
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "restore checkpoint exceeds the canonical mutation limit",
+                )
+            })?;
+        if remaining == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "restore checkpoint is full without having been published",
+            ));
+        }
+        let page = self
+            .diff_page_bounded(
+                &cursor.branch,
+                cursor.original_head,
+                cursor.source,
+                cursor.diff.as_ref(),
+                max_steps.min(remaining),
+            )
+            .await?;
+        let processed = page.changes.len();
+        let mut mutations = checkpoint.mutations;
+        for change in page.changes {
+            if change.to.is_none() {
+                mutations.push(StagedMutation::delete(change.key));
+                continue;
+            }
+            let source = self
+                .head_object_at(&cursor.branch, cursor.source, &change.key)
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "restore diff points to a missing source object",
+                    )
+                })?;
+            if Some(source.version.id) != change.to {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "restore diff and source object version disagree",
+                ));
+            }
+            let LogicalObjectVersionKind::Live {
+                size,
+                logical_etag,
+                headers,
+                checksums,
+                user_metadata,
+                tags,
+            } = source.version.body.kind
+            else {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "restore source current object is a delete marker",
+                ));
+            };
+            let binding = source.version.binding.ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "restore source object has no payload binding",
+                )
+            })?;
+            mutations.push(StagedMutation {
+                body: StagedMutationBody::Put(Box::new(StagedPut {
+                    key: change.key,
+                    size,
+                    logical_etag,
+                    checksums,
+                    headers,
+                    user_metadata,
+                    tags,
+                    binding,
+                })),
+            });
+        }
+        let mut next = cursor.clone();
+        next.diff = page.continuation;
+        let at_batch_limit =
+            mutations.len() >= self.format.canonical_limits.max_mutations_per_commit as usize;
+        let diff_complete = next.diff.is_none();
+        if !at_batch_limit && !diff_complete {
+            let sequence = checkpoint.sequence.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "restore checkpoint sequence overflow",
+                )
+            })?;
+            let checkpoint = self
+                .checkpoint_commit_session(&checkpoint.session, mutations, sequence)
+                .await?;
+            next.checkpoint_sequence = checkpoint.sequence;
+            return Ok(RestorePage {
+                cursor: next,
+                processed,
+                receipt: None,
+                complete: false,
+            });
+        }
+        if mutations.is_empty() {
+            self.abort_commit_session(checkpoint.session, mutations, checkpoint.sequence)
+                .await?;
+            next.complete = true;
+            return Ok(RestorePage {
+                cursor: next,
+                processed,
+                receipt: None,
+                complete: true,
+            });
+        }
+        let receipt = self
+            .publish_commit_session(checkpoint.session, mutations)
+            .await?;
+        next.expected_head = receipt.id;
+        if diff_complete {
+            next.complete = true;
+        } else {
+            let checkpoint = self
+                .begin_durable_commit_session(
+                    &cursor.branch,
+                    cursor.message.clone(),
+                    24 * 60 * 60 * 1_000,
+                )
+                .await?;
+            next.batch = checkpoint.session.id;
+            next.checkpoint_sequence = checkpoint.sequence;
+        }
+        Ok(RestorePage {
+            complete: next.complete,
+            cursor: next,
+            processed,
+            receipt: Some(receipt),
+        })
     }
 
     /// Start a durable merge between two branch snapshots.

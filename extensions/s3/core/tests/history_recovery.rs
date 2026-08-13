@@ -192,4 +192,46 @@ async fn history_diff_reflog_reset_and_recovery_are_bounded_and_audited() {
         .await
         .unwrap();
     assert_eq!(deleted.changed_keys, 2);
+
+    let mut restore = repository
+        .start_restore("main", second.id, deleted.id, "restore the second snapshot")
+        .await
+        .unwrap();
+    let mut restored_receipt = None;
+    loop {
+        let page = repository.advance_restore(&restore, 1).await.unwrap();
+        if page.receipt.is_some() {
+            restored_receipt = page.receipt;
+        }
+        restore = page.cursor;
+        if page.complete {
+            break;
+        }
+    }
+    let restored = restored_receipt.unwrap();
+    assert_eq!(restored.parents, vec![deleted.id]);
+    assert_eq!(restored.changed_keys, 3);
+    assert_eq!(
+        repository
+            .get_object("main", b"a.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"one"
+    );
+    assert_eq!(
+        repository
+            .get_object("main", b"b.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"two"
+    );
+    assert!(repository
+        .get_object("main", b"archive/a.txt")
+        .await
+        .unwrap()
+        .is_none());
 }

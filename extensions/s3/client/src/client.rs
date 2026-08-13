@@ -18,8 +18,8 @@ use prolly_s3_core::{
     OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
     ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
-    Repository, RepositoryOptions, Result, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
-    VersionSummary,
+    Repository, RepositoryOptions, RestoreCursor, RestorePage, Result, StagedMutation, Tag,
+    TagCatalogPage, TraversalBudget, VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -219,6 +219,27 @@ impl Client {
     pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
         self.ensure_provider_qualified()?;
         self.repository.advance_fsck(cursor, max_steps).await
+    }
+
+    pub async fn start_restore(
+        &self,
+        source: CommitId,
+        expected_head: CommitId,
+        message: impl Into<String>,
+    ) -> Result<RestoreCursor> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .start_restore(&self.branch, source, expected_head, message)
+            .await
+    }
+
+    pub async fn advance_restore(
+        &self,
+        cursor: &RestoreCursor,
+        max_steps: usize,
+    ) -> Result<RestorePage> {
+        self.ensure_provider_qualified()?;
+        self.repository.advance_restore(cursor, max_steps).await
     }
 
     /// Start a restartable structural merge from `source_branch` into this
