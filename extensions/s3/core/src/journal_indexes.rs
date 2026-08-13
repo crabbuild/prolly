@@ -92,6 +92,13 @@ pub struct JournalDerivedIndexes<P: ObjectPlane> {
 }
 
 impl<P: ObjectPlane> JournalDerivedIndexes<P> {
+    pub(crate) fn node_cache_snapshot(&self) -> crate::NodeCacheSnapshot {
+        self.node_engine
+            .store()
+            .node_cache_snapshot()
+            .saturating_add(self.graph_engine.store().node_cache_snapshot())
+    }
+
     pub fn new(
         plane: Arc<P>,
         prefix: impl Into<String>,

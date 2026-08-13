@@ -961,7 +961,10 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     pub fn node_cache_snapshot(&self) -> crate::NodeCacheSnapshot {
-        self.node_store.node_cache_snapshot()
+        self.node_store
+            .node_cache_snapshot()
+            .saturating_add(self.ref_catalog.node_cache_snapshot())
+            .saturating_add(self.journal_indexes.node_cache_snapshot())
     }
 
     /// Traverse both current-state trees to populate the configured node

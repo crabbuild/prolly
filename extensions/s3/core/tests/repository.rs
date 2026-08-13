@@ -2,11 +2,48 @@ use std::{collections::BTreeMap, io::Write as _, sync::Arc};
 
 use md5::{Digest as _, Md5};
 use prolly_s3_core::{
-    FixedClock, GetRequest, ListRequest, LogicalObjectVersionKind, MemoryObjectPlane,
-    ObjectHeaders, ObjectPath, ObjectPlane, ProviderPerKeyVersionLimit, Repository,
-    RepositoryOptions, SequenceIdSource,
+    FixedClock, GetRequest, ListRequest, LogicalObjectVersionKind, MemoryNodeCache,
+    MemoryObjectPlane, ObjectHeaders, ObjectPath, ObjectPlane, ProviderPerKeyVersionLimit,
+    Repository, RepositoryOptions, SequenceIdSource,
 };
 use sha2::Sha256;
+
+#[tokio::test]
+async fn repository_cache_snapshot_includes_ref_catalog_reads_after_reopen() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let cache = Arc::new(MemoryNodeCache::new(64 * 1024 * 1024));
+    let options = RepositoryOptions {
+        repository_prefix: ".tests/repository-cache-metrics".to_string(),
+        writer: "cache-writer".to_string(),
+        node_cache: Some(cache.clone()),
+        provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    let root = repository.head("main").await.unwrap();
+    repository.create_branch("cached", root).await.unwrap();
+    drop(repository);
+
+    let reopened = Repository::open(
+        plane,
+        RepositoryOptions {
+            read_only: true,
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    let before = reopened.node_cache_snapshot();
+    let page = reopened.list_branch_catalog_page(None, 100).await.unwrap();
+    assert_eq!(page.branches.len(), 2);
+    let after = reopened.node_cache_snapshot();
+    assert!(
+        after.hits > before.hits,
+        "ref-catalog cache hits must be included in the repository snapshot"
+    );
+}
 
 #[tokio::test]
 async fn repository_put_read_replay_and_reopen_use_only_authority() {

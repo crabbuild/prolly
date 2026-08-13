@@ -369,21 +369,29 @@ let cache = FoyerNodeCache::open(FoyerNodeCacheConfig {
     directory: PathBuf::from("./prolly-node-cache"),
     memory_capacity_bytes: 64 * 1024 * 1024,
     disk_capacity_bytes: 4 * 1024 * 1024 * 1024,
-    disk_block_size_bytes: 4 * 1024 * 1024,
+    // 32 MiB accommodates the repository format's 16 MiB hard node bound
+    // plus Foyer's block index and entry envelope.
+    disk_block_size_bytes: 32 * 1024 * 1024,
     memory_shards: 8,
 })
 .await?;
 
 let client = Client::builder()
     // supply the same required provider and bucket settings
-    .node_cache(cache)
+    .node_cache(cache.clone())
     .open()
     .await?;
+
+// During graceful shutdown, release cache users before flushing Foyer.
+drop(client);
+cache.close().await?;
 ```
 
 Cache keys include repository identity, tree format, and immutable CID. Cached
 bytes are verified before use. Persisted caches improve cold-start traversal
-but are never authoritative.
+but are never authoritative. `max_entry_size_bytes()` reports the largest node
+that fits the configured disk block; larger nodes are deliberately rejected
+from cache admission and continue to use the provider fallback.
 
 Use `prewarm_node_cache(snapshot)` during startup to traverse both state trees.
 Use `node_cache_snapshot()` before and after to observe hits, misses,

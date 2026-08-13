@@ -65,6 +65,10 @@ pub struct ShardedRefCatalog<P: ObjectPlane> {
 }
 
 impl<P: ObjectPlane> ShardedRefCatalog<P> {
+    pub(crate) fn node_cache_snapshot(&self) -> crate::NodeCacheSnapshot {
+        self.engine.store().node_cache_snapshot()
+    }
+
     pub fn new(
         plane: Arc<P>,
         prefix: impl Into<String>,
