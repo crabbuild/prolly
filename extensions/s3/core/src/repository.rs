@@ -361,6 +361,15 @@ pub struct BackupVerificationPage {
     pub complete: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NodeCachePrewarmReport {
+    pub snapshot: CommitId,
+    pub object_nodes: usize,
+    pub version_nodes: usize,
+    pub before: crate::NodeCacheSnapshot,
+    pub after: crate::NodeCacheSnapshot,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchHead {
     pub name: String,
@@ -812,6 +821,39 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub fn plane(&self) -> Arc<P> {
         self.plane.clone()
+    }
+
+    pub fn node_cache_snapshot(&self) -> crate::NodeCacheSnapshot {
+        self.node_store.node_cache_snapshot()
+    }
+
+    /// Traverse both current-state trees to populate the configured node
+    /// cache. This is an explicit full-snapshot operation; use it during
+    /// startup or controlled prewarming rather than on request paths.
+    pub async fn prewarm_node_cache(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+    ) -> Result<NodeCachePrewarmReport> {
+        validate_branch(branch)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let before = self.node_store.node_cache_snapshot();
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let engine = self.engine(self.node_store.clone());
+        let object_stats = engine
+            .collect_stats(&self.tree_from_root(&commit.state.objects)?)
+            .await?;
+        let version_stats = engine
+            .collect_stats(&self.tree_from_root(&commit.state.versions)?)
+            .await?;
+        Ok(NodeCachePrewarmReport {
+            snapshot,
+            object_nodes: object_stats.num_nodes,
+            version_nodes: version_stats.num_nodes,
+            before,
+            after: self.node_store.node_cache_snapshot(),
+        })
     }
 
     pub async fn head(&self, branch: &str) -> Result<CommitId> {

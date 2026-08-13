@@ -60,6 +60,12 @@ async fn history_diff_reflog_reset_and_recovery_are_bounded_and_audited() {
             .pins,
         vec![pin]
     );
+    let prewarm = repository
+        .prewarm_node_cache("main", second.id)
+        .await
+        .unwrap();
+    assert!(prewarm.object_nodes > 0);
+    assert!(prewarm.version_nodes > 0);
 
     let first_page = repository
         .log_page_bounded(

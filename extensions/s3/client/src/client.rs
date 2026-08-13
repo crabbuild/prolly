@@ -14,8 +14,8 @@ use prolly_s3_core::{
     HistoryCursor, JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
     MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage,
     MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor,
-    MergePolicy, MergeReceipt, ObjectData, ObjectDiff, ObjectDiffCursor, ObjectDiffPage,
-    ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion, OperationId,
+    MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor,
+    ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion, OperationId,
     OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
     ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
@@ -71,6 +71,14 @@ pub struct ClientBuilder {
     background_index_maintenance: Option<bool>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IngestObject {
+    pub key: String,
+    pub bytes: Vec<u8>,
+    pub headers: ObjectHeaders,
+    pub user_metadata: BTreeMap<String, String>,
+}
+
 impl Client {
     pub fn builder() -> ClientBuilder {
         ClientBuilder::default()
@@ -86,6 +94,17 @@ impl Client {
 
     pub fn repository_id(&self) -> prolly_s3_core::RepositoryId {
         self.repository.repository_id()
+    }
+
+    pub fn node_cache_snapshot(&self) -> prolly_s3_core::NodeCacheSnapshot {
+        self.repository.node_cache_snapshot()
+    }
+
+    pub async fn prewarm_node_cache(&self, snapshot: CommitId) -> Result<NodeCachePrewarmReport> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .prewarm_node_cache(&self.branch, snapshot)
+            .await
     }
 
     pub fn for_branch(&self, branch: impl Into<String>) -> Result<Self> {
@@ -566,6 +585,53 @@ impl Client {
                 operation,
             )
             .await
+    }
+
+    /// Ingest objects through durable atomic batches. This is the recommended
+    /// path for bulk loading because publication and checkpoint costs are
+    /// amortized across each batch.
+    pub async fn ingest_objects(
+        &self,
+        objects: Vec<IngestObject>,
+        batch_size: usize,
+    ) -> Result<Vec<CommitReceipt>> {
+        self.ensure_provider_qualified()?;
+        let max = self
+            .repository
+            .format()
+            .canonical_limits
+            .max_mutations_per_commit as usize;
+        if batch_size == 0 || batch_size > max {
+            return Err(invalid(
+                "ingest batch size exceeds the canonical mutation limit",
+            ));
+        }
+        let mut receipts = Vec::new();
+        let mut objects = objects.into_iter();
+        loop {
+            let batch = objects.by_ref().take(batch_size).collect::<Vec<_>>();
+            if batch.is_empty() {
+                break;
+            }
+            let mut session = self
+                .begin_commit()
+                .message("bulk ingest")
+                .checkpoint_every(batch_size.min(1_000))
+                .start()
+                .await?;
+            for object in batch {
+                session
+                    .put_object_with_metadata(
+                        object.key,
+                        object.bytes,
+                        object.headers,
+                        object.user_metadata,
+                    )
+                    .await?;
+            }
+            receipts.push(session.publish().await?);
+        }
+        Ok(receipts)
     }
 
     pub async fn get_object(&self, key: impl AsRef<str>) -> Result<Option<ObjectData>> {
