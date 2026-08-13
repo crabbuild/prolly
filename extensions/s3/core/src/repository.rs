@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -129,6 +129,72 @@ pub struct ObjectRangeData {
 pub struct ObjectSummary {
     pub key: Vec<u8>,
     pub version: ObjectVersion,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct ListObjectsCursor {
+    repository: crate::RepositoryId,
+    branch: String,
+    snapshot: CommitId,
+    prefix: Vec<u8>,
+    traversal: prolly::RangeCursor,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ListObjectsPage {
+    pub snapshot: CommitId,
+    pub objects: Vec<ObjectSummary>,
+    /// Opaque, snapshot-bound continuation. `None` means traversal completed.
+    pub continuation: Option<String>,
+}
+
+/// One logical object accepted by a bounded commit-session staging window.
+pub type CommitSessionPutInput = (Vec<u8>, Vec<u8>, ObjectHeaders, BTreeMap<String, String>);
+
+struct CommitMetadataCache {
+    entries: BTreeMap<CommitId, (Arc<BucketCommit>, usize)>,
+    order: VecDeque<CommitId>,
+    bytes: usize,
+    max_bytes: usize,
+}
+
+impl CommitMetadataCache {
+    fn new(max_bytes: usize) -> Self {
+        Self {
+            entries: BTreeMap::new(),
+            order: VecDeque::new(),
+            bytes: 0,
+            max_bytes,
+        }
+    }
+
+    fn get(&mut self, id: CommitId) -> Option<Arc<BucketCommit>> {
+        let commit = self.entries.get(&id)?.0.clone();
+        self.order.retain(|candidate| *candidate != id);
+        self.order.push_back(id);
+        Some(commit)
+    }
+
+    fn insert(&mut self, id: CommitId, commit: Arc<BucketCommit>, bytes: usize) {
+        if bytes > self.max_bytes {
+            return;
+        }
+        if let Some((_, previous_bytes)) = self.entries.remove(&id) {
+            self.bytes = self.bytes.saturating_sub(previous_bytes);
+            self.order.retain(|candidate| *candidate != id);
+        }
+        while self.bytes.saturating_add(bytes) > self.max_bytes {
+            let Some(oldest) = self.order.pop_front() else {
+                break;
+            };
+            if let Some((_, evicted_bytes)) = self.entries.remove(&oldest) {
+                self.bytes = self.bytes.saturating_sub(evicted_bytes);
+            }
+        }
+        self.bytes = self.bytes.saturating_add(bytes);
+        self.entries.insert(id, (commit, bytes));
+        self.order.push_back(id);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -638,6 +704,8 @@ pub struct Repository<P: ObjectPlane> {
     permits: RwLock<BTreeMap<AuthorityScope, AuthorityPermit>>,
     fenced_scopes: RwLock<BTreeSet<AuthorityScope>>,
     authority_renewal: tokio::sync::Mutex<()>,
+    commit_metadata_cache: std::sync::Mutex<CommitMetadataCache>,
+    commit_metadata_fetch: tokio::sync::Mutex<()>,
     publication_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
     index_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
     local_index_heads: RwLock<BTreeMap<String, CommitId>>,
@@ -916,6 +984,7 @@ impl<P: ObjectPlane> Repository<P> {
         });
         node_store.set_node_locator(locator.clone())?;
         let writable = !options.read_only;
+        let commit_metadata_cache_bytes = options.max_cached_node_bytes;
         Ok(Self {
             plane,
             options,
@@ -933,6 +1002,10 @@ impl<P: ObjectPlane> Repository<P> {
             permits: RwLock::new(BTreeMap::new()),
             fenced_scopes: RwLock::new(BTreeSet::new()),
             authority_renewal: tokio::sync::Mutex::new(()),
+            commit_metadata_cache: std::sync::Mutex::new(CommitMetadataCache::new(
+                commit_metadata_cache_bytes,
+            )),
+            commit_metadata_fetch: tokio::sync::Mutex::new(()),
             publication_lanes: std::sync::Mutex::new(BTreeMap::new()),
             index_lanes: std::sync::Mutex::new(BTreeMap::new()),
             local_index_heads: RwLock::new(BTreeMap::new()),
@@ -1519,6 +1592,87 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
+    /// Stage a bounded input window, packing non-empty payloads up to 4 KiB
+    /// into deterministic immutable segments no larger than 4 MiB. Larger and
+    /// empty payloads retain the direct content-addressed representation.
+    pub async fn stage_commit_session_put_batch(
+        &self,
+        session: &CommitSessionManifest,
+        mut objects: Vec<CommitSessionPutInput>,
+        concurrency: usize,
+    ) -> Result<Vec<StagedMutation>> {
+        self.validate_commit_session(session).await?;
+        if concurrency == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "payload staging concurrency is zero",
+            ));
+        }
+        objects.sort_by(|left, right| left.0.cmp(&right.0));
+        for pair in objects.windows(2) {
+            if pair[0].0 == pair[1].0 {
+                return Err(Error::new(
+                    ErrorCode::InvalidRequest,
+                    "payload staging window contains a duplicate key",
+                ));
+            }
+        }
+        for (key, bytes, _, _) in &objects {
+            self.validate_key(key)?;
+            if bytes.len() as u64 > self.format.canonical_limits.max_object_bytes {
+                return Err(Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "object exceeds the repository object-size limit",
+                ));
+            }
+        }
+
+        const SMALL_OBJECT_MAX: usize = 4 * 1024;
+        const PACK_MAX: usize = 4 * 1024 * 1024;
+        let mut packed_groups = Vec::new();
+        let mut current = Vec::new();
+        let mut current_bytes = 0_usize;
+        let mut direct = Vec::new();
+        for object in objects {
+            if object.1.is_empty() || object.1.len() > SMALL_OBJECT_MAX {
+                direct.push(object);
+                continue;
+            }
+            if !current.is_empty() && current_bytes.saturating_add(object.1.len()) > PACK_MAX {
+                packed_groups.push(std::mem::take(&mut current));
+                current_bytes = 0;
+            }
+            current_bytes = current_bytes.saturating_add(object.1.len());
+            current.push(object);
+        }
+        if !current.is_empty() {
+            packed_groups.push(current);
+        }
+
+        let mut staged = Vec::new();
+        for group in packed_groups {
+            let pack_inputs = group
+                .iter()
+                .map(|(_, bytes, _, _)| (crate::codec::sha256(bytes), bytes.clone()))
+                .collect();
+            let bindings = self.payloads.put_pack(pack_inputs).await?;
+            for ((key, bytes, headers, user_metadata), binding) in group.into_iter().zip(bindings) {
+                staged.push(staged_put(key, bytes, headers, user_metadata, binding));
+            }
+        }
+        let direct = stream::iter(direct)
+            .map(|(key, bytes, headers, user_metadata)| async move {
+                self.stage_commit_session_put(session, key, bytes, headers, user_metadata)
+                    .await
+            })
+            .buffer_unordered(concurrency)
+            .collect::<Vec<_>>()
+            .await;
+        staged.extend(direct.into_iter().collect::<Result<Vec<_>>>()?);
+        staged.sort_by(|left, right| left.key().cmp(right.key()));
+        Ok(staged)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn stage_commit_session_file(
         &self,
@@ -1843,7 +1997,7 @@ impl<P: ObjectPlane> Repository<P> {
             .md5
             .map(|md5| format!("\"{}\"", hex::encode(md5)));
         if staged.size > self.format.canonical_limits.max_object_bytes
-            || staged.binding.path != self.payloads.path(staged.binding.checksum_sha256)?
+            || staged.binding.path != self.payloads.expected_path(&staged.binding)?
             || staged.checksums.sha256 != Some(staged.binding.checksum_sha256)
             || expected_etag.as_deref() != Some(staged.logical_etag.as_str())
         {
@@ -2027,10 +2181,7 @@ impl<P: ObjectPlane> Repository<P> {
         let reference = self.publisher.load(branch).await?;
         self.require_branch_indexes_ready_for(branch, &reference)
             .await?;
-        let commit = self
-            .load_commit_object(reference.value.target)
-            .await?
-            .commit;
+        let commit = self.load_commit_metadata(reference.value.target).await?;
         let objects = self.tree_from_root(&commit.state.objects)?;
         let Some(encoded) = self
             .engine(self.node_store.clone())
@@ -2065,7 +2216,7 @@ impl<P: ObjectPlane> Repository<P> {
         self.validate_key(key)?;
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
-        let commit = self.load_commit_object(snapshot).await?.commit;
+        let commit = self.load_commit_metadata(snapshot).await?;
         let objects = self.tree_from_root(&commit.state.objects)?;
         let Some(encoded) = self
             .engine(self.node_store.clone())
@@ -2113,7 +2264,7 @@ impl<P: ObjectPlane> Repository<P> {
         self.validate_key(key)?;
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
-        let commit = self.load_commit_object(snapshot).await?.commit;
+        let commit = self.load_commit_metadata(snapshot).await?;
         let objects = self.tree_from_root(&commit.state.objects)?;
         let Some(encoded) = self
             .engine(self.node_store.clone())
@@ -2167,7 +2318,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "live object has no payload binding",
             )
         })?;
-        if binding.path != self.payloads.path(binding.checksum_sha256)? {
+        if binding.path != self.payloads.expected_path(binding)? {
             return Err(Error::new(
                 ErrorCode::CorruptContent,
                 "payload binding path does not match its checksum",
@@ -2180,16 +2331,34 @@ impl<P: ObjectPlane> Repository<P> {
                 .map(|version_id| PhysicalVersion::Versioned {
                     version_id: version_id.clone(),
                 });
+        let logical_range = *range.start()..=(*range.end()).min(size - 1);
+        let translated = if let Some((offset, pack_end)) = binding.pack_range {
+            let start = offset.checked_add(*logical_range.start()).ok_or_else(|| {
+                Error::new(ErrorCode::InvalidRange, "packed payload range overflow")
+            })?;
+            let end = offset
+                .checked_add(*logical_range.end())
+                .filter(|end| *end <= pack_end)
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::CorruptContent,
+                        "packed payload range exceeds its logical extent",
+                    )
+                })?;
+            start..=end
+        } else {
+            logical_range.clone()
+        };
         let stored = self
             .plane
             .get(GetRequest {
                 path: binding.path.clone(),
-                range: Some(range.clone()),
+                range: Some(translated),
                 physical_version,
             })
             .await?
             .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "payload is missing"))?;
-        if stored.metadata.sha256 != binding.checksum_sha256
+        if stored.metadata.sha256 != binding.physical_checksum_sha256()
             || stored.metadata.token.etag != binding.provider_etag
             || stored.metadata.token.version_id != binding.provider_version_id
         {
@@ -2203,7 +2372,7 @@ impl<P: ObjectPlane> Repository<P> {
             version: summary.version,
             bytes: stored.bytes,
             snapshot,
-            range,
+            range: logical_range,
         }))
     }
 
@@ -2422,6 +2591,99 @@ impl<P: ObjectPlane> Repository<P> {
         Ok((snapshot, objects, truncated))
     }
 
+    /// List a stable snapshot using an opaque traversal cursor. Resumption
+    /// seeks directly to the saved key in O(log n), rather than replaying and
+    /// discarding every earlier prefix entry. Cursors remain valid while their
+    /// immutable snapshot is retained; callers spanning GC should hold a
+    /// retention pin for `snapshot`.
+    pub async fn list_objects_page(
+        &self,
+        branch: &str,
+        prefix: &[u8],
+        continuation: Option<&str>,
+        requested_limit: usize,
+    ) -> Result<ListObjectsPage> {
+        std::str::from_utf8(prefix)
+            .map_err(|_| Error::new(ErrorCode::InvalidKey, "list prefix is not UTF-8"))?;
+        let limit = requested_limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "list cursor page size is zero",
+            ));
+        }
+        let cursor = match continuation {
+            Some(token) => {
+                let bytes = hex::decode(token).map_err(|_| {
+                    Error::new(
+                        ErrorCode::InvalidContinuationToken,
+                        "list continuation is not canonical hex",
+                    )
+                })?;
+                let cursor: ListObjectsCursor = decode_canonical(&bytes).map_err(|_| {
+                    Error::new(
+                        ErrorCode::InvalidContinuationToken,
+                        "list continuation is malformed",
+                    )
+                })?;
+                if cursor.repository != self.format.repository_id
+                    || cursor.branch != branch
+                    || cursor.prefix != prefix
+                {
+                    return Err(Error::new(
+                        ErrorCode::InvalidContinuationToken,
+                        "list continuation belongs to another repository, branch, or prefix",
+                    ));
+                }
+                cursor
+            }
+            None => ListObjectsCursor {
+                repository: self.format.repository_id,
+                branch: branch.to_string(),
+                snapshot: self.head(branch).await?,
+                prefix: prefix.to_vec(),
+                traversal: prolly::RangeCursor::start(),
+            },
+        };
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let commit = self.load_commit_metadata(cursor.snapshot).await?;
+        let objects = self.tree_from_root(&commit.state.objects)?;
+        let engine = self.engine(self.node_store.clone());
+        let mut page = engine
+            .prefix_page(&objects, prefix, &cursor.traversal, limit.saturating_add(1))
+            .await?;
+        let truncated = page.entries.len() > limit;
+        page.entries.truncate(limit);
+        let next = if truncated {
+            page.entries.last().map(|(key, _)| ListObjectsCursor {
+                traversal: prolly::RangeCursor::after_key(key.clone()),
+                ..cursor.clone()
+            })
+        } else {
+            None
+        };
+        let objects = page
+            .entries
+            .into_iter()
+            .map(|(key, encoded)| {
+                let current: CurrentObject = decode_canonical(&encoded)?;
+                current.version.validate()?;
+                Ok(ObjectSummary {
+                    key,
+                    version: current.version,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ListObjectsPage {
+            snapshot: cursor.snapshot,
+            objects,
+            continuation: next
+                .map(|cursor| encode_canonical(&cursor).map(hex::encode))
+                .transpose()?,
+        })
+    }
+
     /// S3-style delimiter projection over a stable ordered object page.
     pub async fn list_objects_delimited(
         &self,
@@ -2501,7 +2763,7 @@ impl<P: ObjectPlane> Repository<P> {
         }
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
-        let commit = self.load_commit_object(snapshot).await?.commit;
+        let commit = self.load_commit_metadata(snapshot).await?;
         let objects = self.tree_from_root(&commit.state.objects)?;
         let engine = self.engine(self.node_store.clone());
         let mut iter = engine.prefix(&objects, prefix).await?;
@@ -5239,6 +5501,18 @@ impl<P: ObjectPlane> Repository<P> {
                 "repository branch authority is fenced in this repository instance",
             ));
         }
+        // Renewal changes the mutable object's storage token before the
+        // renewed permit can be installed locally. Serialize the complete
+        // cached-permit read and remote validation with renewal so foreground
+        // operations can never observe that transient stale-token window and
+        // fence an otherwise healthy authority epoch.
+        let _renewal = self.authority_renewal.lock().await;
+        if self.is_scope_fenced(&scope)? {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "repository branch authority is fenced in this repository instance",
+            ));
+        }
         let cached = self
             .permits
             .read()
@@ -5249,13 +5523,6 @@ impl<P: ObjectPlane> Repository<P> {
         {
             permit
         } else {
-            let _renewal = self.authority_renewal.lock().await;
-            if self.is_scope_fenced(&scope)? {
-                return Err(Error::new(
-                    ErrorCode::PreconditionFailed,
-                    "repository branch authority is fenced in this repository instance",
-                ));
-            }
             let current = self
                 .permits
                 .read()
@@ -5413,6 +5680,43 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(object)
     }
 
+    async fn load_commit_metadata(&self, id: CommitId) -> Result<Arc<BucketCommit>> {
+        if let Some(commit) = self
+            .commit_metadata_cache
+            .lock()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit cache lock poisoned"))?
+            .get(id)
+        {
+            return Ok(commit);
+        }
+
+        // A commit is immutable. Serializing misses prevents a cold burst for the
+        // same branch head from downloading and decoding the same large metadata
+        // envelope once per request; the second lookup lets waiters share it.
+        let _fetch = self.commit_metadata_fetch.lock().await;
+        if let Some(commit) = self
+            .commit_metadata_cache
+            .lock()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit cache lock poisoned"))?
+            .get(id)
+        {
+            return Ok(commit);
+        }
+        let commit = Arc::new(self.publisher.load_commit(id).await?);
+        let encoded_bytes = encode_canonical(commit.as_ref())?.len();
+        self.commit_metadata_cache
+            .lock()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "commit cache lock poisoned"))?
+            .insert(id, commit.clone(), encoded_bytes);
+        Ok(commit)
+    }
+
+    /// Administrative traversal fallback for commits that may not exist in a
+    /// live branch's journal-derived node index (notably GC history closure).
+    async fn load_commit_object_with_pack(&self, id: CommitId) -> Result<CommitObject> {
+        self.load_commit_object(id).await
+    }
+
     async fn finalize_pack(
         &self,
         id: CommitId,
@@ -5473,7 +5777,7 @@ impl<P: ObjectPlane> Repository<P> {
                 "live object version has no payload binding",
             )
         })?;
-        if binding.path != self.payloads.path(binding.checksum_sha256)? {
+        if binding.path != self.payloads.expected_path(binding)? {
             return Err(Error::new(
                 ErrorCode::CorruptContent,
                 "payload binding path does not match its content checksum",
@@ -5483,8 +5787,13 @@ impl<P: ObjectPlane> Repository<P> {
             self.plane.head(&binding.path).await?.ok_or_else(|| {
                 Error::new(ErrorCode::MissingClosure, "immutable payload is missing")
             })?;
-        if metadata.len != *size
-            || metadata.sha256 != binding.checksum_sha256
+        let expected_physical_len = binding
+            .pack_range
+            .map(|(_, end)| end.saturating_add(1))
+            .unwrap_or(*size);
+        if metadata.len < expected_physical_len
+            || (!binding.is_packed() && metadata.len != *size)
+            || metadata.sha256 != binding.physical_checksum_sha256()
             || metadata.token.etag != binding.provider_etag
             || metadata.token.version_id != binding.provider_version_id
         {
@@ -5621,7 +5930,7 @@ impl<P: ObjectPlane> Repository<P> {
             let mark_key = gc_commit_mark_key(id);
             let mut mutations = vec![Mutation::Delete { key: queue_key }];
             if engine.get(&tree, &mark_key).await?.is_none() {
-                let commit = self.load_commit_object(id).await?.commit;
+                let commit = self.load_commit_object_with_pack(id).await?.commit;
                 mutations.push(Mutation::Upsert {
                     key: mark_key,
                     val: Vec::new(),
@@ -7834,6 +8143,34 @@ fn decode_retention_pin_tag(tag: &str) -> Result<Option<String>> {
     })
 }
 
+fn staged_put(
+    key: Vec<u8>,
+    bytes: Vec<u8>,
+    headers: ObjectHeaders,
+    user_metadata: BTreeMap<String, String>,
+    binding: crate::PayloadBinding,
+) -> StagedMutation {
+    let size = bytes.len() as u64;
+    let checksum_md5: [u8; 16] = Md5::digest(&bytes).into();
+    let checksum_sha256: [u8; 32] = Sha256::digest(&bytes).into();
+    StagedMutation {
+        body: StagedMutationBody::Put(Box::new(StagedPut {
+            key,
+            size,
+            logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
+            checksums: Checksums {
+                md5: Some(checksum_md5),
+                sha256: Some(checksum_sha256),
+                algorithm_values: BTreeMap::new(),
+            },
+            headers,
+            user_metadata,
+            tags: BTreeMap::new(),
+            binding,
+        })),
+    }
+}
+
 fn validate_options(options: &RepositoryOptions) -> Result<()> {
     crate::repository::validate_branch(&options.default_branch)?;
     options.idempotency_retention.validate()?;
@@ -7966,7 +8303,7 @@ fn gc_managed_kind(prefix: &str, path: &ObjectPath) -> Option<&'static str> {
         Some("commits")
     } else if relative.starts_with("nodes/sha256/") {
         Some("nodes")
-    } else if relative.starts_with("payloads/") {
+    } else if relative.starts_with("payloads/") || relative.starts_with("payload-packs/") {
         Some("payloads")
     } else {
         None

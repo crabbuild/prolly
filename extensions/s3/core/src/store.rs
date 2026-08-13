@@ -45,6 +45,9 @@ struct PackedNodeState {
     cache_corruptions: AtomicU64,
     coalesced_waits: AtomicU64,
     ranged_fetches: AtomicU64,
+    fetched_bytes: AtomicU64,
+    avoided_bytes: AtomicU64,
+    admission_rejections: AtomicU64,
     locator: RwLock<Option<Arc<dyn NodeLocator>>>,
 }
 
@@ -59,6 +62,9 @@ struct DirectNodeState {
     cache_corruptions: AtomicU64,
     coalesced_waits: AtomicU64,
     object_fetches: AtomicU64,
+    fetched_bytes: AtomicU64,
+    avoided_bytes: AtomicU64,
+    admission_rejections: AtomicU64,
 }
 
 struct BoundedNodeLocations {
@@ -135,6 +141,9 @@ pub struct NodeCacheSnapshot {
     pub corruptions: u64,
     pub coalesced_waits: u64,
     pub ranged_fetches: u64,
+    pub fetched_bytes: u64,
+    pub avoided_bytes: u64,
+    pub admission_rejections: u64,
 }
 
 impl NodeCacheSnapshot {
@@ -147,6 +156,11 @@ impl NodeCacheSnapshot {
             corruptions: self.corruptions.saturating_add(other.corruptions),
             coalesced_waits: self.coalesced_waits.saturating_add(other.coalesced_waits),
             ranged_fetches: self.ranged_fetches.saturating_add(other.ranged_fetches),
+            fetched_bytes: self.fetched_bytes.saturating_add(other.fetched_bytes),
+            avoided_bytes: self.avoided_bytes.saturating_add(other.avoided_bytes),
+            admission_rejections: self
+                .admission_rejections
+                .saturating_add(other.admission_rejections),
         }
     }
 }
@@ -274,6 +288,9 @@ impl<P> ProllyObjectStore<P> {
                 cache_corruptions: AtomicU64::new(0),
                 coalesced_waits: AtomicU64::new(0),
                 ranged_fetches: AtomicU64::new(0),
+                fetched_bytes: AtomicU64::new(0),
+                avoided_bytes: AtomicU64::new(0),
+                admission_rejections: AtomicU64::new(0),
                 locator: RwLock::new(None),
             })),
             packed_pending: Some(Arc::new(RwLock::new(BTreeMap::new()))),
@@ -308,6 +325,9 @@ impl<P> ProllyObjectStore<P> {
                 cache_corruptions: AtomicU64::new(0),
                 coalesced_waits: AtomicU64::new(0),
                 object_fetches: AtomicU64::new(0),
+                fetched_bytes: AtomicU64::new(0),
+                avoided_bytes: AtomicU64::new(0),
+                admission_rejections: AtomicU64::new(0),
             })),
             write_direct: true,
         }
@@ -403,6 +423,9 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 corruptions: state.cache_corruptions.load(Ordering::Relaxed),
                 coalesced_waits: state.coalesced_waits.load(Ordering::Relaxed),
                 ranged_fetches: state.ranged_fetches.load(Ordering::Relaxed),
+                fetched_bytes: state.fetched_bytes.load(Ordering::Relaxed),
+                avoided_bytes: state.avoided_bytes.load(Ordering::Relaxed),
+                admission_rejections: state.admission_rejections.load(Ordering::Relaxed),
             };
         }
         if let Some(state) = &self.direct {
@@ -414,6 +437,9 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 corruptions: state.cache_corruptions.load(Ordering::Relaxed),
                 coalesced_waits: state.coalesced_waits.load(Ordering::Relaxed),
                 ranged_fetches: state.object_fetches.load(Ordering::Relaxed),
+                fetched_bytes: state.fetched_bytes.load(Ordering::Relaxed),
+                avoided_bytes: state.avoided_bytes.load(Ordering::Relaxed),
+                admission_rejections: state.admission_rejections.load(Ordering::Relaxed),
             };
         }
         NodeCacheSnapshot::default()
@@ -566,6 +592,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         Ok(())
     }
 
+    #[allow(dead_code)] // Retained for offline callers that already hold a complete object.
     pub(crate) fn register_commit_object(
         &self,
         container: CommitId,
@@ -580,6 +607,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         )
     }
 
+    #[allow(dead_code)]
     fn register_node_pack(
         &self,
         container: PackedCommitId,
@@ -725,6 +753,9 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         match cache.get(&key).await {
             Ok(Some(bytes)) if sha256(&bytes).as_slice() == cid.as_bytes() => {
                 state.cache_hits.fetch_add(1, Ordering::Relaxed);
+                state
+                    .avoided_bytes
+                    .fetch_add(bytes.len() as u64, Ordering::Relaxed);
                 Some(bytes)
             }
             Ok(Some(_)) => {
@@ -762,6 +793,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             return;
         };
         if !cache.admits(&key, bytes.len()) {
+            state.admission_rejections.fetch_add(1, Ordering::Relaxed);
             return;
         }
         match cache.insert(key, bytes).await {
@@ -862,6 +894,9 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             })
             .await?
             .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "node pack is missing"))?;
+        state
+            .fetched_bytes
+            .fetch_add(object.bytes.len() as u64, Ordering::Relaxed);
         if object.bytes.len() != location.len as usize
             || sha256(&object.bytes) != location.sha256
             || cid.as_bytes() != location.sha256
@@ -889,6 +924,9 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         match state.node_cache.get(&key).await {
             Ok(Some(bytes)) if sha256(&bytes).as_slice() == cid.as_bytes() => {
                 state.cache_hits.fetch_add(1, Ordering::Relaxed);
+                state
+                    .avoided_bytes
+                    .fetch_add(bytes.len() as u64, Ordering::Relaxed);
                 Some(bytes)
             }
             Ok(Some(_)) => {
@@ -923,6 +961,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
             return;
         };
         if !state.node_cache.admits(&key, bytes.len()) {
+            state.admission_rejections.fetch_add(1, Ordering::Relaxed);
             return;
         }
         match state.node_cache.insert(key, bytes).await {
@@ -971,6 +1010,9 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         state.object_fetches.fetch_add(1, Ordering::Relaxed);
         let bytes = self.get_uncached_direct(key).await?;
         if let Some(bytes) = &bytes {
+            state
+                .fetched_bytes
+                .fetch_add(bytes.len() as u64, Ordering::Relaxed);
             self.admit_direct_node(cid, bytes.clone()).await;
         }
         Ok(bytes)

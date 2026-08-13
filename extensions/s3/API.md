@@ -78,8 +78,11 @@ provider profile. Use a stable workload identity for `writer`.
 - `delete_object` publishes one delete marker.
 - `delete_objects` publishes many delete markers atomically.
 
-One logical file is one immutable payload object. The client deliberately does
-not chunk or multipart a logical file.
+A standalone or larger logical file is one immutable content-addressed payload
+object. Bulk staging combines non-empty files up to 4 KiB into deterministic
+immutable segments capped at 4 MiB. Tree bindings carry each logical checksum
+and inclusive extent, and reads use byte ranges; empty and larger files retain
+the direct representation.
 
 ### Reads
 
@@ -93,6 +96,9 @@ not chunk or multipart a logical file.
 - `list_objects` returns `(snapshot, objects, truncated)`.
 - `list_objects_at` holds the supplied snapshot stable across pages.
 - `list_objects_delimited` returns objects plus S3-style common prefixes.
+- `list_objects_page` returns a snapshot-bound opaque cursor and resumes with a
+  direct tree seek; `stream_objects` lazily consumes those pages with bounded
+  memory.
 - `list_object_versions` lists versions for one logical key.
 - `list_versions_prefix` and `list_versions_at` scan version history across a
   logical key prefix.
@@ -103,8 +109,12 @@ When an object listing is truncated, pass the last returned logical key as
 
 ## Atomic commit sessions and bulk writes
 
-`put_objects` is the concise bulk path. It divides `PutObjectInput` values
-into durable atomic batches and returns one receipt per published batch.
+`put_objects` is the concise in-memory bulk path. It divides `PutObjectInput`
+values into durable atomic batches, uploads each checkpoint window with bounded
+concurrency, and returns one receipt per published batch. `put_object_stream`
+accepts a fallible `Stream` plus `BulkWriteOptions` for bounded-memory ingestion
+from an unbounded source. Completed checkpoint windows remain resumable after
+cancellation or a source/object failure.
 
 For explicit control, call `begin_commit`. `CommitSessionBuilder` supports:
 

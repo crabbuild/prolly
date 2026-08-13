@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, VecDeque},
     io::Write as _,
     str::FromStr as _,
     sync::{Arc, Mutex},
@@ -7,6 +7,7 @@ use std::{
 };
 
 use aws_sdk_s3::primitives::ByteStream;
+use futures_util::{stream, Stream, StreamExt};
 use md5::Md5;
 use prolly_s3_core::{
     BackupVerificationCursor, BackupVerificationPage, BatchId, BranchCatalogPage, BranchHead,
@@ -14,11 +15,11 @@ use prolly_s3_core::{
     CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCursor, FsckPage, GcCursor,
     GcPage, HistoryCursor, HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage,
     JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
-    MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage,
-    MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor,
-    MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor,
-    ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion, OperationId,
-    OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
+    ListObjectsPage, MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor,
+    MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage,
+    MergeCursor, MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff,
+    ObjectDiffCursor, ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion,
+    OperationId, OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
     ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
     RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
@@ -82,6 +83,27 @@ pub struct PutObjectInput {
     pub bytes: Vec<u8>,
     pub headers: ObjectHeaders,
     pub user_metadata: BTreeMap<String, String>,
+}
+
+/// Bounded resource controls for [`Client::put_object_stream`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BulkWriteOptions {
+    /// Maximum logical mutations published by one atomic commit.
+    pub batch_size: usize,
+    /// Maximum payload uploads in flight at once.
+    pub concurrency: usize,
+    /// Successfully staged mutations durably checkpointed as one window.
+    pub checkpoint_every: usize,
+}
+
+impl Default for BulkWriteOptions {
+    fn default() -> Self {
+        Self {
+            batch_size: 10_000,
+            concurrency: 32,
+            checkpoint_every: 1_000,
+        }
+    }
 }
 
 /// A revision accepted by [`Client::checkout`].
@@ -870,6 +892,29 @@ impl Client {
         objects: Vec<PutObjectInput>,
         batch_size: usize,
     ) -> Result<Vec<CommitReceipt>> {
+        self.put_object_stream(
+            stream::iter(objects.into_iter().map(Ok)),
+            BulkWriteOptions {
+                batch_size,
+                checkpoint_every: batch_size.min(1_000),
+                ..BulkWriteOptions::default()
+            },
+        )
+        .await
+    }
+
+    /// Consume a fallible object stream using bounded memory and concurrent
+    /// payload uploads. Each checkpoint window is fully resolved before its
+    /// canonical mutation metadata is saved, so cancellation or a staging
+    /// failure leaves the last completed window resumable by batch ID.
+    pub async fn put_object_stream<S>(
+        &self,
+        objects: S,
+        options: BulkWriteOptions,
+    ) -> Result<Vec<CommitReceipt>>
+    where
+        S: Stream<Item = Result<PutObjectInput>> + Send,
+    {
         self.ensure_provider_qualified()?;
         self.attached_branch()?;
         let max = self
@@ -877,33 +922,89 @@ impl Client {
             .format()
             .canonical_limits
             .max_mutations_per_commit as usize;
-        if batch_size == 0 || batch_size > max {
+        if options.batch_size == 0 || options.batch_size > max {
             return Err(invalid(
-                "put_objects batch size exceeds the canonical mutation limit",
+                "bulk-write batch size exceeds the canonical mutation limit",
             ));
         }
+        if options.concurrency == 0 || options.concurrency > 1_024 {
+            return Err(invalid("bulk-write concurrency must be 1..=1024"));
+        }
+        if options.checkpoint_every == 0 || options.checkpoint_every > options.batch_size {
+            return Err(invalid(
+                "bulk-write checkpoint interval must be within the batch size",
+            ));
+        }
+
+        futures_util::pin_mut!(objects);
         let mut receipts = Vec::new();
-        let mut objects = objects.into_iter();
-        loop {
-            let batch = objects.by_ref().take(batch_size).collect::<Vec<_>>();
-            if batch.is_empty() {
-                break;
-            }
+        let mut next = objects.next().await.transpose()?;
+        while next.is_some() {
             let mut session = self
                 .begin_commit()
                 .message("bulk object write")
-                .checkpoint_every(batch_size.min(1_000))
+                .checkpoint_every(options.checkpoint_every)
                 .start()
                 .await?;
-            for object in batch {
-                session
-                    .put_object_with_metadata(
-                        object.key,
-                        object.bytes,
-                        object.headers,
-                        object.user_metadata,
+            let mut batch_items = 0_usize;
+            while batch_items < options.batch_size && next.is_some() {
+                let window_limit = options
+                    .checkpoint_every
+                    .min(options.batch_size - batch_items);
+                let mut window = Vec::with_capacity(window_limit);
+                while window.len() < window_limit {
+                    let Some(object) = next.take() else {
+                        break;
+                    };
+                    window.push(object);
+                    next = match objects.next().await {
+                        Some(Ok(object)) => Some(object),
+                        Some(Err(mut error)) => {
+                            session.checkpoint().await?;
+                            error.message = format!(
+                                "bulk input failed after {} staged objects: {}",
+                                session.staged_objects(),
+                                error.message
+                            );
+                            error.operation_id = Some(session.id().to_string());
+                            return Err(error);
+                        }
+                        None => None,
+                    };
+                }
+
+                batch_items = batch_items.saturating_add(window.len());
+                let staged = self
+                    .repository
+                    .stage_commit_session_put_batch(
+                        &session.manifest,
+                        window
+                            .into_iter()
+                            .map(|object| {
+                                (
+                                    object.key.into_bytes(),
+                                    object.bytes,
+                                    object.headers,
+                                    object.user_metadata,
+                                )
+                            })
+                            .collect(),
+                        options.concurrency,
                     )
-                    .await?;
+                    .await;
+                let staged = match staged {
+                    Ok(staged) => staged,
+                    Err(mut error) => {
+                        session.checkpoint().await?;
+                        error.message = format!("bulk payload staging failed: {}", error.message);
+                        error.operation_id = Some(session.id().to_string());
+                        return Err(error);
+                    }
+                };
+                for mutation in staged {
+                    session.insert_staged(mutation);
+                }
+                session.checkpoint().await?;
             }
             receipts.push(session.publish().await?);
         }
@@ -1074,6 +1175,74 @@ impl Client {
                     .await
             }
         }
+    }
+
+    pub async fn list_objects_page(
+        &self,
+        prefix: impl AsRef<str>,
+        continuation: Option<&str>,
+        limit: usize,
+    ) -> Result<ListObjectsPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_objects_page(
+                &self.branch,
+                prefix.as_ref().as_bytes(),
+                continuation,
+                limit,
+            )
+            .await
+    }
+
+    /// Lazily stream a snapshot-bound prefix listing. The first page captures
+    /// the branch snapshot; subsequent pages seek through its opaque cursor.
+    pub fn stream_objects(
+        &self,
+        prefix: impl Into<String>,
+        page_size: usize,
+    ) -> impl Stream<Item = Result<ObjectSummary>> + Send + 'static {
+        struct State {
+            client: Client,
+            prefix: String,
+            page_size: usize,
+            continuation: Option<String>,
+            buffered: VecDeque<ObjectSummary>,
+            complete: bool,
+        }
+        stream::try_unfold(
+            State {
+                client: self.clone(),
+                prefix: prefix.into(),
+                page_size,
+                continuation: None,
+                buffered: VecDeque::new(),
+                complete: false,
+            },
+            |mut state| async move {
+                loop {
+                    if let Some(object) = state.buffered.pop_front() {
+                        return Ok(Some((object, state)));
+                    }
+                    if state.complete {
+                        return Ok(None);
+                    }
+                    let page = state
+                        .client
+                        .list_objects_page(
+                            &state.prefix,
+                            state.continuation.as_deref(),
+                            state.page_size,
+                        )
+                        .await?;
+                    state.continuation = page.continuation;
+                    state.complete = state.continuation.is_none();
+                    state.buffered = page.objects.into();
+                    if state.buffered.is_empty() && state.complete {
+                        return Ok(None);
+                    }
+                }
+            },
+        )
     }
 
     pub async fn list_objects_delimited(
@@ -1455,6 +1624,11 @@ impl CommitSession {
         self.durable
     }
 
+    fn insert_staged(&mut self, staged: StagedMutation) {
+        self.staged.insert(staged.key().to_vec(), staged);
+        self.dirty_mutations = self.dirty_mutations.saturating_add(1);
+    }
+
     pub async fn put_object(&mut self, key: impl Into<String>, bytes: Vec<u8>) -> Result<()> {
         self.put_object_with_metadata(key, bytes, ObjectHeaders::default(), BTreeMap::new())
             .await
@@ -1479,7 +1653,7 @@ impl CommitSession {
                 metadata,
             )
             .await?;
-        self.staged.insert(staged.key().to_vec(), staged);
+        self.insert_staged(staged);
         self.mark_staged_and_checkpoint_if_due().await?;
         Ok(())
     }
@@ -1558,7 +1732,7 @@ impl CommitSession {
                 metadata,
             )
             .await?;
-        self.staged.insert(staged.key().to_vec(), staged);
+        self.insert_staged(staged);
         self.mark_staged_and_checkpoint_if_due().await?;
         Ok(())
     }
@@ -1622,7 +1796,6 @@ impl CommitSession {
     }
 
     async fn mark_staged_and_checkpoint_if_due(&mut self) -> Result<()> {
-        self.dirty_mutations = self.dirty_mutations.saturating_add(1);
         if self.durable && self.dirty_mutations >= self.checkpoint_every {
             self.checkpoint().await?;
         }

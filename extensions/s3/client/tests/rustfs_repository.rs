@@ -13,10 +13,10 @@ use aws_sdk_s3::{
 use futures_util::{stream, StreamExt};
 use prolly_s3_client::{
     core::{
-        decode_canonical, encode_canonical, LogicalObjectVersionKind, MergeCursor, MergePhase,
-        MergePolicy, ProviderPerKeyVersionLimit,
+        decode_canonical, encode_canonical, BatchId, Error, ErrorCode, LogicalObjectVersionKind,
+        MergeCursor, MergePhase, MergePolicy, ProviderPerKeyVersionLimit,
     },
-    CheckoutRef, Client, HmacAttestationSigner, ProviderIdentity,
+    BulkWriteOptions, CheckoutRef, Client, HmacAttestationSigner, ProviderIdentity, PutObjectInput,
 };
 
 fn rustfs_enabled() -> bool {
@@ -812,6 +812,297 @@ async fn rustfs_over_limit_index_rebuild_resumes_from_canonical_cursor() {
         .unwrap();
     assert!(replay.idempotent_replay);
     assert_eq!(replay.id, original.id);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn rustfs_streaming_bulk_write_is_bounded_batched_and_ordered() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+    let (aws, bucket) = rustfs_client().await;
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("streaming-bulk-write"))
+        .writer("rustfs-streaming-bulk-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+
+    let objects = stream::iter((0..257).map(|index| {
+        Ok(PutObjectInput {
+            key: format!("stream/{index:04}.txt"),
+            bytes: format!("value-{index}").into_bytes(),
+            headers: Default::default(),
+            user_metadata: Default::default(),
+        })
+    }));
+    let receipts = client
+        .put_object_stream(
+            objects,
+            BulkWriteOptions {
+                batch_size: 128,
+                concurrency: 16,
+                checkpoint_every: 32,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(receipts.len(), 3);
+    assert_eq!(
+        receipts
+            .iter()
+            .map(|receipt| receipt.changed_keys)
+            .collect::<Vec<_>>(),
+        vec![128, 128, 1]
+    );
+    let (_, first) = client
+        .head_object("stream/0000.txt")
+        .await
+        .unwrap()
+        .unwrap();
+    let (_, second) = client
+        .head_object("stream/0001.txt")
+        .await
+        .unwrap()
+        .unwrap();
+    let first_binding = first.version.binding.unwrap();
+    let second_binding = second.version.binding.unwrap();
+    assert!(first_binding.is_packed());
+    assert_eq!(first_binding.path, second_binding.path);
+    assert_ne!(first_binding.pack_range, second_binding.pack_range);
+    assert_eq!(
+        client
+            .get_object_range(receipts[0].id, "stream/0000.txt", 0..=u64::MAX)
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"value-0"
+    );
+    for index in [0, 31, 127, 128, 255, 256] {
+        assert_eq!(
+            client
+                .get_object(format!("stream/{index:04}.txt"))
+                .await
+                .unwrap()
+                .unwrap()
+                .bytes,
+            format!("value-{index}").as_bytes()
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn rustfs_streaming_bulk_failure_preserves_completed_checkpoint() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+    let (aws, bucket) = rustfs_client().await;
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("streaming-bulk-resume"))
+        .writer("rustfs-streaming-resume-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+
+    let objects = stream::iter((0..40).map(|index| {
+        if index == 37 {
+            Err(Error::new(ErrorCode::Transport, "upstream source failed"))
+        } else {
+            Ok(PutObjectInput {
+                key: format!("resume/{index:04}.txt"),
+                bytes: vec![index as u8],
+                headers: Default::default(),
+                user_metadata: Default::default(),
+            })
+        }
+    }));
+    let error = client
+        .put_object_stream(
+            objects,
+            BulkWriteOptions {
+                batch_size: 128,
+                concurrency: 8,
+                checkpoint_every: 16,
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::Transport);
+    assert!(error.message.contains("after 32 staged objects"));
+    let batch: BatchId = error.operation_id.unwrap().parse().unwrap();
+    let resumed = client.resume_commit(batch).await.unwrap();
+    assert_eq!(resumed.staged_objects(), 32);
+    let receipt = resumed.publish().await.unwrap();
+    assert_eq!(receipt.changed_keys, 32);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+#[ignore = "10K tiny-file RustFS throughput release gate"]
+async fn rustfs_streaming_bulk_exceeds_500_files_per_second() {
+    assert!(rustfs_enabled(), "set PROLLY_S3_RUSTFS=1 to run");
+    const FILES: usize = 10_000;
+    let (aws, bucket) = rustfs_client().await;
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("streaming-bulk-throughput"))
+        .writer("rustfs-streaming-throughput-writer")
+        .authority_lease_duration(Duration::from_secs(600))
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    let objects = stream::iter((0..FILES).map(|index| {
+        Ok(PutObjectInput {
+            key: format!("tiny/{index:05}.txt"),
+            bytes: format!("{index:016x}").into_bytes(),
+            headers: Default::default(),
+            user_metadata: Default::default(),
+        })
+    }));
+    client.reset_s3_operation_metrics();
+    let started = std::time::Instant::now();
+    let receipts = client
+        .put_object_stream(objects, BulkWriteOptions::default())
+        .await
+        .unwrap();
+    let elapsed = started.elapsed();
+    let throughput = FILES as f64 / elapsed.as_secs_f64();
+    let metrics = client.reset_s3_operation_metrics();
+    eprintln!(
+        "RUSTFS_STREAMING_BULK files={FILES} wall_ms={} files_per_second={throughput:.2} s3_calls={} uploaded_bytes={}",
+        elapsed.as_millis(),
+        metrics.total_calls(),
+        metrics.uploaded_body_bytes,
+    );
+    assert_eq!(receipts.len(), 1);
+    assert!(
+        throughput >= 500.0,
+        "throughput was {throughput:.2} files/s"
+    );
+    assert!(
+        metrics.put_object < 100,
+        "packing should require fewer than 100 physical PUTs: {metrics:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+#[ignore = "10K warm-read and cursor-listing RustFS release gate"]
+async fn rustfs_warm_reads_and_cursor_listing_meet_scale_slos() {
+    assert!(rustfs_enabled(), "set PROLLY_S3_RUSTFS=1 to run");
+    const FILES: usize = 10_000;
+    const READS: usize = 100;
+    let (aws, bucket) = rustfs_client().await;
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("read-list-performance"))
+        .writer("rustfs-read-list-writer")
+        .authority_lease_duration(Duration::from_secs(600))
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .background_index_maintenance(false)
+        .initialize()
+        .await
+        .unwrap();
+    client
+        .put_object_stream(
+            stream::iter((0..FILES).map(|index| {
+                Ok(PutObjectInput {
+                    key: format!("tiny/{index:05}.txt"),
+                    bytes: format!("{index:016x}").into_bytes(),
+                    headers: Default::default(),
+                    user_metadata: Default::default(),
+                })
+            })),
+            BulkWriteOptions::default(),
+        )
+        .await
+        .unwrap();
+    client.advance_branch_indexes().await.unwrap();
+
+    let sample = (0..READS)
+        .map(|index| index * (FILES / READS))
+        .collect::<Vec<_>>();
+    for index in &sample {
+        client
+            .get_object(format!("tiny/{index:05}.txt"))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+    client.reset_s3_operation_metrics();
+    let mut latencies = stream::iter(sample)
+        .map(|index| {
+            let client = client.clone();
+            async move {
+                let started = std::time::Instant::now();
+                let object = client
+                    .get_object(format!("tiny/{index:05}.txt"))
+                    .await
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(object.bytes, format!("{index:016x}").as_bytes());
+                started.elapsed()
+            }
+        })
+        .buffer_unordered(32)
+        .collect::<Vec<_>>()
+        .await;
+    latencies.sort_unstable();
+    let p99 = latencies[(latencies.len() * 99).div_ceil(100) - 1];
+    let read_metrics = client.reset_s3_operation_metrics();
+    eprintln!(
+        "RUSTFS_WARM_READS reads={READS} p99_ms={:.2} downloaded_bytes={} bytes_per_read={:.2} s3_calls={}",
+        p99.as_secs_f64() * 1_000.0,
+        read_metrics.downloaded_body_bytes,
+        read_metrics.downloaded_body_bytes as f64 / READS as f64,
+        read_metrics.total_calls(),
+    );
+    assert!(p99 < Duration::from_millis(100), "warm p99 was {p99:?}");
+    assert!(
+        read_metrics.downloaded_body_bytes < 4 * 1024 * 1024,
+        "warm reads transferred too much metadata: {read_metrics:?}"
+    );
+
+    client.reset_s3_operation_metrics();
+    let started = std::time::Instant::now();
+    let listed = client
+        .stream_objects("tiny/", 1_000)
+        .collect::<Vec<_>>()
+        .await;
+    for object in &listed {
+        object.as_ref().unwrap();
+    }
+    let elapsed = started.elapsed();
+    let throughput = listed.len() as f64 / elapsed.as_secs_f64();
+    let list_metrics = client.reset_s3_operation_metrics();
+    eprintln!(
+        "RUSTFS_CURSOR_LIST files={} wall_ms={} files_per_second={throughput:.2} downloaded_bytes={} s3_calls={} put_calls={}",
+        listed.len(),
+        elapsed.as_millis(),
+        list_metrics.downloaded_body_bytes,
+        list_metrics.total_calls(),
+        list_metrics.put_object,
+    );
+    assert_eq!(listed.len(), FILES);
+    assert!(throughput > 10_000.0, "listing achieved {throughput:.2}/s");
+    assert_eq!(list_metrics.put_object, 0, "foreground listing wrote data");
 }
 
 /// Reproducible release gate for the same-branch publication lane.

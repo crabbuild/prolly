@@ -106,8 +106,11 @@ assert_eq!(current.bytes, b"second revision\n");
 assert_eq!(historical.bytes, b"first revision\n");
 ```
 
-A write uploads one whole payload. It does not split a 64 KiB or larger file
-into chunks. The content-addressed key deduplicates identical bytes.
+A standalone write uploads one whole content-addressed payload. Bulk ingestion
+packs non-empty files up to 4 KiB into immutable segments capped at 4 MiB;
+logical bindings retain checksums and byte extents, while empty and larger
+files keep the direct representation. Identical bytes in a segment share one
+extent, and replaying the same segment reuses its content-addressed object.
 
 For safe retries, generate and persist one operation ID:
 
@@ -156,7 +159,7 @@ For a disposable job, add `.ephemeral()`. That removes checkpoint requests
 but cannot recover process-local staged metadata after a crash.
 
 For a collection already in memory, `put_objects` creates durable batches
-for you:
+for you. Payload uploads use bounded concurrency by default:
 
 ```rust
 use prolly_s3_client::PutObjectInput;
@@ -173,6 +176,30 @@ let receipts = client
     )
     .await?;
 ```
+
+For an unbounded or fallible source, pass a `Stream` so memory stays bounded
+by one checkpoint window:
+
+```rust
+use prolly_s3_client::{BulkWriteOptions, PutObjectInput};
+
+let receipts = client
+    .put_object_stream(
+        incoming_objects, // Stream<Item = prolly_s3_client::Result<PutObjectInput>>
+        BulkWriteOptions {
+            batch_size: 10_000,
+            concurrency: 32,
+            checkpoint_every: 1_000,
+        },
+    )
+    .await?;
+```
+
+Completed windows are durably checkpointed. On an input or per-object staging
+failure, the error's `operation_id` contains the resumable batch ID and its
+message identifies the failed object or completed checkpoint size. Dropping the
+future cancels in-flight work; the last completed remote checkpoint remains
+available to `resume_commit`.
 
 ## List files and versions
 
@@ -195,6 +222,25 @@ loop {
 let (_head, versions) =
     client.list_object_versions("documents/readme.txt", 100).await?;
 ```
+
+For large scans, prefer the snapshot-bound cursor or streaming APIs:
+
+```rust
+use futures_util::StreamExt;
+
+let mut objects = client.stream_objects("incoming/", 1_000);
+while let Some(object) = objects.next().await {
+    consume(object?);
+}
+```
+
+`list_objects_page` returns an opaque continuation that seeks directly into the
+same immutable snapshot. A continuation is bound to its repository, branch,
+and prefix and cannot be reused for another query. Hold a retention pin on the
+returned snapshot if traversal may overlap garbage collection. Disable
+`background_index_maintenance` on a dedicated measurement client when provider
+telemetry must attribute only foreground reads; foreground listing itself never
+writes index state.
 
 ## Branch and merge
 
@@ -411,7 +457,8 @@ while gc.phase != GcPhase::Complete {
 }
 ```
 
-The collector sweeps only immutable commit, direct-node, and payload objects.
+The collector sweeps only immutable commit, direct-node, direct-payload, and
+payload-pack objects.
 It never sweeps mutable refs, derived indexes, publication journals, format
 markers, or administration data. Branch and tag updates during an epoch write
 dirty-root records before their CAS; sweep batches fence publication and catch
@@ -457,13 +504,15 @@ from cache admission and continue to use the provider fallback.
 
 Use `prewarm_node_cache(snapshot)` during startup to traverse both state trees.
 Use `node_cache_snapshot()` before and after to observe hits, misses,
-insertions, corruptions, coalesced waits, and ranged fetches.
+insertions, corruptions, coalesced waits, ranged fetches, fetched and avoided
+bytes, and admission rejections.
 
 ## Performance model
 
 - A single-file write uploads one payload and publishes immutable metadata.
-- A batch uploads one payload per changed file, then amortizes tree and
-  publication requests across the batch.
+- A tiny-file batch uploads one payload pack per segment; direct payloads use
+  bounded parallel uploads. Tree and publication requests are amortized across
+  the batch.
 - A current or historical read resolves a ref/commit/tree path and one payload.
 - Warm immutable-node caches remove most repeated metadata reads.
 - Same-branch writers contend on one ref CAS; different branches publish
