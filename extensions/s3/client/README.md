@@ -282,9 +282,38 @@ while !verify.complete {
 }
 ```
 
-`start_clone_from`, `start_fetch_from`, and `start_push_to` use this same
-restartable logical-snapshot transfer. They intentionally do not claim to copy
-the source commit DAG.
+The existing `start_clone_from`, `start_fetch_from`, and `start_push_to`
+methods remain snapshot-only aliases for compatibility. Use their `history_`
+variants when commit topology matters:
+
+```rust
+let source_head = source.head().await?;
+let expected_destination_head = destination.head().await?;
+let mut transfer = destination
+    .start_history_clone_from(
+        &source,
+        source_head,
+        expected_destination_head,
+    )
+    .await?;
+
+while !transfer.complete {
+    transfer = destination
+        .advance_history_transfer_from(&source, &transfer, 1_000)
+        .await?
+        .cursor;
+    // Persist `transfer` here so the job can resume after a restart.
+}
+
+destination
+    .publish_history_transfer(&transfer, "publish imported history")
+    .await?;
+```
+
+History transfer walks the full source commit DAG parent-first, recreates each
+commit with destination-local payload bindings, preserves merge topology, and
+records the source-to-destination commit mapping. Commit IDs necessarily
+change because repository identity and provider bindings are different.
 
 Retention pins are durable tag-backed roots:
 
@@ -347,8 +376,9 @@ latency or cost claim substitutes for AWS qualification.
 - Concurrent writes to one branch can conflict; batch related changes.
 - Retention pins exist, but an online immutable-object sweep still requires a
   publication-epoch barrier; no unsafe concurrent GC sweep is exposed.
-- Cross-repository clone/fetch/push currently transfers and verifies logical
-  snapshots, not the source commit DAG or reflog identity.
+- Snapshot clone/fetch/push preserves only the selected logical state. The
+  `history_` variants preserve the source commit DAG, but not source commit IDs
+  or reflog identity.
 - “Millions or billions” requires provider quota, cache, latency, cost,
   throttling, and hot-branch qualification at the intended workload.
 

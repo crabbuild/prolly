@@ -16,26 +16,29 @@ use sha2::Sha256;
 use crate::merge::{MergeBaseCandidate, MergePlanEntry, MergeQueueEntry, MergeSeenEntry};
 use crate::publication::BranchMovement;
 use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
+use crate::transfer::{commit_mapping_key, version_mapping_key};
 use crate::{
     decode_canonical, encode_canonical, tree_format_digest, AuthorityPermit, AuthorityScope,
     BucketCommit, BucketDelta, BucketState, CanonicalLimits, Checksums, Clock, CommitGeneration,
     CommitId, CommitObject, CommitPublication, CommitSessionCheckpoint, CommitSessionCleanupReport,
     CommitSessionManifest, CommitSessionState, CommitSessionStore, CompareExchange,
-    CompareExchangeOutcome, CurrentObject, DeleteOutcome, Error, ErrorCode, GetRequest, IdSource,
-    IdempotencyRetention, ImmutablePayloadStore, InitializationIntent, JournalCommitGraphEntry,
-    JournalDerivedIndexes, JournalIndexAdvanceReport, JournalIndexRebuildCleanup,
-    JournalIndexRebuildCursor, JournalIndexRebuildPhase, JournalIndexRebuildStep, ListRequest,
-    LoadedRef, LogicalObjectVersionBody, LogicalObjectVersionKind, MemoryNodeCache,
-    MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChange, MergeChangeCursor,
-    MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflict, MergeConflictCursor,
-    MergeConflictPage, MergeCursor, MergePhase, MergePolicy, MergeReceipt, MutationIdentity,
-    NodeCache, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransition, ObjectVersion,
-    ObjectVersionId, ObjectVersionOrder, OperationId, OperationIndexAdvanceReport,
-    OperationIndexRebuildCursor, OperationIndexRebuildStep, PhysicalVersion, ProllyObjectStore,
-    ProviderPerKeyVersionLimit, RandomIdSource, RefCatalogCursor, RefGeneration, RefKind,
-    RepositoryFormat, Result, RootManifest, SegmentedOperationIndex, ShardWriterAuthority,
-    ShardedBranchPublisher, ShardedRefCatalog, StagedMutation, StagedMutationBody, StagedPut,
-    SystemClock, TagStore, TakeoverRequest,
+    CompareExchangeOutcome, CurrentObject, DeleteOutcome, Error, ErrorCode, GetRequest,
+    HistoryTransferCursor, HistoryTransferPage, HistoryTransferPhase, HistoryTransferReport,
+    IdSource, IdempotencyRetention, ImmutablePayloadStore, InitializationIntent,
+    JournalCommitGraphEntry, JournalDerivedIndexes, JournalIndexAdvanceReport,
+    JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildPhase,
+    JournalIndexRebuildStep, ListRequest, LoadedRef, LogicalObjectVersionBody,
+    LogicalObjectVersionKind, MemoryNodeCache, MergeAdvancePage, MergeBaseCursor, MergeBasePage,
+    MergeChange, MergeChangeCursor, MergeChangePage, MergeCleanupCursor, MergeCleanupPage,
+    MergeConflict, MergeConflictCursor, MergeConflictPage, MergeCursor, MergePhase, MergePolicy,
+    MergeReceipt, MutationIdentity, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
+    ObjectTransition, ObjectVersion, ObjectVersionId, ObjectVersionOrder, OperationId,
+    OperationIndexAdvanceReport, OperationIndexRebuildCursor, OperationIndexRebuildStep,
+    PendingHistoryTransferCommit, PhysicalVersion, ProllyObjectStore, ProviderPerKeyVersionLimit,
+    RandomIdSource, RefCatalogCursor, RefGeneration, RefKind, RepositoryFormat, Result,
+    RootManifest, SegmentedOperationIndex, ShardWriterAuthority, ShardedBranchPublisher,
+    ShardedRefCatalog, StagedMutation, StagedMutationBody, StagedPut, SystemClock, TagStore,
+    TakeoverRequest,
 };
 
 #[derive(Clone)]
@@ -2899,6 +2902,251 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
+    /// Start a restartable logical transfer that preserves the complete source
+    /// commit DAG. Commit and object-version IDs are mapped because repository
+    /// identity, authority stamps, and provider bindings are destination-local.
+    pub async fn start_history_transfer_from<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        source_branch: &str,
+        source_head: CommitId,
+        destination_branch: &str,
+        expected_destination_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        validate_branch(source_branch)?;
+        validate_branch(destination_branch)?;
+        source.locator.register(source_branch)?;
+        source.require_branch_indexes_ready(source_branch).await?;
+        source.load_commit_object(source_head).await?;
+        self.locator.register(destination_branch)?;
+        self.require_branch_indexes_ready(destination_branch)
+            .await?;
+        if self.head(destination_branch).await? != expected_destination_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "destination head does not match history-transfer expectation",
+            ));
+        }
+        let job = self.options.ids.operation();
+        let mappings = self.history_transfer_mapping_engine(job)?.create();
+        let cursor = HistoryTransferCursor {
+            source_repository: source.format.repository_id,
+            destination_repository: self.format.repository_id,
+            job,
+            source_branch: source_branch.to_string(),
+            destination_branch: destination_branch.to_string(),
+            source_head,
+            expected_destination_head,
+            closure: source.start_commit_closure(&[source_head]).await?,
+            mappings: RootManifest::from_tree(&mappings)?,
+            pending: None,
+            mapped_head: None,
+            report: HistoryTransferReport::default(),
+            complete: false,
+        };
+        self.validate_history_transfer_cursor(source, &cursor)?;
+        Ok(cursor)
+    }
+
+    /// Advance a history transfer by bounded traversal or tree-mutation work.
+    /// Persist the returned cursor before discarding its predecessor.
+    pub async fn advance_history_transfer_from<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &HistoryTransferCursor,
+        max_steps: usize,
+    ) -> Result<HistoryTransferPage> {
+        if !(1..=1_000).contains(&max_steps) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "history-transfer page size must be between 1 and 1,000",
+            ));
+        }
+        self.validate_history_transfer_cursor(source, cursor)?;
+        if cursor.complete {
+            return Ok(HistoryTransferPage {
+                cursor: cursor.clone(),
+                traversal_steps: 0,
+                mutation_steps: 0,
+                imported_commits: 0,
+                complete: true,
+            });
+        }
+        if self.head(&cursor.destination_branch).await? != cursor.expected_destination_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "destination branch moved during history transfer",
+            ));
+        }
+        let mut next = cursor.clone();
+        if next.pending.is_none() {
+            let page = source
+                .commit_closure_page(&next.closure, max_steps, 1)
+                .await?;
+            let traversal_steps = page.steps;
+            let Some((source_id, source_commit)) = page.commits.into_iter().next() else {
+                next.closure = page.cursor;
+                if page.complete {
+                    if next.mapped_head.is_none() {
+                        return Err(Error::new(
+                            ErrorCode::MissingClosure,
+                            "history transfer completed without mapping its source head",
+                        ));
+                    }
+                    next.complete = true;
+                }
+                return Ok(HistoryTransferPage {
+                    complete: next.complete,
+                    cursor: next,
+                    traversal_steps,
+                    mutation_steps: 0,
+                    imported_commits: 0,
+                });
+            };
+            let mapping_engine = self.history_transfer_mapping_engine(next.job)?;
+            let mapping_tree = self.tree_from_root(&next.mappings)?;
+            let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
+            for parent in &source_commit.parents {
+                let encoded = mapping_engine
+                    .get(&mapping_tree, &commit_mapping_key(*parent))
+                    .await?
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::MissingClosure,
+                            "parent commit was not mapped before its child",
+                        )
+                    })?;
+                let hash: [u8; 32] = encoded.try_into().map_err(|_| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "mapped commit ID has wrong length",
+                    )
+                })?;
+                mapped_parents.push(CommitId::from_hash(hash));
+            }
+            let (objects, versions) = if let Some(first_parent) = mapped_parents.first() {
+                let parent = self.load_commit_object(*first_parent).await?.commit;
+                (parent.state.objects, parent.state.versions)
+            } else {
+                let engine = self.merge_state_engine();
+                (
+                    RootManifest::from_tree(&engine.create())?,
+                    RootManifest::from_tree(&engine.create())?,
+                )
+            };
+            let delta =
+                RootManifest::from_tree(&self.history_transfer_delta_engine(next.job)?.create())?;
+            next.pending = Some(PendingHistoryTransferCommit {
+                source: source_id,
+                next_closure: page.cursor,
+                mapped_parents,
+                objects,
+                versions,
+                delta,
+                phase: if source_commit.parents.len() > 1 {
+                    HistoryTransferPhase::UnionParentVersions
+                } else {
+                    HistoryTransferPhase::ApplyTransitions
+                },
+                union_parent_index: 1,
+                union_base: None,
+                union_diff: None,
+                inline_index: 0,
+                external_after: None,
+                transitions_applied: 0,
+            });
+            return Ok(HistoryTransferPage {
+                cursor: next,
+                traversal_steps,
+                mutation_steps: 0,
+                imported_commits: 0,
+                complete: false,
+            });
+        }
+        let phase = next
+            .pending
+            .as_ref()
+            .expect("pending transfer checked")
+            .phase;
+        let (mutation_steps, imported_commits) = match phase {
+            HistoryTransferPhase::UnionParentVersions => (
+                self.advance_history_transfer_union(&mut next, max_steps)
+                    .await?,
+                0,
+            ),
+            HistoryTransferPhase::ApplyTransitions => (
+                self.advance_history_transfer_transitions(source, &mut next, max_steps)
+                    .await?,
+                0,
+            ),
+            HistoryTransferPhase::FinalizeCommit => {
+                self.finalize_history_transfer_commit(source, &mut next)
+                    .await?;
+                (0, 1)
+            }
+        };
+        Ok(HistoryTransferPage {
+            complete: next.complete,
+            cursor: next,
+            traversal_steps: 0,
+            mutation_steps,
+            imported_commits,
+        })
+    }
+
+    /// Publish the mapped source head by an audited ref movement after every
+    /// source commit is durable at the destination.
+    pub async fn publish_history_transfer(
+        &self,
+        cursor: &HistoryTransferCursor,
+        reason: &str,
+    ) -> Result<RefMoveReceipt> {
+        if !cursor.complete || cursor.pending.is_some() {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "history transfer is not complete",
+            ));
+        }
+        let mapped = cursor
+            .mapped_head
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "mapped source head is absent"))?;
+        self.reset_branch(
+            &cursor.destination_branch,
+            mapped,
+            cursor.expected_destination_head,
+            reason,
+        )
+        .await
+    }
+
+    pub async fn history_transfer_mapping(
+        &self,
+        cursor: &HistoryTransferCursor,
+        source: CommitId,
+    ) -> Result<Option<crate::HistoryTransferMapping>> {
+        if cursor.destination_repository != self.format.repository_id || cursor.job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history-transfer cursor belongs to another destination",
+            ));
+        }
+        let engine = self.history_transfer_mapping_engine(cursor.job)?;
+        let tree = self.tree_from_root(&cursor.mappings)?;
+        let Some(encoded) = engine.get(&tree, &commit_mapping_key(source)).await? else {
+            return Ok(None);
+        };
+        let hash: [u8; 32] = encoded.try_into().map_err(|_| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "mapped commit ID has wrong length",
+            )
+        })?;
+        Ok(Some(crate::HistoryTransferMapping {
+            source,
+            destination: CommitId::from_hash(hash),
+        }))
+    }
+
     /// Start a logical source-assisted repair. Provider-specific bindings are
     /// never copied: payload bytes are verified by the source and rebound by
     /// the destination into new logical versions.
@@ -4873,6 +5121,484 @@ impl<P: ObjectPlane> Repository<P> {
         )))
     }
 
+    fn history_transfer_mapping_engine(
+        &self,
+        job: OperationId,
+    ) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history-transfer job ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new(
+            self.plane.clone(),
+            format!(
+                "{}/administration/transfer/{job}/mappings",
+                self.options.repository_prefix
+            ),
+        )))
+    }
+
+    fn history_transfer_delta_engine(
+        &self,
+        job: OperationId,
+    ) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history-transfer job ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new(
+            self.plane.clone(),
+            format!(
+                "{}/administration/transfer/{job}/delta",
+                self.options.repository_prefix
+            ),
+        )))
+    }
+
+    fn validate_history_transfer_cursor<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &HistoryTransferCursor,
+    ) -> Result<()> {
+        validate_branch(&cursor.source_branch)?;
+        validate_branch(&cursor.destination_branch)?;
+        source.validate_commit_closure_cursor(&cursor.closure)?;
+        if cursor.source_repository != source.format.repository_id
+            || cursor.destination_repository != self.format.repository_id
+            || cursor.job.is_nil()
+            || cursor.mappings.format_digest != tree_format_digest(&self.format.state_tree_format)?
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history-transfer cursor belongs to another repository pair",
+            ));
+        }
+        if let Some(pending) = &cursor.pending {
+            self.tree_from_root(&pending.objects)?;
+            self.tree_from_root(&pending.versions)?;
+            self.tree_from_root(&pending.delta)?;
+            if let Some(union_base) = &pending.union_base {
+                self.tree_from_root(union_base)?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn advance_history_transfer_union(
+        &self,
+        cursor: &mut HistoryTransferCursor,
+        max_steps: usize,
+    ) -> Result<usize> {
+        let mut pending = cursor.pending.take().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit is absent",
+            )
+        })?;
+        if pending.union_parent_index >= pending.mapped_parents.len() {
+            pending.phase = HistoryTransferPhase::ApplyTransitions;
+            cursor.pending = Some(pending);
+            return Ok(0);
+        }
+        let parent = self
+            .load_commit_object(pending.mapped_parents[pending.union_parent_index])
+            .await?
+            .commit;
+        let current_tree = self.tree_from_root(&pending.versions)?;
+        let union_base = pending
+            .union_base
+            .get_or_insert_with(|| pending.versions.clone())
+            .clone();
+        let base_tree = self.tree_from_root(&union_base)?;
+        let parent_tree = self.tree_from_root(&parent.state.versions)?;
+        let read_engine = self.engine(self.node_store.clone());
+        let page = read_engine
+            .structural_diff_page(
+                &base_tree,
+                &parent_tree,
+                pending.union_diff.as_ref(),
+                max_steps,
+            )
+            .await?;
+        let processed = page.diffs.len();
+        let mut mutations = Vec::new();
+        for diff in page.diffs {
+            match diff {
+                Diff::Added { key, val } => mutations.push(Mutation::Upsert { key, val }),
+                Diff::Removed { .. } => {}
+                Diff::Changed { .. } => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "mapped parent version trees disagree on an immutable version key",
+                    ));
+                }
+            }
+        }
+        let mut versions = current_tree;
+        if !mutations.is_empty() {
+            versions = self
+                .merge_state_engine()
+                .batch(&versions, mutations)
+                .await?;
+            pending.versions = RootManifest::from_tree(&versions)?;
+        }
+        pending.union_diff = page.next_cursor;
+        if pending.union_diff.is_none() {
+            pending.union_parent_index += 1;
+            pending.union_base = None;
+            if pending.union_parent_index >= pending.mapped_parents.len() {
+                pending.phase = HistoryTransferPhase::ApplyTransitions;
+            }
+        }
+        cursor.pending = Some(pending);
+        Ok(processed)
+    }
+
+    async fn advance_history_transfer_transitions<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &mut HistoryTransferCursor,
+        max_steps: usize,
+    ) -> Result<usize> {
+        let mut pending = cursor.pending.take().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit is absent",
+            )
+        })?;
+        let source_commit = source.load_commit_object(pending.source).await?.commit;
+        let mut transitions = Vec::new();
+        let mut complete = false;
+        if let Some(root) = &source_commit.delta.changes_root {
+            let tree = source.tree_from_root(root)?;
+            let engine = source.engine(source.node_store.clone());
+            let mut entries = match pending.external_after.as_deref() {
+                Some(after) => engine.range_after(&tree, after, None).await?,
+                None => engine.prefix(&tree, b"").await?,
+            };
+            while transitions.len() < max_steps {
+                let Some(entry) = entries.next().await else {
+                    complete = true;
+                    break;
+                };
+                let (key, encoded) = entry?;
+                let transition: ObjectTransition = decode_canonical(&encoded)?;
+                if transition.key != key {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "external transfer delta key disagrees with its transition",
+                    ));
+                }
+                pending.external_after = Some(key);
+                transitions.push(transition);
+            }
+        } else {
+            let start = pending.inline_index;
+            let end = start
+                .saturating_add(max_steps)
+                .min(source_commit.delta.changes.len());
+            transitions.extend_from_slice(&source_commit.delta.changes[start..end]);
+            pending.inline_index = end;
+            complete = end == source_commit.delta.changes.len();
+        }
+        let processed = transitions.len();
+        cursor.pending = Some(pending);
+        for transition in transitions {
+            self.import_history_transition(source, cursor, &source_commit, transition)
+                .await?;
+        }
+        let pending = cursor.pending.as_mut().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit disappeared",
+            )
+        })?;
+        if complete {
+            if pending.transitions_applied != source_commit.delta.logical_change_count() {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "history transfer did not consume the source commit delta exactly",
+                ));
+            }
+            pending.phase = HistoryTransferPhase::FinalizeCommit;
+        }
+        Ok(processed)
+    }
+
+    async fn import_history_transition<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &mut HistoryTransferCursor,
+        source_commit: &BucketCommit,
+        transition: ObjectTransition,
+    ) -> Result<()> {
+        let mut pending = cursor.pending.take().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit is absent",
+            )
+        })?;
+        let ordinal = u32::try_from(pending.transitions_applied).map_err(|_| {
+            Error::new(
+                ErrorCode::InvalidLimit,
+                "history-transfer mutation ordinal exceeds u32",
+            )
+        })?;
+        let source_version = if transition.delete_marker {
+            let versions = source.tree_from_root(&source_commit.state.versions)?;
+            let encoded = source
+                .engine(source.node_store.clone())
+                .get(
+                    &versions,
+                    &version_tree_key(
+                        &transition.key,
+                        ObjectVersionOrder {
+                            commit_generation: source_commit.generation,
+                            mutation_ordinal: ordinal,
+                        },
+                        transition.next,
+                    ),
+                )
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "source delete version is missing from its commit",
+                    )
+                })?;
+            decode_canonical::<ObjectVersion>(&encoded)?
+        } else {
+            let objects = source.tree_from_root(&source_commit.state.objects)?;
+            let encoded = source
+                .engine(source.node_store.clone())
+                .get(&objects, &transition.key)
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "source live version is missing from its commit",
+                    )
+                })?;
+            decode_canonical::<CurrentObject>(&encoded)?.version
+        };
+        source_version.validate()?;
+        if source_version.id != transition.next {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "source transition and object version disagree",
+            ));
+        }
+        let mapping_engine = self.history_transfer_mapping_engine(cursor.job)?;
+        let mut mapping_tree = self.tree_from_root(&cursor.mappings)?;
+        let mapped_version = if let Some(encoded) = mapping_engine
+            .get(&mapping_tree, &version_mapping_key(source_version.id))
+            .await?
+        {
+            let version: ObjectVersion = decode_canonical(&encoded)?;
+            version.validate()?;
+            version
+        } else {
+            let binding = match &source_version.body.kind {
+                LogicalObjectVersionKind::Live { size, .. } => {
+                    let source_binding = source_version.binding.as_ref().ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::CorruptCommit,
+                            "source live version has no payload binding",
+                        )
+                    })?;
+                    let bytes = source.payloads.get(source_binding).await?;
+                    if bytes.len() as u64 != *size {
+                        return Err(Error::new(
+                            ErrorCode::ChecksumMismatch,
+                            "source payload length disagrees with its logical version",
+                        ));
+                    }
+                    cursor.report.copied_payloads = checked_fsck_add(
+                        cursor.report.copied_payloads,
+                        1,
+                        "history-transfer-payload",
+                    )?;
+                    cursor.report.copied_payload_bytes = checked_fsck_add(
+                        cursor.report.copied_payload_bytes,
+                        *size,
+                        "history-transfer-payload-byte",
+                    )?;
+                    Some(self.payloads.put(bytes).await?)
+                }
+                LogicalObjectVersionKind::DeleteMarker => None,
+            };
+            let version = ObjectVersion::derive(
+                self.format.repository_id,
+                &transition.key,
+                history_transfer_version_operation(self.format.repository_id, source_version.id),
+                source_version.body.clone(),
+                binding,
+            )?;
+            mapping_tree = mapping_engine
+                .put(
+                    &mapping_tree,
+                    version_mapping_key(source_version.id),
+                    encode_canonical(&version)?,
+                )
+                .await?;
+            cursor.mappings = RootManifest::from_tree(&mapping_tree)?;
+            cursor.report.rebound_versions = checked_fsck_add(
+                cursor.report.rebound_versions,
+                1,
+                "history-transfer-version",
+            )?;
+            version
+        };
+        let state_engine = self.merge_state_engine();
+        let mut objects = self.tree_from_root(&pending.objects)?;
+        let mut versions = self.tree_from_root(&pending.versions)?;
+        let previous = state_engine
+            .get(&objects, &transition.key)
+            .await?
+            .map(|encoded| decode_canonical::<CurrentObject>(&encoded))
+            .transpose()?
+            .map(|current| current.version.id);
+        if transition.delete_marker {
+            objects = state_engine.delete(&objects, &transition.key).await?;
+        } else {
+            objects = state_engine
+                .put(
+                    &objects,
+                    transition.key.clone(),
+                    encode_canonical(&CurrentObject {
+                        version: mapped_version.clone(),
+                    })?,
+                )
+                .await?;
+        }
+        versions = state_engine
+            .put(
+                &versions,
+                version_tree_key(
+                    &transition.key,
+                    mapped_version.body.order,
+                    mapped_version.id,
+                ),
+                encode_canonical(&mapped_version)?,
+            )
+            .await?;
+        let mapped_transition = ObjectTransition {
+            key: transition.key.clone(),
+            previous,
+            next: mapped_version.id,
+            delete_marker: transition.delete_marker,
+        };
+        let delta_engine = self.history_transfer_delta_engine(cursor.job)?;
+        let delta = delta_engine
+            .put(
+                &self.tree_from_root(&pending.delta)?,
+                transition.key,
+                encode_canonical(&mapped_transition)?,
+            )
+            .await?;
+        pending.objects = RootManifest::from_tree(&objects)?;
+        pending.versions = RootManifest::from_tree(&versions)?;
+        pending.delta = RootManifest::from_tree(&delta)?;
+        pending.transitions_applied =
+            pending.transitions_applied.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "history-transfer transition counter overflow",
+                )
+            })?;
+        cursor.pending = Some(pending);
+        Ok(())
+    }
+
+    async fn finalize_history_transfer_commit<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &mut HistoryTransferCursor,
+    ) -> Result<()> {
+        let pending = cursor.pending.take().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit is absent",
+            )
+        })?;
+        let source_commit = source.load_commit_object(pending.source).await?.commit;
+        let now = self.options.clock.now_millis()?;
+        let permit = self.active_permit(&cursor.destination_branch, now).await?;
+        self.authority.validate_active(&permit, now).await?;
+        let expected_generation = if pending.mapped_parents.is_empty() {
+            0
+        } else {
+            let mut newest = 0_u64;
+            for parent in &pending.mapped_parents {
+                newest = newest.max(self.load_commit_object(*parent).await?.commit.generation.0);
+            }
+            newest.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "transfer generation overflow")
+            })?
+        };
+        if source_commit.generation.0 != expected_generation {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "source commit generation does not match its mapped parents",
+            ));
+        }
+        let mut metadata = source_commit.metadata.clone();
+        metadata.insert(
+            "prolly.transfer.source_repository".to_string(),
+            source.format.repository_id.as_bytes().to_vec(),
+        );
+        metadata.insert(
+            "prolly.transfer.source_commit".to_string(),
+            pending.source.as_bytes().to_vec(),
+        );
+        let commit = BucketCommit {
+            state: BucketState {
+                objects: pending.objects,
+                versions: pending.versions,
+            },
+            parents: pending.mapped_parents,
+            generation: source_commit.generation,
+            delta: BucketDelta {
+                input_digest: crate::model::derive_input_digest(&[
+                    b"history-transfer",
+                    source.format.repository_id.as_bytes(),
+                    pending.source.as_bytes(),
+                    self.format.repository_id.as_bytes(),
+                ]),
+                changes: Vec::new(),
+                changes_root: (pending.transitions_applied != 0).then_some(pending.delta),
+                change_count: pending.transitions_applied,
+            },
+            node_pack: None,
+            authority: permit.stamp(),
+            author: self.options.writer.clone(),
+            message: source_commit.message,
+            created_at_millis: source_commit.created_at_millis,
+            metadata,
+        };
+        let destination = self.publisher.store_commit(&commit, None).await?;
+        let mapping_engine = self.history_transfer_mapping_engine(cursor.job)?;
+        let mapping_tree = mapping_engine
+            .put(
+                &self.tree_from_root(&cursor.mappings)?,
+                commit_mapping_key(pending.source),
+                destination.as_bytes().to_vec(),
+            )
+            .await?;
+        cursor.mappings = RootManifest::from_tree(&mapping_tree)?;
+        cursor.closure = pending.next_closure;
+        cursor.report.imported_commits =
+            checked_fsck_add(cursor.report.imported_commits, 1, "history-transfer-commit")?;
+        if pending.source == cursor.source_head {
+            cursor.mapped_head = Some(destination);
+        }
+        Ok(())
+    }
+
     fn validate_commit_closure_cursor(&self, cursor: &CommitClosureCursor) -> Result<()> {
         if cursor.repository != self.format.repository_id
             || cursor.traversal.is_nil()
@@ -5960,6 +6686,20 @@ fn checked_fsck_add(current: u64, add: u64, counter: &str) -> Result<u64> {
             format!("fsck {counter} counter overflow"),
         )
     })
+}
+
+fn history_transfer_version_operation(
+    repository: crate::RepositoryId,
+    source: ObjectVersionId,
+) -> OperationId {
+    let digest = crate::model::derive_input_digest(&[
+        b"history-transfer-version",
+        repository.as_bytes(),
+        source.as_bytes(),
+    ]);
+    let mut bytes = [0_u8; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    OperationId(uuid::Uuid::from_bytes(bytes))
 }
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {

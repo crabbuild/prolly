@@ -18,6 +18,7 @@ mod repository;
 mod runtime;
 mod store;
 mod tag;
+mod transfer;
 
 pub use authority::{
     AuthorityLease, AuthorityLeaseState, AuthorityPermit, AuthorityScope, AuthorityStamp,
@@ -72,3 +73,7 @@ pub use repository::{
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};
 pub use tag::{LoadedTag, TagStore};
+pub use transfer::{
+    HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage, HistoryTransferPhase,
+    HistoryTransferReport, PendingHistoryTransferCommit,
+};

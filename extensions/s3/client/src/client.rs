@@ -11,7 +11,8 @@ use prolly_s3_core::{
     BackupVerificationCursor, BackupVerificationPage, BatchId, BranchCatalogPage, BranchHead,
     BranchIndexAdvanceReport, BranchIndexHealth, CommitId, CommitPage, CommitReceipt,
     CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCursor, FsckPage,
-    HistoryCursor, JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
+    HistoryCursor, HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage,
+    JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
     MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage,
     MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor,
     MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor,
@@ -314,6 +315,60 @@ impl Client {
             .await
     }
 
+    pub async fn start_history_transfer_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        self.ensure_provider_qualified()?;
+        source.ensure_provider_qualified()?;
+        self.repository
+            .start_history_transfer_from(
+                source.repository.as_ref(),
+                &source.branch,
+                source_snapshot,
+                &self.branch,
+                expected_head,
+            )
+            .await
+    }
+
+    pub async fn advance_history_transfer_from(
+        &self,
+        source: &Client,
+        cursor: &HistoryTransferCursor,
+        max_steps: usize,
+    ) -> Result<HistoryTransferPage> {
+        self.ensure_provider_qualified()?;
+        source.ensure_provider_qualified()?;
+        self.repository
+            .advance_history_transfer_from(source.repository.as_ref(), cursor, max_steps)
+            .await
+    }
+
+    pub async fn publish_history_transfer(
+        &self,
+        cursor: &HistoryTransferCursor,
+        reason: impl AsRef<str>,
+    ) -> Result<RefMoveReceipt> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .publish_history_transfer(cursor, reason.as_ref())
+            .await
+    }
+
+    pub async fn history_transfer_mapping(
+        &self,
+        cursor: &HistoryTransferCursor,
+        source: CommitId,
+    ) -> Result<Option<HistoryTransferMapping>> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .history_transfer_mapping(cursor, source)
+            .await
+    }
+
     pub async fn start_fetch_from(
         &self,
         source: &Client,
@@ -347,6 +402,40 @@ impl Client {
                 destination_expected_head,
                 "push snapshot",
             )
+            .await
+    }
+
+    /// Start a fetch that preserves the complete source commit DAG.
+    pub async fn start_history_fetch_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        self.start_history_transfer_from(source, source_snapshot, expected_head)
+            .await
+    }
+
+    /// Start a clone that preserves the complete source commit DAG.
+    pub async fn start_history_clone_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        self.start_history_transfer_from(source, source_snapshot, expected_head)
+            .await
+    }
+
+    /// Start a push that preserves the complete source commit DAG.
+    pub async fn start_history_push_to(
+        &self,
+        destination: &Client,
+        source_snapshot: CommitId,
+        destination_expected_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        destination
+            .start_history_transfer_from(self, source_snapshot, destination_expected_head)
             .await
     }
 
