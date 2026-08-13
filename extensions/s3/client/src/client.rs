@@ -9,14 +9,16 @@ use aws_sdk_s3::primitives::ByteStream;
 use md5::Md5;
 use prolly_s3_core::{
     BatchId, BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth, CommitId,
-    CommitReceipt, CommitSessionManifest, Error, ErrorCode, JournalIndexRebuildCleanup,
-    JournalIndexRebuildCursor, JournalIndexRebuildStep, MergeAdvancePage, MergeBaseCursor,
-    MergeBasePage, MergeChangeCursor, MergeChangePage, MergeCleanupCursor, MergeCleanupPage,
-    MergeConflictCursor, MergeConflictPage, MergeCursor, MergePolicy, MergeReceipt, ObjectData,
+    CommitPage, CommitReceipt, CommitSessionManifest, Error, ErrorCode, FsckCursor, FsckPage,
+    HistoryCursor, JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
+    MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage,
+    MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor,
+    MergePolicy, MergeReceipt, ObjectData, ObjectDiff, ObjectDiffCursor, ObjectDiffPage,
     ObjectHeaders, ObjectSummary, ObjectVersion, OperationId, OperationIndexRebuildCursor,
     OperationIndexRebuildStep, ProviderAttestation, ProviderPerKeyVersionLimit, ProviderProfileId,
-    RefCatalogCursor, RefCatalogRepairPage, RefKind, Repository, RepositoryOptions, Result,
-    StagedMutation, Tag, TagCatalogPage, VersionSummary,
+    PublicationJournalCursor, PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage,
+    RefKind, RefMoveReceipt, Repository, RepositoryOptions, Result, StagedMutation, Tag,
+    TagCatalogPage, TraversalBudget, VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -127,6 +129,95 @@ impl Client {
     pub async fn delete_tag(&self, name: impl AsRef<str>, expected: CommitId) -> Result<()> {
         self.ensure_provider_qualified()?;
         self.repository.delete_tag(name.as_ref(), expected).await
+    }
+
+    pub async fn commit(&self, id: CommitId) -> Result<prolly_s3_core::BucketCommit> {
+        self.ensure_provider_qualified()?;
+        self.repository.commit(id).await
+    }
+
+    pub async fn log(&self, limit: usize) -> Result<Vec<(CommitId, prolly_s3_core::BucketCommit)>> {
+        self.ensure_provider_qualified()?;
+        self.repository.log(&self.branch, limit).await
+    }
+
+    pub async fn log_bounded(
+        &self,
+        start: CommitId,
+        cursor: Option<&HistoryCursor>,
+        limit: usize,
+        budget: TraversalBudget,
+    ) -> Result<CommitPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .log_page_bounded(&self.branch, start, cursor, limit, budget)
+            .await
+    }
+
+    pub async fn diff(&self, from: CommitId, to: CommitId) -> Result<Vec<ObjectDiff>> {
+        self.ensure_provider_qualified()?;
+        self.repository.diff(&self.branch, from, to).await
+    }
+
+    pub async fn diff_bounded(
+        &self,
+        from: CommitId,
+        to: CommitId,
+        cursor: Option<&ObjectDiffCursor>,
+        limit: usize,
+    ) -> Result<ObjectDiffPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .diff_page_bounded(&self.branch, from, to, cursor, limit)
+            .await
+    }
+
+    pub async fn open_reflog(&self) -> Result<PublicationJournalCursor> {
+        self.ensure_provider_qualified()?;
+        self.repository.open_reflog(&self.branch).await
+    }
+
+    pub async fn read_reflog_page(
+        &self,
+        cursor: &PublicationJournalCursor,
+        limit: usize,
+    ) -> Result<PublicationJournalPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.read_reflog_page(cursor, limit).await
+    }
+
+    pub async fn reset_branch(
+        &self,
+        to: CommitId,
+        expected_head: CommitId,
+        reason: impl AsRef<str>,
+    ) -> Result<RefMoveReceipt> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .reset_branch(&self.branch, to, expected_head, reason.as_ref())
+            .await
+    }
+
+    pub async fn recover_branch(
+        &self,
+        reflog: prolly_s3_core::ReflogEntryId,
+        expected_head: CommitId,
+        reason: impl AsRef<str>,
+    ) -> Result<RefMoveReceipt> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .recover_branch(&self.branch, reflog, expected_head, reason.as_ref())
+            .await
+    }
+
+    pub async fn start_fsck(&self, deep: bool) -> Result<FsckCursor> {
+        self.ensure_provider_qualified()?;
+        self.repository.start_fsck(&self.branch, deep).await
+    }
+
+    pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.advance_fsck(cursor, max_steps).await
     }
 
     /// Start a restartable structural merge from `source_branch` into this

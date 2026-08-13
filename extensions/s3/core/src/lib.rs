@@ -60,8 +60,11 @@ pub use ref_catalog::{
 };
 pub use repository::{
     validate_branch, BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth,
-    BranchIndexMaintenance, CommitReceipt, ObjectData, ObjectSummary, RefCatalogRepairPage,
-    Repository, RepositoryOptions, ShardAuthorityMaintenance, Tag, TagCatalogPage, VersionSummary,
+    BranchIndexMaintenance, CommitClosureCursor, CommitClosurePage, CommitPage, CommitReceipt,
+    FsckCursor, FsckPage, FsckPhase, FsckReport, HistoryCursor, ObjectData, ObjectDiff,
+    ObjectDiffCursor, ObjectDiffPage, ObjectSummary, RefCatalogRepairPage, RefMoveReceipt,
+    Repository, RepositoryOptions, ShardAuthorityMaintenance, Tag, TagCatalogPage, TraversalBudget,
+    VersionSummary,
 };
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};

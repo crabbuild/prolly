@@ -14,6 +14,7 @@ use prolly::{AsyncProlly, Config, Diff, Mutation, RuntimeConfig, Tree, TreeForma
 use sha2::Sha256;
 
 use crate::merge::{MergeBaseCandidate, MergePlanEntry, MergeQueueEntry, MergeSeenEntry};
+use crate::publication::BranchMovement;
 use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
 use crate::{
     decode_canonical, encode_canonical, tree_format_digest, AuthorityPermit, AuthorityScope,
@@ -119,6 +120,136 @@ pub struct VersionSummary {
     pub key: Vec<u8>,
     pub version: ObjectVersion,
     pub cursor: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectDiff {
+    pub key: Vec<u8>,
+    pub from: Option<ObjectVersionId>,
+    pub to: Option<ObjectVersionId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ObjectDiffCursor {
+    repository: crate::RepositoryId,
+    branch: String,
+    from: CommitId,
+    to: CommitId,
+    traversal: prolly::StructuralDiffCursor,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectDiffPage {
+    pub changes: Vec<ObjectDiff>,
+    pub continuation: Option<ObjectDiffCursor>,
+    pub compared_nodes: usize,
+    pub reused_subtrees: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TraversalBudget {
+    pub max_commits: usize,
+    pub max_decoded_bytes: u64,
+    pub max_elapsed: Duration,
+}
+
+impl Default for TraversalBudget {
+    fn default() -> Self {
+        Self {
+            max_commits: 10_000,
+            max_decoded_bytes: 64 * 1024 * 1024,
+            max_elapsed: Duration::from_secs(30),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct HistoryCursor {
+    repository: crate::RepositoryId,
+    branch: String,
+    root: CommitId,
+    next: CommitId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitPage {
+    pub commits: Vec<(CommitId, BucketCommit)>,
+    pub continuation: Option<HistoryCursor>,
+    pub visited_commits: usize,
+    pub decoded_bytes: u64,
+    pub budget_exhausted: bool,
+}
+
+/// Constant-size checkpoint for a durable parent-before-child traversal of a
+/// commit DAG. The work stack and visited set live in immutable Prolly nodes.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CommitClosureCursor {
+    pub repository: crate::RepositoryId,
+    pub traversal: OperationId,
+    pub state: RootManifest,
+    pub next_stack_sequence: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitClosurePage {
+    pub commits: Vec<(CommitId, BucketCommit)>,
+    pub cursor: CommitClosureCursor,
+    pub steps: usize,
+    pub complete: bool,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct CommitClosureWork {
+    commit: CommitId,
+    finish: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum FsckPhase {
+    DiscoverCommits,
+    VerifyObjects,
+    VerifyVersions,
+    Complete,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FsckReport {
+    pub commits: u64,
+    pub reachable_nodes: u64,
+    pub current_objects: u64,
+    pub logical_versions: u64,
+    pub payloads_verified: u64,
+    pub payload_bytes_verified: u64,
+    pub deep_content_bytes_verified: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FsckCursor {
+    pub repository: crate::RepositoryId,
+    pub branch: String,
+    pub snapshot: CommitId,
+    pub closure: CommitClosureCursor,
+    pub phase: FsckPhase,
+    pub after: Option<Vec<u8>>,
+    pub deep: bool,
+    pub report: FsckReport,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FsckPage {
+    pub cursor: FsckCursor,
+    pub processed: usize,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RefMoveReceipt {
+    pub branch: String,
+    pub old_target: CommitId,
+    pub new_target: CommitId,
+    pub operation: OperationId,
+    pub generation: RefGeneration,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1879,6 +2010,640 @@ impl<P: ObjectPlane> Repository<P> {
         Ok((result, truncated))
     }
 
+    /// Load and verify one immutable commit object.
+    pub async fn commit(&self, id: CommitId) -> Result<BucketCommit> {
+        Ok(self.load_commit_object(id).await?.commit)
+    }
+
+    /// Return the first-parent history of a branch, newest first.
+    pub async fn log(&self, branch: &str, limit: usize) -> Result<Vec<(CommitId, BucketCommit)>> {
+        let head = self.head(branch).await?;
+        Ok(self
+            .log_page_bounded(branch, head, None, limit, TraversalBudget::default())
+            .await?
+            .commits)
+    }
+
+    /// Traverse first-parent history with a constant-size continuation and
+    /// explicit work, byte, and wall-clock budgets.
+    pub async fn log_page_bounded(
+        &self,
+        branch: &str,
+        start: CommitId,
+        cursor: Option<&HistoryCursor>,
+        requested_limit: usize,
+        budget: TraversalBudget,
+    ) -> Result<CommitPage> {
+        validate_branch(branch)?;
+        if budget.max_commits == 0 || budget.max_decoded_bytes == 0 || budget.max_elapsed.is_zero()
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "history traversal budgets must be greater than zero",
+            ));
+        }
+        if cursor.is_some_and(|cursor| {
+            cursor.repository != self.format.repository_id
+                || cursor.branch != branch
+                || cursor.root != start
+        }) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history cursor belongs to another repository, branch, or root",
+            ));
+        }
+        let limit = requested_limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Ok(CommitPage {
+                commits: Vec::new(),
+                continuation: cursor.cloned(),
+                visited_commits: 0,
+                decoded_bytes: 0,
+                budget_exhausted: false,
+            });
+        }
+        self.locator.register(branch)?;
+        let started = std::time::Instant::now();
+        let mut current = cursor.map_or(start, |cursor| cursor.next);
+        let mut commits = Vec::with_capacity(limit.min(64));
+        let mut visited_commits = 0usize;
+        let mut decoded_bytes = 0u64;
+        let mut budget_exhausted = false;
+        let continuation = loop {
+            if commits.len() >= limit {
+                break Some(HistoryCursor {
+                    repository: self.format.repository_id,
+                    branch: branch.to_string(),
+                    root: start,
+                    next: current,
+                });
+            }
+            if visited_commits >= budget.max_commits || started.elapsed() >= budget.max_elapsed {
+                budget_exhausted = true;
+                break Some(HistoryCursor {
+                    repository: self.format.repository_id,
+                    branch: branch.to_string(),
+                    root: start,
+                    next: current,
+                });
+            }
+            let commit = self.load_commit_object(current).await?.commit;
+            let encoded_len = u64::try_from(encode_canonical(&commit)?.len()).map_err(|_| {
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "encoded commit length exceeds u64",
+                )
+            })?;
+            if decoded_bytes.saturating_add(encoded_len) > budget.max_decoded_bytes {
+                if commits.is_empty() {
+                    return Err(Error::new(
+                        ErrorCode::InvalidLimit,
+                        "history byte budget cannot hold one commit",
+                    ));
+                }
+                budget_exhausted = true;
+                break Some(HistoryCursor {
+                    repository: self.format.repository_id,
+                    branch: branch.to_string(),
+                    root: start,
+                    next: current,
+                });
+            }
+            let parent = commit.parents.first().copied();
+            decoded_bytes = decoded_bytes.checked_add(encoded_len).ok_or_else(|| {
+                Error::new(ErrorCode::EntityTooLarge, "history byte counter overflow")
+            })?;
+            visited_commits += 1;
+            commits.push((current, commit));
+            let Some(parent) = parent else { break None };
+            current = parent;
+        };
+        Ok(CommitPage {
+            commits,
+            continuation,
+            visited_commits,
+            decoded_bytes,
+            budget_exhausted,
+        })
+    }
+
+    /// Start a durable traversal over one or more commit roots.
+    pub async fn start_commit_closure(&self, roots: &[CommitId]) -> Result<CommitClosureCursor> {
+        if roots.is_empty() || roots.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure start requires between 1 and 1,000 roots",
+            ));
+        }
+        let traversal = self.options.ids.operation();
+        let engine = self.commit_closure_engine(traversal)?;
+        let mut cursor = CommitClosureCursor {
+            repository: self.format.repository_id,
+            traversal,
+            state: RootManifest::from_tree(&engine.create())?,
+            next_stack_sequence: u64::MAX,
+        };
+        self.extend_commit_closure(&mut cursor, roots).await?;
+        Ok(cursor)
+    }
+
+    /// Attach a bounded page of additional roots to a durable traversal.
+    pub async fn extend_commit_closure(
+        &self,
+        cursor: &mut CommitClosureCursor,
+        roots: &[CommitId],
+    ) -> Result<()> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if roots.is_empty() || roots.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure extension requires between 1 and 1,000 roots",
+            ));
+        }
+        let engine = self.commit_closure_engine(cursor.traversal)?;
+        let mut tree = self.tree_from_root(&cursor.state)?;
+        let mut unique = roots.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        let mut mutations = Vec::with_capacity(unique.len());
+        for commit in unique.into_iter().rev() {
+            if engine
+                .get(&tree, &commit_closure_seen_key(commit))
+                .await?
+                .is_some()
+            {
+                continue;
+            }
+            mutations.push(Mutation::Upsert {
+                key: commit_closure_stack_key(cursor.next_stack_sequence),
+                val: encode_canonical(&CommitClosureWork {
+                    commit,
+                    finish: false,
+                })?,
+            });
+            cursor.next_stack_sequence =
+                cursor.next_stack_sequence.checked_sub(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::HistoryLimitExceeded,
+                        "commit-closure stack sequence is exhausted",
+                    )
+                })?;
+        }
+        if !mutations.is_empty() {
+            tree = engine.batch(&tree, mutations).await?;
+            cursor.state = RootManifest::from_tree(&tree)?;
+        }
+        Ok(())
+    }
+
+    /// Advance a durable DAG traversal under explicit work and output bounds.
+    /// Commits are emitted parent-before-child and exactly once.
+    pub async fn commit_closure_page(
+        &self,
+        cursor: &CommitClosureCursor,
+        max_steps: usize,
+        max_commits: usize,
+    ) -> Result<CommitClosurePage> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if !(1..=100_000).contains(&max_steps) || !(1..=1_000).contains(&max_commits) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure page requires 1..=100,000 steps and 1..=1,000 commits",
+            ));
+        }
+        let engine = self.commit_closure_engine(cursor.traversal)?;
+        let mut tree = self.tree_from_root(&cursor.state)?;
+        let mut next_cursor = cursor.clone();
+        let mut commits = Vec::with_capacity(max_commits.min(64));
+        let mut steps = 0usize;
+        while steps < max_steps && commits.len() < max_commits {
+            let mut queue = engine.prefix(&tree, COMMIT_CLOSURE_QUEUE_PREFIX).await?;
+            let Some(entry) = queue.next().await else {
+                break;
+            };
+            let (stack_key, encoded) = entry?;
+            drop(queue);
+            let work: CommitClosureWork = decode_canonical(&encoded)?;
+            let seen_key = commit_closure_seen_key(work.commit);
+            let state = engine.get(&tree, &seen_key).await?;
+            let mut mutations = vec![Mutation::Delete { key: stack_key }];
+            if work.finish {
+                match state.as_deref() {
+                    Some([1]) => {}
+                    Some([0]) => {
+                        let commit = self.load_commit_object(work.commit).await?.commit;
+                        mutations.push(Mutation::Upsert {
+                            key: seen_key,
+                            val: vec![1],
+                        });
+                        commits.push((work.commit, commit));
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit-closure finish record has invalid state",
+                        ));
+                    }
+                }
+            } else {
+                match state.as_deref() {
+                    Some([1]) => {}
+                    Some([0]) => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit graph contains a cycle",
+                        ));
+                    }
+                    None => {
+                        let commit = self.load_commit_object(work.commit).await?.commit;
+                        mutations.push(Mutation::Upsert {
+                            key: seen_key,
+                            val: vec![0],
+                        });
+                        push_commit_closure_work(
+                            &mut next_cursor,
+                            &mut mutations,
+                            work.commit,
+                            true,
+                        )?;
+                        for parent in commit.parents.iter().rev() {
+                            push_commit_closure_work(
+                                &mut next_cursor,
+                                &mut mutations,
+                                *parent,
+                                false,
+                            )?;
+                        }
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit-closure visited state is malformed",
+                        ));
+                    }
+                }
+            }
+            tree = engine.batch(&tree, mutations).await?;
+            steps += 1;
+        }
+        next_cursor.state = RootManifest::from_tree(&tree)?;
+        let mut remaining = engine.prefix(&tree, COMMIT_CLOSURE_QUEUE_PREFIX).await?;
+        let complete = remaining.next().await.is_none();
+        Ok(CommitClosurePage {
+            commits,
+            cursor: next_cursor,
+            steps,
+            complete,
+            budget_exhausted: !complete && steps == max_steps,
+        })
+    }
+
+    /// Start a restartable integrity check for one stable branch snapshot.
+    /// Deep mode additionally streams every reachable payload and verifies its
+    /// content checksum; metadata mode verifies immutable paths and provider
+    /// metadata without downloading object bodies.
+    pub async fn start_fsck(&self, branch: &str, deep: bool) -> Result<FsckCursor> {
+        validate_branch(branch)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let snapshot = self.head(branch).await?;
+        Ok(FsckCursor {
+            repository: self.format.repository_id,
+            branch: branch.to_string(),
+            snapshot,
+            closure: self.start_commit_closure(&[snapshot]).await?,
+            phase: FsckPhase::DiscoverCommits,
+            after: None,
+            deep,
+            report: FsckReport::default(),
+        })
+    }
+
+    /// Advance an integrity check by at most `max_steps` commit-work records,
+    /// current objects, or logical versions. Persist the returned cursor after
+    /// every page.
+    pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
+        if !(1..=1_000).contains(&max_steps) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "fsck page size must be between 1 and 1,000",
+            ));
+        }
+        if cursor.repository != self.format.repository_id {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck cursor belongs to another repository",
+            ));
+        }
+        validate_branch(&cursor.branch)?;
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        self.locator.register(&cursor.branch)?;
+        let mut next = cursor.clone();
+        let mut processed = 0usize;
+        match next.phase {
+            FsckPhase::DiscoverCommits => {
+                let page = self
+                    .commit_closure_page(&next.closure, max_steps, max_steps.min(1_000))
+                    .await?;
+                processed = page.steps;
+                for (_, commit) in &page.commits {
+                    next.report.commits = next.report.commits.checked_add(1).ok_or_else(|| {
+                        Error::new(ErrorCode::EntityTooLarge, "fsck commit counter overflow")
+                    })?;
+                    let nodes = commit
+                        .node_pack
+                        .as_ref()
+                        .map_or(0_u64, |pack| u64::from(pack.node_count));
+                    next.report.reachable_nodes = next
+                        .report
+                        .reachable_nodes
+                        .checked_add(nodes)
+                        .ok_or_else(|| {
+                            Error::new(ErrorCode::EntityTooLarge, "fsck node counter overflow")
+                        })?;
+                }
+                next.closure = page.cursor;
+                if page.complete {
+                    next.phase = FsckPhase::VerifyObjects;
+                }
+            }
+            FsckPhase::VerifyObjects => {
+                let commit = self.load_commit_object(next.snapshot).await?.commit;
+                let tree = self.tree_from_root(&commit.state.objects)?;
+                let engine = self.engine(self.node_store.clone());
+                let mut entries = match next.after.as_deref() {
+                    Some(after) => engine.range_after(&tree, after, None).await?,
+                    None => engine.prefix(&tree, b"").await?,
+                };
+                while processed < max_steps {
+                    let Some(entry) = entries.next().await else {
+                        next.phase = FsckPhase::VerifyVersions;
+                        next.after = None;
+                        break;
+                    };
+                    let (key, encoded) = entry?;
+                    let current: CurrentObject = decode_canonical(&encoded)?;
+                    current.version.validate()?;
+                    let (payloads, bytes, deep_bytes) = self
+                        .verify_payload_metadata(&current.version, next.deep)
+                        .await?;
+                    next.report.current_objects =
+                        checked_fsck_add(next.report.current_objects, 1, "current-object")?;
+                    next.report.payloads_verified =
+                        checked_fsck_add(next.report.payloads_verified, payloads, "payload")?;
+                    next.report.payload_bytes_verified = checked_fsck_add(
+                        next.report.payload_bytes_verified,
+                        bytes,
+                        "payload-byte",
+                    )?;
+                    next.report.deep_content_bytes_verified = checked_fsck_add(
+                        next.report.deep_content_bytes_verified,
+                        deep_bytes,
+                        "deep-content-byte",
+                    )?;
+                    next.after = Some(key);
+                    processed += 1;
+                }
+            }
+            FsckPhase::VerifyVersions => {
+                let commit = self.load_commit_object(next.snapshot).await?.commit;
+                let tree = self.tree_from_root(&commit.state.versions)?;
+                let engine = self.engine(self.node_store.clone());
+                let mut entries = match next.after.as_deref() {
+                    Some(after) => engine.range_after(&tree, after, None).await?,
+                    None => engine.prefix(&tree, b"").await?,
+                };
+                while processed < max_steps {
+                    let Some(entry) = entries.next().await else {
+                        next.phase = FsckPhase::Complete;
+                        next.after = None;
+                        break;
+                    };
+                    let (key, encoded) = entry?;
+                    let version: ObjectVersion = decode_canonical(&encoded)?;
+                    version.validate()?;
+                    let (payloads, bytes, deep_bytes) =
+                        self.verify_payload_metadata(&version, next.deep).await?;
+                    next.report.logical_versions =
+                        checked_fsck_add(next.report.logical_versions, 1, "logical-version")?;
+                    next.report.payloads_verified =
+                        checked_fsck_add(next.report.payloads_verified, payloads, "payload")?;
+                    next.report.payload_bytes_verified = checked_fsck_add(
+                        next.report.payload_bytes_verified,
+                        bytes,
+                        "payload-byte",
+                    )?;
+                    next.report.deep_content_bytes_verified = checked_fsck_add(
+                        next.report.deep_content_bytes_verified,
+                        deep_bytes,
+                        "deep-content-byte",
+                    )?;
+                    next.after = Some(key);
+                    processed += 1;
+                }
+            }
+            FsckPhase::Complete => {}
+        }
+        Ok(FsckPage {
+            complete: next.phase == FsckPhase::Complete,
+            cursor: next,
+            processed,
+        })
+    }
+
+    /// Return all current-object changes between two immutable snapshots.
+    pub async fn diff(
+        &self,
+        branch: &str,
+        from: CommitId,
+        to: CommitId,
+    ) -> Result<Vec<ObjectDiff>> {
+        validate_branch(branch)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let from_commit = self.load_commit_object(from).await?.commit;
+        let to_commit = self.load_commit_object(to).await?.commit;
+        let from_tree = self.tree_from_root(&from_commit.state.objects)?;
+        let to_tree = self.tree_from_root(&to_commit.state.objects)?;
+        self.engine(self.node_store.clone())
+            .diff(&from_tree, &to_tree)
+            .await?
+            .into_iter()
+            .map(object_diff_from_prolly)
+            .collect()
+    }
+
+    /// Return one CID-pruned diff page without rediscovering the previous
+    /// structural frontier when the caller resumes.
+    pub async fn diff_page_bounded(
+        &self,
+        branch: &str,
+        from: CommitId,
+        to: CommitId,
+        cursor: Option<&ObjectDiffCursor>,
+        requested_limit: usize,
+    ) -> Result<ObjectDiffPage> {
+        validate_branch(branch)?;
+        if cursor.is_some_and(|cursor| {
+            cursor.repository != self.format.repository_id
+                || cursor.branch != branch
+                || cursor.from != from
+                || cursor.to != to
+        }) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "diff cursor belongs to another repository, branch, or snapshot pair",
+            ));
+        }
+        let limit = requested_limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "bounded diff page limit must be greater than zero",
+            ));
+        }
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let from_commit = self.load_commit_object(from).await?.commit;
+        let to_commit = self.load_commit_object(to).await?.commit;
+        let from_tree = self.tree_from_root(&from_commit.state.objects)?;
+        let to_tree = self.tree_from_root(&to_commit.state.objects)?;
+        let page = self
+            .engine(self.node_store.clone())
+            .structural_diff_page(
+                &from_tree,
+                &to_tree,
+                cursor.map(|cursor| &cursor.traversal),
+                limit,
+            )
+            .await?;
+        let changes = page
+            .diffs
+            .into_iter()
+            .map(object_diff_from_prolly)
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ObjectDiffPage {
+            changes,
+            continuation: page.next_cursor.map(|traversal| ObjectDiffCursor {
+                repository: self.format.repository_id,
+                branch: branch.to_string(),
+                from,
+                to,
+                traversal,
+            }),
+            compared_nodes: page.stats.compared_nodes,
+            reused_subtrees: page.stats.reused_subtrees,
+        })
+    }
+
+    /// Open a stable snapshot of the immutable branch reflog.
+    pub async fn open_reflog(&self, branch: &str) -> Result<crate::PublicationJournalCursor> {
+        self.publisher.open_journal(branch).await
+    }
+
+    /// Read one newest-to-oldest page from a stable reflog snapshot.
+    pub async fn read_reflog_page(
+        &self,
+        cursor: &crate::PublicationJournalCursor,
+        limit: usize,
+    ) -> Result<crate::PublicationJournalPage> {
+        self.publisher.read_journal_page(cursor, limit).await
+    }
+
+    /// Administratively move a branch ref to an existing commit. The move is
+    /// fenced, CAS-protected, and recorded in the immutable publication log.
+    pub async fn reset_branch(
+        &self,
+        branch: &str,
+        to: CommitId,
+        expected_head: CommitId,
+        reason: &str,
+    ) -> Result<RefMoveReceipt> {
+        if !self.writable.load(Ordering::Acquire) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "repository is read-only",
+            ));
+        }
+        validate_branch(branch)?;
+        if reason.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "administrative ref movement requires a non-empty reason",
+            ));
+        }
+        let _lane = self.lock_branch(branch).await;
+        let now = self.options.clock.now_millis()?;
+        let permit = self.active_permit(branch, now).await?;
+        self.authority.validate_active(&permit, now).await?;
+        self.load_commit_object(to).await?;
+        let current = self.publisher.load(branch).await?;
+        if current.value.target != expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch head does not match reset expectation",
+            ));
+        }
+        let operation = self.options.ids.operation();
+        let old_target = current.value.target;
+        let moved = self
+            .publisher
+            .move_target(
+                current,
+                BranchMovement {
+                    permit: &permit,
+                    branch,
+                    target: to,
+                    operation,
+                    message: reason,
+                    now_millis: now,
+                },
+            )
+            .await?;
+        self.record_branch_catalog(&moved).await?;
+        self.advance_branch_indexes(branch).await?;
+        Ok(RefMoveReceipt {
+            branch: branch.to_string(),
+            old_target,
+            new_target: to,
+            operation,
+            generation: moved.value.generation,
+        })
+    }
+
+    /// Recover the previous target named by a reflog entry. The selected entry
+    /// is found through bounded pages of the immutable publication journal.
+    pub async fn recover_branch(
+        &self,
+        branch: &str,
+        reflog: crate::ReflogEntryId,
+        expected_head: CommitId,
+        reason: &str,
+    ) -> Result<RefMoveReceipt> {
+        let mut cursor = Some(self.open_reflog(branch).await?);
+        let mut target = None;
+        while let Some(current) = cursor {
+            let page = self.read_reflog_page(&current, 1_000).await?;
+            if let Some(event) = page
+                .entries
+                .iter()
+                .find(|entry| entry.event.reflog == reflog)
+            {
+                target = event.event.old_target;
+                break;
+            }
+            cursor = page.continuation;
+        }
+        let target = target.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidRevision,
+                "selected reflog entry has no recoverable previous target",
+            )
+        })?;
+        self.reset_branch(branch, target, expected_head, reason)
+            .await
+    }
+
     /// Start a durable merge between two branch snapshots.
     ///
     /// The returned cursor is process-independent. Callers must persist the
@@ -2936,6 +3701,81 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
+    async fn verify_payload_metadata(
+        &self,
+        version: &ObjectVersion,
+        deep: bool,
+    ) -> Result<(u64, u64, u64)> {
+        let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
+            return Ok((0, 0, 0));
+        };
+        let binding = version.binding.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "live object version has no payload binding",
+            )
+        })?;
+        if binding.path != self.payloads.path(binding.checksum_sha256)? {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "payload binding path does not match its content checksum",
+            ));
+        }
+        let metadata =
+            self.plane.head(&binding.path).await?.ok_or_else(|| {
+                Error::new(ErrorCode::MissingClosure, "immutable payload is missing")
+            })?;
+        if metadata.len != *size
+            || metadata.sha256 != binding.checksum_sha256
+            || metadata.token.etag != binding.provider_etag
+            || metadata.token.version_id != binding.provider_version_id
+        {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "immutable payload metadata does not match its logical binding",
+            ));
+        }
+        let deep_bytes = if deep {
+            u64::try_from(self.payloads.get(binding).await?.len())
+                .map_err(|_| Error::new(ErrorCode::EntityTooLarge, "payload length exceeds u64"))?
+        } else {
+            0
+        };
+        Ok((1, *size, deep_bytes))
+    }
+
+    fn commit_closure_engine(
+        &self,
+        traversal: OperationId,
+    ) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if traversal.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "commit-closure traversal ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new(
+            self.plane.clone(),
+            format!(
+                "{}/administration/closure/{traversal}/tree",
+                self.options.repository_prefix
+            ),
+        )))
+    }
+
+    fn validate_commit_closure_cursor(&self, cursor: &CommitClosureCursor) -> Result<()> {
+        if cursor.repository != self.format.repository_id
+            || cursor.traversal.is_nil()
+            || cursor.state.format_digest != tree_format_digest(&self.format.state_tree_format)?
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "commit-closure cursor is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
+
     fn merge_plan_engine(&self, job: OperationId) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
         if job.is_nil() {
             return Err(Error::new(
@@ -3950,6 +4790,8 @@ impl<P: ObjectPlane> Repository<P> {
     }
 }
 
+const COMMIT_CLOSURE_QUEUE_PREFIX: &[u8] = b"q/";
+const COMMIT_CLOSURE_SEEN_PREFIX: &[u8] = b"s/";
 const MERGE_LEFT: u8 = 1;
 const MERGE_RIGHT: u8 = 2;
 const MERGE_BOTH: u8 = MERGE_LEFT | MERGE_RIGHT;
@@ -3966,6 +4808,48 @@ fn normalized_merge_cursor(cursor: &MergeCursor) -> Result<Vec<u8>> {
     let mut normalized = cursor.clone();
     normalized.plan_root.root = None;
     encode_canonical(&normalized)
+}
+
+fn commit_closure_stack_key(sequence: u64) -> Vec<u8> {
+    let mut key = Vec::with_capacity(COMMIT_CLOSURE_QUEUE_PREFIX.len() + 8);
+    key.extend_from_slice(COMMIT_CLOSURE_QUEUE_PREFIX);
+    key.extend_from_slice(&sequence.to_be_bytes());
+    key
+}
+
+fn commit_closure_seen_key(commit: CommitId) -> Vec<u8> {
+    let mut key = Vec::with_capacity(COMMIT_CLOSURE_SEEN_PREFIX.len() + 32);
+    key.extend_from_slice(COMMIT_CLOSURE_SEEN_PREFIX);
+    key.extend_from_slice(commit.as_bytes());
+    key
+}
+
+fn push_commit_closure_work(
+    cursor: &mut CommitClosureCursor,
+    mutations: &mut Vec<Mutation>,
+    commit: CommitId,
+    finish: bool,
+) -> Result<()> {
+    mutations.push(Mutation::Upsert {
+        key: commit_closure_stack_key(cursor.next_stack_sequence),
+        val: encode_canonical(&CommitClosureWork { commit, finish })?,
+    });
+    cursor.next_stack_sequence = cursor.next_stack_sequence.checked_sub(1).ok_or_else(|| {
+        Error::new(
+            ErrorCode::HistoryLimitExceeded,
+            "commit-closure stack sequence is exhausted",
+        )
+    })?;
+    Ok(())
+}
+
+fn checked_fsck_add(current: u64, add: u64, counter: &str) -> Result<u64> {
+    current.checked_add(add).ok_or_else(|| {
+        Error::new(
+            ErrorCode::EntityTooLarge,
+            format!("fsck {counter} counter overflow"),
+        )
+    })
 }
 
 fn merge_queue_key(generation: u64, commit: CommitId) -> Vec<u8> {
@@ -4031,6 +4915,15 @@ fn merge_diff_values(diff: Diff) -> (Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>) 
         Diff::Removed { key, val } => (key, Some(val), None),
         Diff::Changed { key, old, new } => (key, Some(old), Some(new)),
     }
+}
+
+fn object_diff_from_prolly(diff: Diff) -> Result<ObjectDiff> {
+    let (key, from, to) = merge_diff_values(diff);
+    Ok(ObjectDiff {
+        key,
+        from: current_id(from.as_deref())?,
+        to: current_id(to.as_deref())?,
+    })
 }
 
 fn current_id(value: Option<&[u8]>) -> Result<Option<ObjectVersionId>> {
