@@ -1,71 +1,246 @@
 # Prolly S3 API guide
 
-The application-facing type is `prolly_s3_client::Client`.
+The application-facing type is `prolly_s3_client::Client`. This guide describes
+the public client surface in version 0.1.0 and separates ordinary application
+operations from administrative maintenance.
 
-| Goal | API |
+## Choose the right workflow
+
+| Goal | Recommended API |
 |---|---|
-| Create a repository | `Client::builder().initialize().await` |
-| Reopen a repository | `Client::builder().open().await` |
-| Write one file | `put_object`, `put_object_with_operation` |
+| Create or reopen a repository | `Client::builder`, then `initialize` or `open` |
+| Write one interactive file | `put_object` or `put_object_with_metadata` |
+| Retry a write after an ambiguous response | `put_object_with_operation` with the same `OperationId` and input |
+| Atomically write many files | `begin_commit`, or `ingest_objects` for bulk loading |
 | Read current or historical data | `get_object`, `get_object_at` |
 | Read metadata or a byte range | `head_object`, `get_object_range` |
-| Copy without uploading the payload | `copy_object` |
+| Copy without re-uploading the payload | `copy_object` |
 | Delete one or many files | `delete_object`, `delete_objects` |
-| List data and common prefixes | `list_objects`, `list_objects_at`, `list_objects_delimited` |
-| Inspect one file's history | `list_object_versions` |
-| Atomically ingest many files | `ingest_objects`, `begin_commit`, `resume_commit` |
-| Work on another branch | `create_branch`, `for_branch`, `delete_branch` |
-| Pin a commit | `create_tag`, `tag`, `delete_tag` |
-| Add a GC retention root | `create_retention_pin`, `delete_retention_pin` |
-| Reclaim unreachable immutable data | `start_gc`, `advance_gc`, `sweep_gc` |
-| Read history or compare snapshots | `log_bounded`, `diff_bounded` |
+| List current or historical objects | `list_objects`, `list_objects_at`, `list_objects_delimited` |
+| Inspect object-version history | `list_object_versions`, `list_versions_prefix`, `list_versions_at` |
+| Work on an independent line of history | `create_branch`, `for_branch`, `delete_branch` |
+| Name or retain a commit | `create_tag`, `tag`, `delete_tag`, `create_retention_pin` |
+| Compare or inspect history | `log_bounded`, `diff_bounded`, `commit` |
 | Inspect or recover ref movement | `open_reflog`, `read_reflog_page`, `recover_branch` |
-| Reset or restore | `reset_branch`, `start_restore`, `advance_restore` |
+| Restore logical state as new history | `start_restore`, `advance_restore` |
+| Move a branch administratively | `reset_branch` |
 | Merge branches | `start_merge`, `advance_merge`, `publish_merge` |
-| Inspect a merge | `merge_bases_page`, `merge_changes_page`, `merge_conflicts_page` |
 | Check repository integrity | `start_fsck`, `advance_fsck` |
-| Repair or transfer a snapshot | `start_repair_from`, `start_fetch_from`, `start_push_to` |
-| Preserve a source commit DAG | `start_history_clone_from`, `start_history_fetch_from`, `start_history_push_to` |
+| Reclaim unreachable immutable data | `start_gc`, `advance_gc`, `sweep_gc` |
+| Synchronize only one logical snapshot | `start_repair_from`, `start_clone_from`, `start_fetch_from`, `start_push_to` |
+| Preserve a complete source commit DAG | `start_history_clone_from`, `start_history_fetch_from`, `start_history_push_to` |
 | Verify a logical backup | `start_backup_verification`, `advance_backup_verification` |
-| Prewarm/inspect node caching | `prewarm_node_cache`, `node_cache_snapshot` |
-| Check index health | `branch_index_health`, `wait_for_branch_indexes` |
-| Observe S3 requests | `s3_operation_metrics`, `reset_s3_operation_metrics` |
+| Inspect cache and provider requests | `prewarm_node_cache`, `node_cache_snapshot`, `s3_operation_metrics` |
 
-## Write choices
+## Client identity and branch selection
 
-Use `put_object` for an interactive single-file update. Use
-`put_object_with_operation` when a request may be retried after an ambiguous
-network response; persist and reuse the same `OperationId` with identical input.
+- `bucket`, `branch`, and `repository_id` return the selected physical bucket,
+  logical branch, and immutable repository identity.
+- `head` returns the selected branch's current `CommitId`.
+- `for_branch` cheaply clones a client handle and selects another branch.
+- `fenced_branches` reports branches this process can no longer publish.
 
-Use a commit session for ingestion:
+`Client` clones share repository state, caches, authority maintenance, and S3
+request metrics.
 
-```rust
-let mut commit = client
-    .begin_commit()
-    .message("daily import")
-    .checkpoint_every(256)
-    .start()
-    .await?;
+## Provisioning and opening
 
-commit.put_object("reports/a.csv", a).await?;
-commit.put_object("reports/b.csv", b).await?;
-let receipt = commit.publish().await?;
-```
+Start with `Client::builder` (the `builder` constructor). The builder exposes:
 
-Durable sessions checkpoint by default and can be reopened with
-`resume_commit(batch_id)`. Use `.ephemeral()` only when restartability is
-unnecessary and minimizing requests matters more.
+| Configuration | Methods |
+|---|---|
+| AWS transport and location | `aws_client`, `bucket`, `repository_prefix`, `default_branch` |
+| Writer identity and fencing | `writer`, `authority_lease_duration`, `read_only` |
+| Provider qualification | `provider_identity`, `attestation_signer`, `provider_attestation`, `provider_attestation_validity`, `provider_per_key_version_limit` |
+| Immutable-node caching | `node_cache`, `max_cached_node_pack_bytes`, `max_cached_node_locations`, `max_cached_node_bytes` |
+| Index maintenance | `background_index_maintenance`, `journal_index_max_unindexed_events`, `operation_index_limits` |
+| Mutable-control retention | `mutable_control_version_retention` |
 
-## Pagination
+Call `initialize` once for a new prefix. Call `open` for an existing prefix.
+All processes opening one repository must agree on its canonical format and
+provider profile. Use a stable workload identity for `writer`.
 
-`list_objects` returns `(snapshot, items, truncated)`. When `truncated` is
-true, pass the last returned key as `after`. Merge and catalog APIs return
-typed cursors; persist the returned cursor and resume from it.
+## Object operations
 
-## Consistency
+### Writes
 
-A branch ref conditional write is the commit point. Payloads, nodes, commits,
-and publication events are immutable and may be safely cached. Reads at an
-explicit `CommitId` remain stable. Different branches have independent
-publication lanes; writers to the same branch serialize through that branch's
-authority and ref compare-and-swap.
+- `put_object` writes bytes with default headers and metadata.
+- `put_object_with_metadata` adds S3-shaped logical headers and user metadata.
+- `put_object_with_operation` accepts a caller-stable operation identity for
+  ambiguous-response reconciliation.
+- `copy_object` creates a new logical version while reusing an immutable
+  payload binding.
+- `delete_object` publishes one delete marker.
+- `delete_objects` publishes many delete markers atomically.
+
+One logical file is one immutable payload object. The client deliberately does
+not chunk or multipart a logical file.
+
+### Reads
+
+- `get_object` reads the selected branch head.
+- `get_object_at` reads an explicit immutable snapshot.
+- `head_object` returns logical metadata without the body.
+- `get_object_range` reads an inclusive byte range from an explicit snapshot.
+
+### Listings
+
+- `list_objects` returns `(snapshot, objects, truncated)`.
+- `list_objects_at` holds the supplied snapshot stable across pages.
+- `list_objects_delimited` returns objects plus S3-style common prefixes.
+- `list_object_versions` lists versions for one logical key.
+- `list_versions_prefix` and `list_versions_at` scan version history across a
+  logical key prefix.
+
+When an object listing is truncated, pass the last returned logical key as
+`after`. Version-prefix pages use the opaque byte cursor returned in each
+`VersionSummary`.
+
+## Atomic commit sessions and ingestion
+
+`ingest_objects` is the concise bulk path. It divides `IngestObject` values
+into durable atomic batches and returns one receipt per published batch.
+
+For explicit control, call `begin_commit`. `CommitSessionBuilder` supports:
+
+- `message` for the audited commit description;
+- `expires_after` for durable staging expiry;
+- `checkpoint_every` for remote checkpoint frequency;
+- `ephemeral` for minimum-request, non-resumable staging;
+- `start` to obtain a `CommitSession`.
+
+A `CommitSession` exposes `id`, `operation`, `base_commit`, `staged_objects`,
+and `is_durable`. Stage mutations with `put_object`,
+`put_object_with_metadata`, `put_stream`, `put_stream_with_metadata`, and
+`delete_object`. Use `checkpoint`, then `publish` or `abort`.
+
+Persist the batch ID before acknowledging upstream progress. After a process
+failure, call `resume_commit` with the batch ID; verified payload bindings are reused.
+Expired durable sessions are removed in bounded pages with
+`cleanup_expired_commit_sessions`.
+
+## Branches, tags, and retention
+
+- `create_branch` creates a branch at an explicit commit or current head.
+- `delete_branch` requires the expected head.
+- `create_tag`, `tag`, and `delete_tag` manage immutable-history names.
+- `create_retention_pin`, `retention_pin`, `delete_retention_pin`, and
+  `list_retention_pins_page` manage durable GC roots.
+
+Branch and tag catalogs are derived, bounded indexes. Enumerate them with
+`list_branch_catalog_page` and `list_tag_catalog_page`.
+
+## History, diff, and recovery
+
+- `commit` loads and validates one immutable commit.
+- `log` and `diff` are convenience APIs for small bounded results.
+- `log_bounded` accepts `TraversalBudget`; `diff_bounded` uses an opaque
+  structural cursor and prunes identical subtrees.
+- `open_reflog` captures a stable immutable journal snapshot;
+  `read_reflog_page` reads newest-to-oldest pages from it.
+- `reset_branch` is a CAS-protected administrative ref move.
+- `recover_branch` selects the previous target named by a reflog event.
+- `start_restore` and `advance_restore` materialize an old snapshot as new,
+  auditable commits without discarding intervening history.
+
+## Structural merge
+
+Call `start_merge`, persist the returned cursor, and repeatedly call
+`advance_merge`. If the graph has multiple best bases, inspect
+`merge_bases_page` and call `select_merge_base`. Inspect planned work with
+`merge_changes_page` and `merge_conflicts_page`. Only `publish_merge` moves the
+target branch. `cleanup_merge` exact-deletes job-scoped plan data in bounded
+pages after publication or abandonment.
+
+## Integrity and garbage collection
+
+### Fsck
+
+`start_fsck(false)` validates metadata and immutable structure.
+`start_fsck(true)` additionally downloads and hashes reachable payload bytes.
+Advance either mode with `advance_fsck`, persisting the cursor after every
+page.
+
+### GC
+
+Start with `start_gc(grace_millis)`, advance marking and discovery with
+`advance_gc`, then delete bounded exact-version batches with `sweep_gc`.
+Retention pins are roots. The grace period must exceed the longest possible
+unpublished upload, commit session, merge, repair, or transfer.
+
+Concurrent GC coordinates all writer handles inside the authoritative process.
+Quiesce separately running writer processes before GC.
+
+## Repair, clone, fetch, push, and backup
+
+There are two deliberately different transfer families:
+
+1. Snapshot synchronization uses `start_repair_from` and
+   `advance_repair_from`. Compatibility aliases are `start_clone_from`,
+   `start_fetch_from`, and `start_push_to`. These recreate only the selected
+   logical state.
+2. History synchronization uses `start_history_transfer_from` and
+   `advance_history_transfer_from`, then `publish_history_transfer`.
+   Convenience starters are `start_history_clone_from`,
+   `start_history_fetch_from`, and `start_history_push_to`.
+   `history_transfer_mapping` resolves a source commit to its destination ID.
+
+History transfer preserves parent topology, including merges, but commit and
+object-version IDs change because repository identity and payload bindings are
+destination-local.
+
+After either transfer, use `start_backup_verification` and
+`advance_backup_verification` to compare logical keys and downloaded content.
+
+## Index and authority administration
+
+These methods are operational controls, not normal foreground request paths:
+
+- `advance_branch_indexes`, `branch_index_health`, and
+  `wait_for_branch_indexes` inspect or catch up one branch.
+- `start_branch_index_rebuild`, `advance_branch_index_rebuild`, and
+  `cleanup_branch_index_rebuild` rebuild journal-derived indexes from a stable
+  immutable cursor.
+- `start_operation_index_rebuild` and `advance_operation_index_rebuild`
+  rebuild bounded operation-ID reconciliation state.
+- `repair_branch_catalog_page` and `repair_tag_catalog_page` repair derived ref
+  catalogs by bounded physical namespace scans.
+- `takeover_branch_writer` is a fencing operation. Isolate the previous writer
+  before supplying its expected identity and generation.
+
+## Cache and observability
+
+- `node_cache_snapshot` returns immutable-node cache counters.
+- `prewarm_node_cache` traverses both state trees for one snapshot.
+- `s3_operation_metrics` returns provider operation and wire-attempt counters.
+- `reset_s3_operation_metrics` atomically returns and resets those counters.
+
+Metrics are process-local. Export them before process termination and correlate
+them with provider request IDs and service-side metrics.
+
+## Error and consistency model
+
+The branch ref conditional write is the commit point. Payloads, nodes, commits,
+and publication events are immutable candidates until that ref CAS succeeds.
+Reads at an explicit `CommitId` remain stable.
+
+Errors expose a stable `ErrorCode`, retry advice, optional operation ID, and
+provider code/message/request ID. Retry ambiguous writes only with identical
+input and the same operation ID. A precondition, authority, or ref conflict
+must be reconciled rather than blindly retried.
+
+## Runnable examples
+
+All examples create an isolated repository in local RustFS:
+
+| Scenario | Example |
+|---|---|
+| CRUD, metadata, ranges, copy, listing, history | [`basic_object_workflow.rs`](client/examples/basic_object_workflow.rs) |
+| Durable atomic batches and streamed input | [`atomic_batch_and_streaming.rs`](client/examples/atomic_batch_and_streaming.rs) |
+| Branch, bounded diff, merge, log, reflog | [`branch_diff_merge.rs`](client/examples/branch_diff_merge.rs) |
+| Historical restore, reset, reflog recovery | [`restore_and_recovery.rs`](client/examples/restore_and_recovery.rs) |
+| Commit-DAG transfer and backup verification | [`history_transfer_and_backup.rs`](client/examples/history_transfer_and_backup.rs) |
+| Deep fsck, cache, metrics, retention, GC | [`integrity_gc_and_observability.rs`](client/examples/integrity_gc_and_observability.rs) |
+
+See [the client guide](client/README.md#runnable-scenario-examples) for setup and
+commands.

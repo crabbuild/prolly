@@ -11,7 +11,13 @@ use prolly_s3_client::{
 };
 
 fn enabled() -> bool {
-    std::env::var("PROLLY_S3_AWS").as_deref() == Ok("1")
+    environment("PROLLY_S3_AWS_QUALIFICATION", "PROLLY_S3_AWS").as_deref() == Some("1")
+}
+
+fn environment(primary: &str, legacy: &str) -> Option<String> {
+    std::env::var(primary)
+        .ok()
+        .or_else(|| std::env::var(legacy).ok())
 }
 
 fn unique_prefix(profile: &str) -> String {
@@ -29,11 +35,13 @@ fn signer() -> Arc<HmacAttestationSigner> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn aws_general_purpose_bucket_qualification_matrix() {
     if !enabled() {
-        eprintln!("set PROLLY_S3_AWS=1 and the documented AWS bucket variables to run");
+        eprintln!(
+            "set PROLLY_S3_AWS_QUALIFICATION=1 and the documented AWS bucket variables to run"
+        );
         return;
     }
-    let region_name = std::env::var("PROLLY_AWS_REGION")
-        .expect("PROLLY_AWS_REGION is required when PROLLY_S3_AWS=1");
+    let region_name = environment("PROLLY_S3_AWS_REGION", "PROLLY_AWS_REGION")
+        .expect("PROLLY_S3_AWS_REGION is required when AWS qualification is enabled");
     let shared = aws_config::defaults(BehaviorVersion::latest())
         .region(Region::new(region_name.clone()))
         .load()
@@ -58,8 +66,8 @@ async fn aws_general_purpose_bucket_qualification_matrix() {
         assert_eq!(error.code, ErrorCode::ProviderNotQualified);
     }
 
-    let bucket = std::env::var("PROLLY_AWS_BUCKET_VERSIONED")
-        .expect("PROLLY_AWS_BUCKET_VERSIONED is required");
+    let bucket = environment("PROLLY_S3_AWS_BUCKET", "PROLLY_AWS_BUCKET_VERSIONED")
+        .expect("PROLLY_S3_AWS_BUCKET is required");
     let status = aws
         .get_bucket_versioning()
         .bucket(&bucket)

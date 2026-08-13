@@ -49,6 +49,35 @@ jobs:
           cargo +"$CLIENT_TOOLCHAIN" test --locked
           --manifest-path extensions/s3/Cargo.toml --workspace --all-features
           -- --skip seeded_histories_are_identical_across_stores_and_restart
+      - name: Start pinned RustFS
+        env:
+          PROLLY_RUSTFS_DATA_DIR: ${{ runner.temp }}/prolly-rustfs-data
+        run: |
+          mkdir -p "$PROLLY_RUSTFS_DATA_DIR"
+          docker compose -f extensions/s3/docker-compose.rustfs.yml up -d
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:9000/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f extensions/s3/docker-compose.rustfs.yml logs --no-color
+          exit 1
+      - name: Required RustFS integration suite
+        env:
+          PROLLY_S3_RUSTFS: "1"
+        run: >-
+          cargo +"$CLIENT_TOOLCHAIN" test --locked
+          --manifest-path extensions/s3/Cargo.toml
+          -p prolly-s3-client --test rustfs_repository -- --nocapture
+      - name: RustFS diagnostics
+        if: failure()
+        run: docker compose -f extensions/s3/docker-compose.rustfs.yml logs --no-color
+      - name: Stop RustFS
+        if: always()
+        env:
+          PROLLY_RUSTFS_DATA_DIR: ${{ runner.temp }}/prolly-rustfs-data
+        run: docker compose -f extensions/s3/docker-compose.rustfs.yml down -v
       - name: Independent protocol structure verifiers
         run: |
           python3 extensions/s3/spec/prolly-s3/conformance/verify.py

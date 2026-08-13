@@ -16,7 +16,8 @@ extensions/s3/scripts/check_clean_downstream.sh
 
 Core tests cover canonical encoding, immutable payloads, operation
 reconciliation, authority renewal/takeover, branch-scoped publication,
-structural merge, bounded indexes, and ref catalogs.
+structural merge, bounded indexes, ref catalogs, commit-DAG transfer, fsck,
+repair, retention pins, and concurrent immutable GC.
 
 ## RustFS
 
@@ -38,11 +39,13 @@ The suite verifies:
 - branch, tag, merge, and historical reads;
 - independent branch publication.
 
-The runnable example provides a small end-to-end smoke test:
+The required pull-request workflow starts the pinned RustFS image and runs this
+suite with `PROLLY_S3_RUSTFS=1`; provider tests must not silently self-skip.
+
+Run all documented scenarios:
 
 ```bash
-cargo run --manifest-path extensions/s3/Cargo.toml \
-  -p prolly-s3-client --example rustfs_versioned_bucket
+extensions/s3/scripts/run_rustfs_examples.sh
 ```
 
 ## Scale gates
@@ -78,10 +81,24 @@ PROLLY_S3_AWS_QUALIFICATION=1 \
 PROLLY_S3_AWS_BUCKET=your-isolated-bucket \
 PROLLY_S3_AWS_REGION=us-west-2 \
   cargo test --manifest-path extensions/s3/Cargo.toml \
-  -p prolly-s3-client --test aws_qualification -- --ignored --nocapture
+  -p prolly-s3-client --test aws_qualification -- --nocapture
 ```
 
-Also run `aws_performance_qualification` with workload-specific request bounds.
+Also run `aws_performance_qualification` with workload-specific request bounds:
+
+```bash
+PROLLY_S3_AWS_PERF=1 \
+PROLLY_S3_AWS_BUCKET=your-isolated-bucket \
+PROLLY_S3_AWS_REGION=us-west-2 \
+PROLLY_S3_AWS_PERF_WRITES_PER_TIER=1000 \
+PROLLY_S3_AWS_PERF_MAX_P99_MS=500 \
+PROLLY_S3_AWS_PERF_MIN_WRITES_PER_SECOND=10 \
+PROLLY_S3_AWS_PERF_MAX_CALLS_PER_WRITE=10 \
+  cargo test --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --test aws_performance_qualification \
+  aws_hot_branch_performance_release_gate -- --ignored --exact --nocapture
+```
+
 Do not promote on RustFS results alone. AWS qualification must cover:
 
 - regional latency and cross-AZ behavior;
@@ -104,7 +121,8 @@ Promote only when:
 - no test relies on bucket listing for normal node lookup;
 - operation response loss reconciles before fencing;
 - authority renewal survives the intended deployment duration;
-- gaps such as absent GC are accepted in the capacity plan.
+- GC grace periods, external-writer quiescence, and retention policies are
+  tested in the deployment runbook.
 
 Million- or billion-object claims require measurements at representative
 cardinality and traffic. Passing a 10K test is a regression gate, not proof of

@@ -51,6 +51,36 @@ async fn create(
 Call `initialize` once for a new prefix. Use the same builder inputs with
 `open` after restart. The default prefix is `.prolly`.
 
+## Runnable scenario examples
+
+The example suite uses an isolated repository prefix for every run. Start the
+pinned local RustFS service, then run every scenario:
+
+```bash
+docker compose -f extensions/s3/docker-compose.rustfs.yml up -d
+extensions/s3/scripts/run_rustfs_examples.sh
+```
+
+Run one scenario with Cargo:
+
+```bash
+cargo run --locked --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --example branch_diff_merge
+```
+
+| Example | Demonstrates |
+|---|---|
+| [`basic_object_workflow.rs`](examples/basic_object_workflow.rs) | Metadata, ranges, copy, listing, and historical reads |
+| [`atomic_batch_and_streaming.rs`](examples/atomic_batch_and_streaming.rs) | Durable atomic batches, checkpoints, and streamed input |
+| [`branch_diff_merge.rs`](examples/branch_diff_merge.rs) | Branch isolation, bounded diff, structural merge, log, and reflog |
+| [`restore_and_recovery.rs`](examples/restore_and_recovery.rs) | Restartable restore, administrative reset, and reflog recovery |
+| [`history_transfer_and_backup.rs`](examples/history_transfer_and_backup.rs) | Commit-DAG transfer and logical backup verification |
+| [`integrity_gc_and_observability.rs`](examples/integrity_gc_and_observability.rs) | Deep fsck, cache prewarm, metrics, retention pins, and GC |
+
+The default credentials and attestation key are local-demo values. Never use
+them in a shared or production environment. See [qualification](../QUALIFICATION.md)
+before adapting an example to AWS.
+
 ## Read and write files
 
 ```rust
