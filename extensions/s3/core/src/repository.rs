@@ -2653,6 +2653,39 @@ impl<P: ObjectPlane> Repository<P> {
         continuation: Option<&str>,
         requested_limit: usize,
     ) -> Result<ListObjectsPage> {
+        self.list_objects_page_from_snapshot(branch, None, prefix, continuation, requested_limit)
+            .await
+    }
+
+    /// List an explicit immutable snapshot using the same opaque traversal
+    /// cursor as [`Self::list_objects_page`]. The first page is seeded from
+    /// `snapshot`; every continuation is validated against that commit.
+    pub async fn list_objects_page_at(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+        prefix: &[u8],
+        continuation: Option<&str>,
+        requested_limit: usize,
+    ) -> Result<ListObjectsPage> {
+        self.list_objects_page_from_snapshot(
+            branch,
+            Some(snapshot),
+            prefix,
+            continuation,
+            requested_limit,
+        )
+        .await
+    }
+
+    async fn list_objects_page_from_snapshot(
+        &self,
+        branch: &str,
+        requested_snapshot: Option<CommitId>,
+        prefix: &[u8],
+        continuation: Option<&str>,
+        requested_limit: usize,
+    ) -> Result<ListObjectsPage> {
         std::str::from_utf8(prefix)
             .map_err(|_| Error::new(ErrorCode::InvalidKey, "list prefix is not UTF-8"))?;
         let limit = requested_limit.min(self.format.canonical_limits.max_list_page as usize);
@@ -2679,10 +2712,11 @@ impl<P: ObjectPlane> Repository<P> {
                 if cursor.repository != self.format.repository_id
                     || cursor.branch != branch
                     || cursor.prefix != prefix
+                    || requested_snapshot.is_some_and(|snapshot| cursor.snapshot != snapshot)
                 {
                     return Err(Error::new(
                         ErrorCode::InvalidContinuationToken,
-                        "list continuation belongs to another repository, branch, or prefix",
+                        "list continuation belongs to another repository, branch, snapshot, or prefix",
                     ));
                 }
                 cursor
@@ -2690,7 +2724,10 @@ impl<P: ObjectPlane> Repository<P> {
             None => ListObjectsCursor {
                 repository: self.format.repository_id,
                 branch: branch.to_string(),
-                snapshot: self.head(branch).await?,
+                snapshot: match requested_snapshot {
+                    Some(snapshot) => snapshot,
+                    None => self.head(branch).await?,
+                },
                 prefix: prefix.to_vec(),
                 traversal: prolly::RangeCursor::start(),
             },

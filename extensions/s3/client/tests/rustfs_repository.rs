@@ -381,6 +381,100 @@ async fn rustfs_ref_lifecycle_uses_catalog_shards_without_ref_scans() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_detached_paged_and_streamed_lists_stay_on_the_selected_commit() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("detached-listing"))
+        .writer("rustfs-detached-list-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .background_index_maintenance(false)
+        .initialize()
+        .await
+        .unwrap();
+    let base = client.head().await.unwrap();
+    client.create_branch("feature", Some(base)).await.unwrap();
+    let feature = client.checkout("feature").await.unwrap();
+    feature
+        .put_object("docs/a.txt", b"a".to_vec())
+        .await
+        .unwrap();
+    feature
+        .put_object("docs/b.txt", b"b".to_vec())
+        .await
+        .unwrap();
+    let selected = feature
+        .put_object("docs/c.txt", b"c".to_vec())
+        .await
+        .unwrap()
+        .id;
+    feature.advance_branch_indexes().await.unwrap();
+
+    // Checkout clones retain `feature` as the node-index lookup context while
+    // exposing the selected immutable commit as their logical revision.
+    let detached = feature.checkout(selected).await.unwrap();
+    assert_eq!(detached.branch(), None);
+    feature.delete_object("docs/b.txt").await.unwrap();
+    feature
+        .put_object("docs/later.txt", b"later".to_vec())
+        .await
+        .unwrap();
+    feature.advance_branch_indexes().await.unwrap();
+
+    let branch_page = feature.list_objects_page("docs/", None, 10).await.unwrap();
+    assert_ne!(branch_page.snapshot, selected);
+    assert_eq!(
+        branch_page
+            .objects
+            .iter()
+            .map(|object| object.key.as_slice())
+            .collect::<Vec<_>>(),
+        vec![
+            b"docs/a.txt".as_slice(),
+            b"docs/c.txt".as_slice(),
+            b"docs/later.txt".as_slice(),
+        ]
+    );
+
+    let mut continuation = None;
+    let mut paged_keys = Vec::new();
+    loop {
+        let page = detached
+            .list_objects_page("docs/", continuation.as_deref(), 1)
+            .await
+            .unwrap();
+        assert_eq!(page.snapshot, selected);
+        paged_keys.extend(page.objects.into_iter().map(|object| object.key));
+        continuation = page.continuation;
+        if continuation.is_none() {
+            break;
+        }
+    }
+    let historical_keys = vec![
+        b"docs/a.txt".to_vec(),
+        b"docs/b.txt".to_vec(),
+        b"docs/c.txt".to_vec(),
+    ];
+    assert_eq!(paged_keys, historical_keys);
+
+    let streamed = detached.stream_objects("docs/", 1);
+    futures_util::pin_mut!(streamed);
+    let mut streamed_keys = Vec::new();
+    while let Some(object) = streamed.next().await {
+        streamed_keys.push(object.unwrap().key);
+    }
+    assert_eq!(streamed_keys, historical_keys);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn rustfs_commit_session_preserves_n_plus_three_puts() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");

@@ -1179,6 +1179,9 @@ impl Client {
         }
     }
 
+    /// List one cursor page from the selected revision. Attached checkouts pin
+    /// the current branch head on page one; detached commit and tag checkouts
+    /// pin their immutable target. Continuations cannot cross those revisions.
     pub async fn list_objects_page(
         &self,
         prefix: impl AsRef<str>,
@@ -1186,18 +1189,34 @@ impl Client {
         limit: usize,
     ) -> Result<ListObjectsPage> {
         self.ensure_provider_qualified()?;
-        self.repository
-            .list_objects_page(
-                &self.branch,
-                prefix.as_ref().as_bytes(),
-                continuation,
-                limit,
-            )
-            .await
+        match self.checked_out.target() {
+            Some(snapshot) => {
+                self.repository
+                    .list_objects_page_at(
+                        &self.branch,
+                        snapshot,
+                        prefix.as_ref().as_bytes(),
+                        continuation,
+                        limit,
+                    )
+                    .await
+            }
+            None => {
+                self.repository
+                    .list_objects_page(
+                        &self.branch,
+                        prefix.as_ref().as_bytes(),
+                        continuation,
+                        limit,
+                    )
+                    .await
+            }
+        }
     }
 
-    /// Lazily stream a snapshot-bound prefix listing. The first page captures
-    /// the branch snapshot; subsequent pages seek through its opaque cursor.
+    /// Lazily stream a snapshot-bound prefix listing. An attached checkout
+    /// captures the branch head on its first page; a detached checkout starts
+    /// from its immutable commit. Later pages seek through the opaque cursor.
     pub fn stream_objects(
         &self,
         prefix: impl Into<String>,

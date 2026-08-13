@@ -344,6 +344,29 @@ async fn object_list_cursor_is_snapshot_bound_and_resumes_without_replay() {
         .await
         .unwrap();
 
+    let historical_first = repository
+        .list_objects_page_at("main", snapshot, b"cursor/", None, 100)
+        .await
+        .unwrap();
+    assert_eq!(historical_first.snapshot, snapshot);
+    assert_eq!(historical_first.objects, first.objects);
+
+    let current = repository.head("main").await.unwrap();
+    let error = repository
+        .list_objects_page_at(
+            "main",
+            current,
+            b"cursor/",
+            first.continuation.as_deref(),
+            100,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.code,
+        prolly_s3_core::ErrorCode::InvalidContinuationToken
+    );
+
     plane.reset_request_counts();
     let second = repository
         .list_objects_page("main", b"cursor/", first.continuation.as_deref(), 100)
