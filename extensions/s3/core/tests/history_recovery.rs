@@ -351,4 +351,27 @@ async fn logical_repair_rebinds_across_repositories_and_removes_destination_only
         .await
         .unwrap()
         .is_none());
+
+    let mut verification = source
+        .start_backup_verification(
+            &destination,
+            "main",
+            source_head,
+            "main",
+            repair.expected_head,
+        )
+        .await
+        .unwrap();
+    loop {
+        let page = source
+            .advance_backup_verification(&destination, &verification, 1)
+            .await
+            .unwrap();
+        verification = page.cursor;
+        if page.complete {
+            break;
+        }
+    }
+    assert_eq!(verification.report.objects_verified, 2);
+    assert_eq!(verification.report.content_bytes_verified, 9);
 }

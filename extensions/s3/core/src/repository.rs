@@ -334,6 +334,33 @@ pub struct RepairPage {
     pub complete: bool,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BackupVerificationReport {
+    pub objects_verified: u64,
+    pub content_bytes_verified: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BackupVerificationCursor {
+    pub source_repository: crate::RepositoryId,
+    pub destination_repository: crate::RepositoryId,
+    pub source_branch: String,
+    pub destination_branch: String,
+    pub source_snapshot: CommitId,
+    pub destination_snapshot: CommitId,
+    pub source_after: Option<Vec<u8>>,
+    pub destination_after: Option<Vec<u8>>,
+    pub report: BackupVerificationReport,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackupVerificationPage {
+    pub cursor: BackupVerificationCursor,
+    pub processed: usize,
+    pub complete: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchHead {
     pub name: String,
@@ -3059,6 +3086,153 @@ impl<P: ObjectPlane> Repository<P> {
             processed,
             receipt: Some(receipt),
             complete,
+        })
+    }
+
+    pub async fn start_backup_verification<Q: ObjectPlane>(
+        &self,
+        destination: &Repository<Q>,
+        source_branch: &str,
+        source_snapshot: CommitId,
+        destination_branch: &str,
+        destination_snapshot: CommitId,
+    ) -> Result<BackupVerificationCursor> {
+        validate_branch(source_branch)?;
+        validate_branch(destination_branch)?;
+        self.locator.register(source_branch)?;
+        destination.locator.register(destination_branch)?;
+        self.require_branch_indexes_ready(source_branch).await?;
+        destination
+            .require_branch_indexes_ready(destination_branch)
+            .await?;
+        self.load_commit_object(source_snapshot).await?;
+        destination.load_commit_object(destination_snapshot).await?;
+        Ok(BackupVerificationCursor {
+            source_repository: self.format.repository_id,
+            destination_repository: destination.format.repository_id,
+            source_branch: source_branch.to_string(),
+            destination_branch: destination_branch.to_string(),
+            source_snapshot,
+            destination_snapshot,
+            source_after: None,
+            destination_after: None,
+            report: BackupVerificationReport::default(),
+            complete: false,
+        })
+    }
+
+    /// Deeply compare one bounded page of two logical snapshots, including
+    /// payload bytes. This qualifies a logical backup even when provider
+    /// version IDs and immutable physical paths differ.
+    pub async fn advance_backup_verification<Q: ObjectPlane>(
+        &self,
+        destination: &Repository<Q>,
+        cursor: &BackupVerificationCursor,
+        limit: usize,
+    ) -> Result<BackupVerificationPage> {
+        if cursor.complete {
+            return Ok(BackupVerificationPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                complete: true,
+            });
+        }
+        if cursor.source_repository != self.format.repository_id
+            || cursor.destination_repository != destination.format.repository_id
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "backup verification cursor belongs to another repository pair",
+            ));
+        }
+        if limit == 0 || limit > self.format.canonical_limits.max_list_page as usize {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "backup verification page size exceeds the canonical list limit",
+            ));
+        }
+        let (source_objects, source_truncated) = self
+            .list_objects_at(
+                &cursor.source_branch,
+                cursor.source_snapshot,
+                b"",
+                cursor.source_after.as_deref(),
+                limit,
+            )
+            .await?;
+        let (destination_objects, destination_truncated) = destination
+            .list_objects_at(
+                &cursor.destination_branch,
+                cursor.destination_snapshot,
+                b"",
+                cursor.destination_after.as_deref(),
+                limit,
+            )
+            .await?;
+        if source_objects.len() != destination_objects.len()
+            || source_truncated != destination_truncated
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "backup snapshots have different object-key cardinality",
+            ));
+        }
+        let processed = source_objects.len();
+        let mut next = cursor.clone();
+        next.source_after = source_objects.last().map(|object| object.key.clone());
+        next.destination_after = destination_objects.last().map(|object| object.key.clone());
+        for (source_object, destination_object) in
+            source_objects.into_iter().zip(destination_objects)
+        {
+            if source_object.key != destination_object.key
+                || source_object.version.body.kind != destination_object.version.body.kind
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "backup snapshots have different logical object metadata",
+                ));
+            }
+            let source_data = self
+                .get_object_at(
+                    &cursor.source_branch,
+                    cursor.source_snapshot,
+                    &source_object.key,
+                )
+                .await?
+                .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "source object is missing"))?;
+            let destination_data = destination
+                .get_object_at(
+                    &cursor.destination_branch,
+                    cursor.destination_snapshot,
+                    &destination_object.key,
+                )
+                .await?
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "destination object is missing")
+                })?;
+            if source_data.bytes != destination_data.bytes {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "backup snapshots have different payload bytes",
+                ));
+            }
+            next.report.objects_verified =
+                checked_fsck_add(next.report.objects_verified, 1, "backup-verified-object")?;
+            next.report.content_bytes_verified = checked_fsck_add(
+                next.report.content_bytes_verified,
+                source_data.bytes.len() as u64,
+                "backup-verified-byte",
+            )?;
+        }
+        next.complete = !source_truncated;
+        if next.complete {
+            next.source_after = None;
+            next.destination_after = None;
+        }
+        Ok(BackupVerificationPage {
+            complete: next.complete,
+            cursor: next,
+            processed,
         })
     }
 

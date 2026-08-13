@@ -8,13 +8,14 @@ use std::{
 use aws_sdk_s3::primitives::ByteStream;
 use md5::Md5;
 use prolly_s3_core::{
-    BatchId, BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth, CommitId,
-    CommitPage, CommitReceipt, CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode,
-    FsckCursor, FsckPage, HistoryCursor, JournalIndexRebuildCleanup, JournalIndexRebuildCursor,
-    JournalIndexRebuildStep, MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor,
-    MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage,
-    MergeCursor, MergePolicy, MergeReceipt, ObjectData, ObjectDiff, ObjectDiffCursor,
-    ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion, OperationId,
+    BackupVerificationCursor, BackupVerificationPage, BatchId, BranchCatalogPage, BranchHead,
+    BranchIndexAdvanceReport, BranchIndexHealth, CommitId, CommitPage, CommitReceipt,
+    CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCursor, FsckPage,
+    HistoryCursor, JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
+    MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage,
+    MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor,
+    MergePolicy, MergeReceipt, ObjectData, ObjectDiff, ObjectDiffCursor, ObjectDiffPage,
+    ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion, OperationId,
     OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
     ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
@@ -252,6 +253,74 @@ impl Client {
         source.ensure_provider_qualified()?;
         self.repository
             .advance_repair_from(source.repository.as_ref(), cursor, max_steps)
+            .await
+    }
+
+    pub async fn start_fetch_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<RepairCursor> {
+        self.start_repair_from(source, source_snapshot, expected_head, "fetch snapshot")
+            .await
+    }
+
+    pub async fn start_clone_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<RepairCursor> {
+        self.start_repair_from(source, source_snapshot, expected_head, "clone snapshot")
+            .await
+    }
+
+    pub async fn start_push_to(
+        &self,
+        destination: &Client,
+        source_snapshot: CommitId,
+        destination_expected_head: CommitId,
+    ) -> Result<RepairCursor> {
+        destination
+            .start_repair_from(
+                self,
+                source_snapshot,
+                destination_expected_head,
+                "push snapshot",
+            )
+            .await
+    }
+
+    pub async fn start_backup_verification(
+        &self,
+        destination: &Client,
+        source_snapshot: CommitId,
+        destination_snapshot: CommitId,
+    ) -> Result<BackupVerificationCursor> {
+        self.ensure_provider_qualified()?;
+        destination.ensure_provider_qualified()?;
+        self.repository
+            .start_backup_verification(
+                destination.repository.as_ref(),
+                &self.branch,
+                source_snapshot,
+                &destination.branch,
+                destination_snapshot,
+            )
+            .await
+    }
+
+    pub async fn advance_backup_verification(
+        &self,
+        destination: &Client,
+        cursor: &BackupVerificationCursor,
+        limit: usize,
+    ) -> Result<BackupVerificationPage> {
+        self.ensure_provider_qualified()?;
+        destination.ensure_provider_qualified()?;
+        self.repository
+            .advance_backup_verification(destination.repository.as_ref(), cursor, limit)
             .await
     }
 

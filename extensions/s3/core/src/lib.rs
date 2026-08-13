@@ -59,7 +59,8 @@ pub use ref_catalog::{
     ShardedRefCatalog, REF_CATALOG_SHARDS,
 };
 pub use repository::{
-    validate_branch, BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth,
+    validate_branch, BackupVerificationCursor, BackupVerificationPage, BackupVerificationReport,
+    BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth,
     BranchIndexMaintenance, CommitClosureCursor, CommitClosurePage, CommitPage, CommitReceipt,
     DelimitedObjectPage, FsckCursor, FsckPage, FsckPhase, FsckReport, HistoryCursor, ObjectData,
     ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectRangeData, ObjectSummary,
