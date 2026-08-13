@@ -6,6 +6,7 @@ mod codec;
 mod commit_session;
 mod control_versions;
 mod error;
+mod gc;
 mod journal_indexes;
 mod merge;
 mod model;
@@ -18,6 +19,7 @@ mod repository;
 mod runtime;
 mod store;
 mod tag;
+mod transfer;
 
 pub use authority::{
     AuthorityLease, AuthorityLeaseState, AuthorityPermit, AuthorityScope, AuthorityStamp,
@@ -31,6 +33,7 @@ pub use control_versions::{
     MutableControlObserver, MutableControlStore, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
+pub use gc::{GcCursor, GcPage, GcPhase, GcReport};
 pub use journal_indexes::{
     JournalDerivedIndexes, JournalIndexAdvanceReport, JournalIndexRebuildCleanup,
     JournalIndexRebuildCursor, JournalIndexRebuildPhase, JournalIndexRebuildStep,
@@ -59,10 +62,20 @@ pub use ref_catalog::{
     ShardedRefCatalog, REF_CATALOG_SHARDS,
 };
 pub use repository::{
-    validate_branch, BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth,
-    BranchIndexMaintenance, CommitReceipt, ObjectData, ObjectSummary, RefCatalogRepairPage,
-    Repository, RepositoryOptions, ShardAuthorityMaintenance, Tag, TagCatalogPage, VersionSummary,
+    validate_branch, BackupVerificationCursor, BackupVerificationPage, BackupVerificationReport,
+    BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth,
+    BranchIndexMaintenance, CommitClosureCursor, CommitClosurePage, CommitPage, CommitReceipt,
+    DelimitedObjectPage, FsckCursor, FsckPage, FsckPhase, FsckReport, HistoryCursor,
+    NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor, ObjectDiffPage,
+    ObjectRangeData, ObjectSummary, RefCatalogRepairPage, RefMoveReceipt, RepairCursor, RepairPage,
+    RepairPhase, RepairReport, Repository, RepositoryOptions, RestoreCursor, RestorePage,
+    RetentionPin, RetentionPinPage, ShardAuthorityMaintenance, Tag, TagCatalogPage,
+    TraversalBudget, VersionSummary,
 };
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};
 pub use tag::{LoadedTag, TagStore};
+pub use transfer::{
+    HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage, HistoryTransferPhase,
+    HistoryTransferReport, PendingHistoryTransferCommit,
+};

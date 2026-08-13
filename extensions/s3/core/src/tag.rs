@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use crate::{
     decode_canonical, encode_canonical, AuthorityPermit, AuthorityScope, CommitId, CompareExchange,
-    CompareExchangeOutcome, Error, ErrorCode, MutableControlStore, ObjectPath, ObjectPlane,
-    OperationId, RefGeneration, ReflogEntry, RepositoryId, Result, RetryAdvice,
-    ShardWriterAuthority, StorageToken, TagValue, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
+    CompareExchangeOutcome, Error, ErrorCode, MutableControlObserver, MutableControlStore,
+    ObjectPath, ObjectPlane, OperationId, RefGeneration, ReflogEntry, RepositoryId, Result,
+    RetryAdvice, ShardWriterAuthority, StorageToken, TagValue,
+    DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 
 #[derive(Clone, Debug)]
@@ -44,9 +45,35 @@ impl<P: ObjectPlane> TagStore<P> {
         authority: Arc<ShardWriterAuthority<P>>,
         control_versions_to_retain: usize,
     ) -> Result<Self> {
+        Self::new_with_gc_controls(
+            plane,
+            prefix,
+            repository,
+            authority,
+            control_versions_to_retain,
+            None,
+            None,
+        )
+    }
+
+    pub(crate) fn new_with_gc_controls(
+        plane: Arc<P>,
+        prefix: impl Into<String>,
+        repository: RepositoryId,
+        authority: Arc<ShardWriterAuthority<P>>,
+        control_versions_to_retain: usize,
+        observer: Option<Arc<dyn MutableControlObserver>>,
+        barrier: Option<Arc<tokio::sync::RwLock<()>>>,
+    ) -> Result<Self> {
         let prefix = prefix.into();
-        let controls =
+        let mut controls =
             MutableControlStore::new(plane.clone(), prefix.clone(), control_versions_to_retain)?;
+        if let Some(observer) = observer {
+            controls = controls.with_observer(observer);
+        }
+        if let Some(barrier) = barrier {
+            controls = controls.with_mutation_barrier(barrier);
+        }
         Ok(Self {
             plane,
             controls,

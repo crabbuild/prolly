@@ -8,15 +8,21 @@ use std::{
 use aws_sdk_s3::primitives::ByteStream;
 use md5::Md5;
 use prolly_s3_core::{
-    BatchId, BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth, CommitId,
-    CommitReceipt, CommitSessionManifest, Error, ErrorCode, JournalIndexRebuildCleanup,
-    JournalIndexRebuildCursor, JournalIndexRebuildStep, MergeAdvancePage, MergeBaseCursor,
-    MergeBasePage, MergeChangeCursor, MergeChangePage, MergeCleanupCursor, MergeCleanupPage,
-    MergeConflictCursor, MergeConflictPage, MergeCursor, MergePolicy, MergeReceipt, ObjectData,
-    ObjectHeaders, ObjectSummary, ObjectVersion, OperationId, OperationIndexRebuildCursor,
-    OperationIndexRebuildStep, ProviderAttestation, ProviderPerKeyVersionLimit, ProviderProfileId,
-    RefCatalogCursor, RefCatalogRepairPage, RefKind, Repository, RepositoryOptions, Result,
-    StagedMutation, Tag, TagCatalogPage, VersionSummary,
+    BackupVerificationCursor, BackupVerificationPage, BatchId, BranchCatalogPage, BranchHead,
+    BranchIndexAdvanceReport, BranchIndexHealth, CommitId, CommitPage, CommitReceipt,
+    CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCursor, FsckPage, GcCursor,
+    GcPage, HistoryCursor, HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage,
+    JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
+    MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage,
+    MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor,
+    MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor,
+    ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion, OperationId,
+    OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
+    ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
+    PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
+    RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
+    RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
+    VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -66,6 +72,14 @@ pub struct ClientBuilder {
     background_index_maintenance: Option<bool>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IngestObject {
+    pub key: String,
+    pub bytes: Vec<u8>,
+    pub headers: ObjectHeaders,
+    pub user_metadata: BTreeMap<String, String>,
+}
+
 impl Client {
     pub fn builder() -> ClientBuilder {
         ClientBuilder::default()
@@ -81,6 +95,17 @@ impl Client {
 
     pub fn repository_id(&self) -> prolly_s3_core::RepositoryId {
         self.repository.repository_id()
+    }
+
+    pub fn node_cache_snapshot(&self) -> prolly_s3_core::NodeCacheSnapshot {
+        self.repository.node_cache_snapshot()
+    }
+
+    pub async fn prewarm_node_cache(&self, snapshot: CommitId) -> Result<NodeCachePrewarmReport> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .prewarm_node_cache(&self.branch, snapshot)
+            .await
     }
 
     pub fn for_branch(&self, branch: impl Into<String>) -> Result<Self> {
@@ -127,6 +152,359 @@ impl Client {
     pub async fn delete_tag(&self, name: impl AsRef<str>, expected: CommitId) -> Result<()> {
         self.ensure_provider_qualified()?;
         self.repository.delete_tag(name.as_ref(), expected).await
+    }
+
+    pub async fn create_retention_pin(
+        &self,
+        name: impl AsRef<str>,
+        target: CommitId,
+    ) -> Result<RetentionPin> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .create_retention_pin(name.as_ref(), target)
+            .await
+    }
+
+    pub async fn retention_pin(&self, name: impl AsRef<str>) -> Result<RetentionPin> {
+        self.ensure_provider_qualified()?;
+        self.repository.retention_pin(name.as_ref()).await
+    }
+
+    pub async fn delete_retention_pin(
+        &self,
+        name: impl AsRef<str>,
+        expected: CommitId,
+    ) -> Result<()> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .delete_retention_pin(name.as_ref(), expected)
+            .await
+    }
+
+    pub async fn list_retention_pins_page(
+        &self,
+        cursor: Option<RefCatalogCursor>,
+        limit: usize,
+    ) -> Result<RetentionPinPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_retention_pins_page(cursor, limit)
+            .await
+    }
+
+    pub async fn commit(&self, id: CommitId) -> Result<prolly_s3_core::BucketCommit> {
+        self.ensure_provider_qualified()?;
+        self.repository.commit(id).await
+    }
+
+    pub async fn log(&self, limit: usize) -> Result<Vec<(CommitId, prolly_s3_core::BucketCommit)>> {
+        self.ensure_provider_qualified()?;
+        self.repository.log(&self.branch, limit).await
+    }
+
+    pub async fn log_bounded(
+        &self,
+        start: CommitId,
+        cursor: Option<&HistoryCursor>,
+        limit: usize,
+        budget: TraversalBudget,
+    ) -> Result<CommitPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .log_page_bounded(&self.branch, start, cursor, limit, budget)
+            .await
+    }
+
+    pub async fn diff(&self, from: CommitId, to: CommitId) -> Result<Vec<ObjectDiff>> {
+        self.ensure_provider_qualified()?;
+        self.repository.diff(&self.branch, from, to).await
+    }
+
+    pub async fn diff_bounded(
+        &self,
+        from: CommitId,
+        to: CommitId,
+        cursor: Option<&ObjectDiffCursor>,
+        limit: usize,
+    ) -> Result<ObjectDiffPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .diff_page_bounded(&self.branch, from, to, cursor, limit)
+            .await
+    }
+
+    pub async fn open_reflog(&self) -> Result<PublicationJournalCursor> {
+        self.ensure_provider_qualified()?;
+        self.repository.open_reflog(&self.branch).await
+    }
+
+    pub async fn read_reflog_page(
+        &self,
+        cursor: &PublicationJournalCursor,
+        limit: usize,
+    ) -> Result<PublicationJournalPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.read_reflog_page(cursor, limit).await
+    }
+
+    pub async fn reset_branch(
+        &self,
+        to: CommitId,
+        expected_head: CommitId,
+        reason: impl AsRef<str>,
+    ) -> Result<RefMoveReceipt> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .reset_branch(&self.branch, to, expected_head, reason.as_ref())
+            .await
+    }
+
+    pub async fn recover_branch(
+        &self,
+        reflog: prolly_s3_core::ReflogEntryId,
+        expected_head: CommitId,
+        reason: impl AsRef<str>,
+    ) -> Result<RefMoveReceipt> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .recover_branch(&self.branch, reflog, expected_head, reason.as_ref())
+            .await
+    }
+
+    pub async fn start_fsck(&self, deep: bool) -> Result<FsckCursor> {
+        self.ensure_provider_qualified()?;
+        self.repository.start_fsck(&self.branch, deep).await
+    }
+
+    pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.advance_fsck(cursor, max_steps).await
+    }
+
+    pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {
+        self.ensure_provider_qualified()?;
+        self.repository.start_gc(grace_millis).await
+    }
+
+    pub async fn advance_gc(&self, cursor: &GcCursor, max_steps: usize) -> Result<GcPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.advance_gc(cursor, max_steps).await
+    }
+
+    pub async fn sweep_gc(&self, cursor: &GcCursor, max_candidates: usize) -> Result<GcPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.sweep_gc(cursor, max_candidates).await
+    }
+
+    pub async fn start_repair_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+        message: impl Into<String>,
+    ) -> Result<RepairCursor> {
+        self.ensure_provider_qualified()?;
+        source.ensure_provider_qualified()?;
+        self.repository
+            .start_repair_from(
+                source.repository.as_ref(),
+                &source.branch,
+                source_snapshot,
+                &self.branch,
+                expected_head,
+                message,
+            )
+            .await
+    }
+
+    pub async fn advance_repair_from(
+        &self,
+        source: &Client,
+        cursor: &RepairCursor,
+        max_steps: usize,
+    ) -> Result<RepairPage> {
+        self.ensure_provider_qualified()?;
+        source.ensure_provider_qualified()?;
+        self.repository
+            .advance_repair_from(source.repository.as_ref(), cursor, max_steps)
+            .await
+    }
+
+    pub async fn start_history_transfer_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        self.ensure_provider_qualified()?;
+        source.ensure_provider_qualified()?;
+        self.repository
+            .start_history_transfer_from(
+                source.repository.as_ref(),
+                &source.branch,
+                source_snapshot,
+                &self.branch,
+                expected_head,
+            )
+            .await
+    }
+
+    pub async fn advance_history_transfer_from(
+        &self,
+        source: &Client,
+        cursor: &HistoryTransferCursor,
+        max_steps: usize,
+    ) -> Result<HistoryTransferPage> {
+        self.ensure_provider_qualified()?;
+        source.ensure_provider_qualified()?;
+        self.repository
+            .advance_history_transfer_from(source.repository.as_ref(), cursor, max_steps)
+            .await
+    }
+
+    pub async fn publish_history_transfer(
+        &self,
+        cursor: &HistoryTransferCursor,
+        reason: impl AsRef<str>,
+    ) -> Result<RefMoveReceipt> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .publish_history_transfer(cursor, reason.as_ref())
+            .await
+    }
+
+    pub async fn history_transfer_mapping(
+        &self,
+        cursor: &HistoryTransferCursor,
+        source: CommitId,
+    ) -> Result<Option<HistoryTransferMapping>> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .history_transfer_mapping(cursor, source)
+            .await
+    }
+
+    pub async fn start_fetch_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<RepairCursor> {
+        self.start_repair_from(source, source_snapshot, expected_head, "fetch snapshot")
+            .await
+    }
+
+    pub async fn start_clone_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<RepairCursor> {
+        self.start_repair_from(source, source_snapshot, expected_head, "clone snapshot")
+            .await
+    }
+
+    pub async fn start_push_to(
+        &self,
+        destination: &Client,
+        source_snapshot: CommitId,
+        destination_expected_head: CommitId,
+    ) -> Result<RepairCursor> {
+        destination
+            .start_repair_from(
+                self,
+                source_snapshot,
+                destination_expected_head,
+                "push snapshot",
+            )
+            .await
+    }
+
+    /// Start a fetch that preserves the complete source commit DAG.
+    pub async fn start_history_fetch_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        self.start_history_transfer_from(source, source_snapshot, expected_head)
+            .await
+    }
+
+    /// Start a clone that preserves the complete source commit DAG.
+    pub async fn start_history_clone_from(
+        &self,
+        source: &Client,
+        source_snapshot: CommitId,
+        expected_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        self.start_history_transfer_from(source, source_snapshot, expected_head)
+            .await
+    }
+
+    /// Start a push that preserves the complete source commit DAG.
+    pub async fn start_history_push_to(
+        &self,
+        destination: &Client,
+        source_snapshot: CommitId,
+        destination_expected_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        destination
+            .start_history_transfer_from(self, source_snapshot, destination_expected_head)
+            .await
+    }
+
+    pub async fn start_backup_verification(
+        &self,
+        destination: &Client,
+        source_snapshot: CommitId,
+        destination_snapshot: CommitId,
+    ) -> Result<BackupVerificationCursor> {
+        self.ensure_provider_qualified()?;
+        destination.ensure_provider_qualified()?;
+        self.repository
+            .start_backup_verification(
+                destination.repository.as_ref(),
+                &self.branch,
+                source_snapshot,
+                &destination.branch,
+                destination_snapshot,
+            )
+            .await
+    }
+
+    pub async fn advance_backup_verification(
+        &self,
+        destination: &Client,
+        cursor: &BackupVerificationCursor,
+        limit: usize,
+    ) -> Result<BackupVerificationPage> {
+        self.ensure_provider_qualified()?;
+        destination.ensure_provider_qualified()?;
+        self.repository
+            .advance_backup_verification(destination.repository.as_ref(), cursor, limit)
+            .await
+    }
+
+    pub async fn start_restore(
+        &self,
+        source: CommitId,
+        expected_head: CommitId,
+        message: impl Into<String>,
+    ) -> Result<RestoreCursor> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .start_restore(&self.branch, source, expected_head, message)
+            .await
+    }
+
+    pub async fn advance_restore(
+        &self,
+        cursor: &RestoreCursor,
+        max_steps: usize,
+    ) -> Result<RestorePage> {
+        self.ensure_provider_qualified()?;
+        self.repository.advance_restore(cursor, max_steps).await
     }
 
     /// Start a restartable structural merge from `source_branch` into this
@@ -313,6 +691,53 @@ impl Client {
             .await
     }
 
+    /// Ingest objects through durable atomic batches. This is the recommended
+    /// path for bulk loading because publication and checkpoint costs are
+    /// amortized across each batch.
+    pub async fn ingest_objects(
+        &self,
+        objects: Vec<IngestObject>,
+        batch_size: usize,
+    ) -> Result<Vec<CommitReceipt>> {
+        self.ensure_provider_qualified()?;
+        let max = self
+            .repository
+            .format()
+            .canonical_limits
+            .max_mutations_per_commit as usize;
+        if batch_size == 0 || batch_size > max {
+            return Err(invalid(
+                "ingest batch size exceeds the canonical mutation limit",
+            ));
+        }
+        let mut receipts = Vec::new();
+        let mut objects = objects.into_iter();
+        loop {
+            let batch = objects.by_ref().take(batch_size).collect::<Vec<_>>();
+            if batch.is_empty() {
+                break;
+            }
+            let mut session = self
+                .begin_commit()
+                .message("bulk ingest")
+                .checkpoint_every(batch_size.min(1_000))
+                .start()
+                .await?;
+            for object in batch {
+                session
+                    .put_object_with_metadata(
+                        object.key,
+                        object.bytes,
+                        object.headers,
+                        object.user_metadata,
+                    )
+                    .await?;
+            }
+            receipts.push(session.publish().await?);
+        }
+        Ok(receipts)
+    }
+
     pub async fn get_object(&self, key: impl AsRef<str>) -> Result<Option<ObjectData>> {
         self.ensure_provider_qualified()?;
         self.repository
@@ -329,6 +754,58 @@ impl Client {
         self.repository
             .get_object_at(&self.branch, snapshot, key.as_ref().as_bytes())
             .await
+    }
+
+    pub async fn head_object(
+        &self,
+        key: impl AsRef<str>,
+    ) -> Result<Option<(CommitId, ObjectSummary)>> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .head_object(&self.branch, key.as_ref().as_bytes())
+            .await
+    }
+
+    pub async fn get_object_range(
+        &self,
+        snapshot: CommitId,
+        key: impl AsRef<str>,
+        range: std::ops::RangeInclusive<u64>,
+    ) -> Result<Option<ObjectRangeData>> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .get_object_range(&self.branch, snapshot, key.as_ref().as_bytes(), range)
+            .await
+    }
+
+    pub async fn copy_object(
+        &self,
+        source_snapshot: CommitId,
+        source_key: impl AsRef<str>,
+        destination_key: impl Into<String>,
+    ) -> Result<CommitReceipt> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .copy_object(
+                &self.branch,
+                source_snapshot,
+                source_key.as_ref().as_bytes(),
+                destination_key.into().into_bytes(),
+            )
+            .await
+    }
+
+    pub async fn delete_objects<I, K>(&self, keys: I) -> Result<CommitReceipt>
+    where
+        I: IntoIterator<Item = K>,
+        K: Into<String>,
+    {
+        self.ensure_provider_qualified()?;
+        let keys = keys
+            .into_iter()
+            .map(|key| key.into().into_bytes())
+            .collect();
+        self.repository.delete_objects(&self.branch, keys).await
     }
 
     pub async fn delete_object(&self, key: impl Into<String>) -> Result<CommitReceipt> {
@@ -382,6 +859,25 @@ impl Client {
             .list_objects(
                 &self.branch,
                 prefix.as_ref().as_bytes(),
+                after.map(str::as_bytes),
+                limit,
+            )
+            .await
+    }
+
+    pub async fn list_objects_delimited(
+        &self,
+        prefix: impl AsRef<str>,
+        delimiter: impl AsRef<str>,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<DelimitedObjectPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_objects_delimited(
+                &self.branch,
+                prefix.as_ref().as_bytes(),
+                delimiter.as_ref().as_bytes(),
                 after.map(str::as_bytes),
                 limit,
             )

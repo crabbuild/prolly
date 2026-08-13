@@ -26,6 +26,7 @@ pub enum MutableControlKind {
     CommitGraphHead,
     OperationIndexHead,
     JournalDerivedIndexHead,
+    GcCoordinator,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -47,6 +48,7 @@ pub struct MutableControlStore<P: ObjectPlane> {
     versions_to_retain: usize,
     seen_paths: Arc<Mutex<BTreeSet<ObjectPath>>>,
     observer: Option<Arc<dyn MutableControlObserver>>,
+    mutation_barrier: Option<Arc<tokio::sync::RwLock<()>>>,
 }
 
 #[async_trait::async_trait]
@@ -77,11 +79,17 @@ impl<P: ObjectPlane> MutableControlStore<P> {
             versions_to_retain,
             seen_paths: Arc::new(Mutex::new(BTreeSet::new())),
             observer: None,
+            mutation_barrier: None,
         })
     }
 
     pub fn with_observer(mut self, observer: Arc<dyn MutableControlObserver>) -> Self {
         self.observer = Some(observer);
+        self
+    }
+
+    pub fn with_mutation_barrier(mut self, barrier: Arc<tokio::sync::RwLock<()>>) -> Self {
+        self.mutation_barrier = Some(barrier);
         self
     }
 
@@ -97,6 +105,10 @@ impl<P: ObjectPlane> MutableControlStore<P> {
         &self,
         request: CompareExchange,
     ) -> Result<CompareExchangeOutcome> {
+        let _barrier = match &self.mutation_barrier {
+            Some(barrier) => Some(barrier.read().await),
+            None => None,
+        };
         let kind = self.classify(&request.path).ok_or_else(|| {
             Error::new(
                 ErrorCode::InvalidRequest,
@@ -361,6 +373,7 @@ pub fn classify_mutable_control_path(
         ["commit-graph", "head.cbor"] => Some(MutableControlKind::CommitGraphHead),
         ["operation-index", "heads", _] => Some(MutableControlKind::OperationIndexHead),
         ["journal-index", "heads", _] => Some(MutableControlKind::JournalDerivedIndexHead),
+        ["gc", "coordinator.cbor"] => Some(MutableControlKind::GcCoordinator),
         _ => None,
     }
 }

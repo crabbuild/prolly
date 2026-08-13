@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     encode_canonical, AuthorityPermit, AuthorityScope, BranchRefBarrier, BucketCommit, CommitId,
     CommitObject, CompareExchange, CompareExchangeOutcome, Error, ErrorCode, GetRequest,
-    ImmutablePut, MutableControlStore, NodePack, ObjectPath, ObjectPlane, OperationId,
-    PendingAuthority, PublicationEvent, PublicationEventId, RefGeneration, RefValue, ReflogEntry,
-    RepositoryId, Result, RetryAdvice, ShardWriterAuthority, StorageToken,
+    ImmutablePut, MutableControlObserver, MutableControlStore, NodePack, ObjectPath, ObjectPlane,
+    OperationId, PendingAuthority, PublicationEvent, PublicationEventId, RefGeneration, RefValue,
+    ReflogEntry, RepositoryId, Result, RetryAdvice, ShardWriterAuthority, StorageToken,
     DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 
@@ -59,6 +59,15 @@ pub struct CommitPublication<'a> {
     pub now_millis: u64,
 }
 
+pub(crate) struct BranchMovement<'a> {
+    pub permit: &'a AuthorityPermit,
+    pub branch: &'a str,
+    pub target: CommitId,
+    pub operation: OperationId,
+    pub message: &'a str,
+    pub now_millis: u64,
+}
+
 impl AppliedBranchBarrier {
     pub fn into_barrier(self) -> BranchRefBarrier {
         self.barrier
@@ -99,9 +108,35 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
         authority: Arc<ShardWriterAuthority<P>>,
         control_versions_to_retain: usize,
     ) -> Result<Self> {
+        Self::new_with_gc_controls(
+            plane,
+            prefix,
+            repository,
+            authority,
+            control_versions_to_retain,
+            None,
+            None,
+        )
+    }
+
+    pub(crate) fn new_with_gc_controls(
+        plane: Arc<P>,
+        prefix: impl Into<String>,
+        repository: RepositoryId,
+        authority: Arc<ShardWriterAuthority<P>>,
+        control_versions_to_retain: usize,
+        observer: Option<Arc<dyn MutableControlObserver>>,
+        barrier: Option<Arc<tokio::sync::RwLock<()>>>,
+    ) -> Result<Self> {
         let prefix = prefix.into();
-        let controls =
+        let mut controls =
             MutableControlStore::new(plane.clone(), prefix.clone(), control_versions_to_retain)?;
+        if let Some(observer) = observer {
+            controls = controls.with_observer(observer);
+        }
+        if let Some(barrier) = barrier {
+            controls = controls.with_mutation_barrier(barrier);
+        }
         Ok(Self {
             plane,
             controls,
@@ -280,6 +315,76 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
             tombstone: true,
         };
         self.cas_ref(branch, Some(current.token), value).await
+    }
+
+    /// Move a live branch ref to an already durable commit without creating a
+    /// new bucket commit. This is the audited primitive used by administrative
+    /// reset and reflog recovery; ordinary object writes must continue to use
+    /// `store_and_publish`.
+    pub(crate) async fn move_target(
+        &self,
+        current: LoadedRef,
+        request: BranchMovement<'_>,
+    ) -> Result<LoadedRef> {
+        crate::repository::validate_branch(request.branch)?;
+        current.value.validate(self.repository, request.branch)?;
+        if request.operation.is_nil() || request.message.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "branch movement requires an operation and non-empty reason",
+            ));
+        }
+        let stamp = self
+            .authority
+            .validate_active(request.permit, request.now_millis)
+            .await?;
+        if current.value.tombstone || current.value.authority != stamp {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch ref is tombstoned or carries another authority epoch",
+            ));
+        }
+        self.load_commit_object(request.target).await?;
+        let generation =
+            RefGeneration(current.value.generation.0.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "ref generation overflow")
+            })?);
+        let reflog = ReflogEntry {
+            branch: request.branch.to_string(),
+            old_target: Some(current.value.target),
+            new_target: request.target,
+            operation: request.operation,
+            actor: stamp.writer_id.clone(),
+            message: request.message.to_string(),
+            created_at_millis: request.now_millis,
+        };
+        let event = PublicationEvent {
+            repository: self.repository,
+            branch: request.branch.to_string(),
+            generation,
+            previous: Some(current.value.publication),
+            old_target: Some(current.value.target),
+            new_target: request.target,
+            operation: request.operation,
+            reflog: reflog.id()?,
+            authority: stamp.clone(),
+            created_at_millis: request.now_millis,
+        };
+        let publication = self.store_publication(&event).await?;
+        let value = RefValue {
+            target: request.target,
+            previous_target: Some(current.value.target),
+            generation,
+            operation: request.operation,
+            reflog: reflog.id()?,
+            publication,
+            inline_reflog: reflog,
+            authority: stamp,
+            updated_at_millis: request.now_millis,
+            tombstone: false,
+        };
+        self.cas_ref(request.branch, Some(current.token), value)
+            .await
     }
 
     pub async fn create(&self, request: CommitPublication<'_>) -> Result<LoadedRef> {
@@ -536,7 +641,7 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
         Ok(())
     }
 
-    async fn store_commit(
+    pub(crate) async fn store_commit(
         &self,
         commit: &BucketCommit,
         node_pack: Option<NodePack>,

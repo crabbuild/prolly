@@ -2,39 +2,47 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, RwLock, Weak,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, OnceLock, RwLock, Weak,
     },
     time::Duration,
 };
 
 use futures_util::{stream, StreamExt};
 use md5::{Digest as _, Md5};
-use prolly::{AsyncProlly, Config, Diff, Mutation, RuntimeConfig, Tree, TreeFormat};
+use prolly::{
+    AsyncProlly, AsyncStore, Config, Diff, Mutation, Node, RuntimeConfig, Tree, TreeFormat,
+};
 use sha2::Sha256;
 
+use crate::gc::{GcCandidate, GcCoordinator, GcDirtyRoot, GcNodeWork};
 use crate::merge::{MergeBaseCandidate, MergePlanEntry, MergeQueueEntry, MergeSeenEntry};
+use crate::publication::BranchMovement;
 use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
+use crate::transfer::{commit_mapping_key, version_mapping_key};
 use crate::{
     decode_canonical, encode_canonical, tree_format_digest, AuthorityPermit, AuthorityScope,
     BucketCommit, BucketDelta, BucketState, CanonicalLimits, Checksums, Clock, CommitGeneration,
     CommitId, CommitObject, CommitPublication, CommitSessionCheckpoint, CommitSessionCleanupReport,
     CommitSessionManifest, CommitSessionState, CommitSessionStore, CompareExchange,
-    CompareExchangeOutcome, CurrentObject, DeleteOutcome, Error, ErrorCode, GetRequest, IdSource,
-    IdempotencyRetention, ImmutablePayloadStore, InitializationIntent, JournalCommitGraphEntry,
-    JournalDerivedIndexes, JournalIndexAdvanceReport, JournalIndexRebuildCleanup,
-    JournalIndexRebuildCursor, JournalIndexRebuildPhase, JournalIndexRebuildStep, ListRequest,
-    LoadedRef, LogicalObjectVersionBody, LogicalObjectVersionKind, MemoryNodeCache,
-    MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChange, MergeChangeCursor,
-    MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflict, MergeConflictCursor,
-    MergeConflictPage, MergeCursor, MergePhase, MergePolicy, MergeReceipt, MutationIdentity,
-    NodeCache, ObjectHeaders, ObjectPath, ObjectPlane, ObjectTransition, ObjectVersion,
-    ObjectVersionId, ObjectVersionOrder, OperationId, OperationIndexAdvanceReport,
-    OperationIndexRebuildCursor, OperationIndexRebuildStep, PhysicalVersion, ProllyObjectStore,
-    ProviderPerKeyVersionLimit, RandomIdSource, RefCatalogCursor, RefGeneration, RefKind,
-    RepositoryFormat, Result, RootManifest, SegmentedOperationIndex, ShardWriterAuthority,
-    ShardedBranchPublisher, ShardedRefCatalog, StagedMutation, StagedMutationBody, StagedPut,
-    SystemClock, TagStore, TakeoverRequest,
+    CompareExchangeOutcome, CurrentObject, DeleteOutcome, Error, ErrorCode, GcCursor, GcPage,
+    GcPhase, GetRequest, HistoryTransferCursor, HistoryTransferPage, HistoryTransferPhase,
+    HistoryTransferReport, IdSource, IdempotencyRetention, ImmutablePayloadStore,
+    InitializationIntent, JournalCommitGraphEntry, JournalDerivedIndexes,
+    JournalIndexAdvanceReport, JournalIndexRebuildCleanup, JournalIndexRebuildCursor,
+    JournalIndexRebuildPhase, JournalIndexRebuildStep, ListRequest, LoadedRef,
+    LogicalObjectVersionBody, LogicalObjectVersionKind, MemoryNodeCache, MergeAdvancePage,
+    MergeBaseCursor, MergeBasePage, MergeChange, MergeChangeCursor, MergeChangePage,
+    MergeCleanupCursor, MergeCleanupPage, MergeConflict, MergeConflictCursor, MergeConflictPage,
+    MergeCursor, MergePhase, MergePolicy, MergeReceipt, MutableControlKind, MutableControlObserver,
+    MutableControlStore, MutationIdentity, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
+    ObjectTransition, ObjectVersion, ObjectVersionId, ObjectVersionOrder, OperationId,
+    OperationIndexAdvanceReport, OperationIndexRebuildCursor, OperationIndexRebuildStep,
+    PendingHistoryTransferCommit, PhysicalVersion, ProllyObjectStore, ProviderPerKeyVersionLimit,
+    RandomIdSource, RefCatalogCursor, RefGeneration, RefKind, RepositoryFormat, Result,
+    RootManifest, SegmentedOperationIndex, ShardWriterAuthority, ShardedBranchPublisher,
+    ShardedRefCatalog, StagedMutation, StagedMutationBody, StagedPut, SystemClock, TagStore,
+    TakeoverRequest,
 };
 
 #[derive(Clone)]
@@ -109,9 +117,26 @@ pub struct ObjectData {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectRangeData {
+    pub key: Vec<u8>,
+    pub version: ObjectVersion,
+    pub bytes: Vec<u8>,
+    pub snapshot: CommitId,
+    pub range: std::ops::RangeInclusive<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectSummary {
     pub key: Vec<u8>,
     pub version: ObjectVersion,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DelimitedObjectPage {
+    pub snapshot: CommitId,
+    pub objects: Vec<ObjectSummary>,
+    pub common_prefixes: Vec<Vec<u8>>,
+    pub truncated: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -119,6 +144,237 @@ pub struct VersionSummary {
     pub key: Vec<u8>,
     pub version: ObjectVersion,
     pub cursor: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectDiff {
+    pub key: Vec<u8>,
+    pub from: Option<ObjectVersionId>,
+    pub to: Option<ObjectVersionId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ObjectDiffCursor {
+    repository: crate::RepositoryId,
+    branch: String,
+    from: CommitId,
+    to: CommitId,
+    traversal: prolly::StructuralDiffCursor,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ObjectDiffPage {
+    pub changes: Vec<ObjectDiff>,
+    pub continuation: Option<ObjectDiffCursor>,
+    pub compared_nodes: usize,
+    pub reused_subtrees: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TraversalBudget {
+    pub max_commits: usize,
+    pub max_decoded_bytes: u64,
+    pub max_elapsed: Duration,
+}
+
+impl Default for TraversalBudget {
+    fn default() -> Self {
+        Self {
+            max_commits: 10_000,
+            max_decoded_bytes: 64 * 1024 * 1024,
+            max_elapsed: Duration::from_secs(30),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct HistoryCursor {
+    repository: crate::RepositoryId,
+    branch: String,
+    root: CommitId,
+    next: CommitId,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitPage {
+    pub commits: Vec<(CommitId, BucketCommit)>,
+    pub continuation: Option<HistoryCursor>,
+    pub visited_commits: usize,
+    pub decoded_bytes: u64,
+    pub budget_exhausted: bool,
+}
+
+/// Constant-size checkpoint for a durable parent-before-child traversal of a
+/// commit DAG. The work stack and visited set live in immutable Prolly nodes.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CommitClosureCursor {
+    pub repository: crate::RepositoryId,
+    pub traversal: OperationId,
+    pub state: RootManifest,
+    pub next_stack_sequence: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommitClosurePage {
+    pub commits: Vec<(CommitId, BucketCommit)>,
+    pub cursor: CommitClosureCursor,
+    pub steps: usize,
+    pub complete: bool,
+    pub budget_exhausted: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct CommitClosureWork {
+    commit: CommitId,
+    finish: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum FsckPhase {
+    DiscoverCommits,
+    VerifyObjects,
+    VerifyVersions,
+    Complete,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FsckReport {
+    pub commits: u64,
+    pub reachable_nodes: u64,
+    pub current_objects: u64,
+    pub logical_versions: u64,
+    pub payloads_verified: u64,
+    pub payload_bytes_verified: u64,
+    pub deep_content_bytes_verified: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FsckCursor {
+    pub repository: crate::RepositoryId,
+    pub branch: String,
+    pub snapshot: CommitId,
+    pub closure: CommitClosureCursor,
+    pub phase: FsckPhase,
+    pub after: Option<Vec<u8>>,
+    pub deep: bool,
+    pub report: FsckReport,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FsckPage {
+    pub cursor: FsckCursor,
+    pub processed: usize,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RefMoveReceipt {
+    pub branch: String,
+    pub old_target: CommitId,
+    pub new_target: CommitId,
+    pub operation: OperationId,
+    pub generation: RefGeneration,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RestoreCursor {
+    pub repository: crate::RepositoryId,
+    pub branch: String,
+    pub source: CommitId,
+    pub original_head: CommitId,
+    pub expected_head: CommitId,
+    pub batch: crate::BatchId,
+    pub checkpoint_sequence: u64,
+    pub diff: Option<ObjectDiffCursor>,
+    pub message: String,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RestorePage {
+    pub cursor: RestoreCursor,
+    pub processed: usize,
+    pub receipt: Option<CommitReceipt>,
+    pub complete: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum RepairPhase {
+    CopySource,
+    DeleteDestinationOnly,
+    Complete,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RepairReport {
+    pub scanned_source_objects: u64,
+    pub copied_objects: u64,
+    pub copied_bytes: u64,
+    pub scanned_destination_objects: u64,
+    pub deleted_objects: u64,
+    pub published_commits: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RepairCursor {
+    pub source_repository: crate::RepositoryId,
+    pub destination_repository: crate::RepositoryId,
+    pub source_branch: String,
+    pub destination_branch: String,
+    pub source_snapshot: CommitId,
+    pub destination_snapshot: CommitId,
+    pub expected_head: CommitId,
+    pub source_after: Option<Vec<u8>>,
+    pub destination_after: Option<Vec<u8>>,
+    pub phase: RepairPhase,
+    pub batch: crate::BatchId,
+    pub checkpoint_sequence: u64,
+    pub message: String,
+    pub report: RepairReport,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RepairPage {
+    pub cursor: RepairCursor,
+    pub processed: usize,
+    pub receipt: Option<CommitReceipt>,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BackupVerificationReport {
+    pub objects_verified: u64,
+    pub content_bytes_verified: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BackupVerificationCursor {
+    pub source_repository: crate::RepositoryId,
+    pub destination_repository: crate::RepositoryId,
+    pub source_branch: String,
+    pub destination_branch: String,
+    pub source_snapshot: CommitId,
+    pub destination_snapshot: CommitId,
+    pub source_after: Option<Vec<u8>>,
+    pub destination_after: Option<Vec<u8>>,
+    pub report: BackupVerificationReport,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BackupVerificationPage {
+    pub cursor: BackupVerificationCursor,
+    pub processed: usize,
+    pub complete: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NodeCachePrewarmReport {
+    pub snapshot: CommitId,
+    pub object_nodes: usize,
+    pub version_nodes: usize,
+    pub before: crate::NodeCacheSnapshot,
+    pub after: crate::NodeCacheSnapshot,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -133,6 +389,19 @@ pub struct Tag {
     pub name: String,
     pub target: CommitId,
     pub generation: RefGeneration,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RetentionPin {
+    pub name: String,
+    pub target: CommitId,
+    pub generation: RefGeneration,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RetentionPinPage {
+    pub pins: Vec<RetentionPin>,
+    pub continuation: Option<RefCatalogCursor>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -241,6 +510,113 @@ impl<P: ObjectPlane> NodeLocator for JournalNodeLocator<P> {
     }
 }
 
+struct GcDirtyRootObserver<P: ObjectPlane> {
+    plane: Arc<P>,
+    prefix: String,
+    repository: crate::RepositoryId,
+    active_epoch: Arc<RwLock<Option<OperationId>>>,
+    sequence: Arc<AtomicU64>,
+}
+
+struct GcProcessState {
+    active_epoch: Arc<RwLock<Option<OperationId>>>,
+    sequence: Arc<AtomicU64>,
+    publication_barrier: Arc<tokio::sync::RwLock<()>>,
+}
+
+fn gc_process_state(repository: crate::RepositoryId) -> Arc<GcProcessState> {
+    static STATES: OnceLock<std::sync::Mutex<BTreeMap<crate::RepositoryId, Weak<GcProcessState>>>> =
+        OnceLock::new();
+    let states = STATES.get_or_init(|| std::sync::Mutex::new(BTreeMap::new()));
+    let mut states = states
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    states.retain(|_, state| state.strong_count() > 0);
+    if let Some(state) = states.get(&repository).and_then(Weak::upgrade) {
+        return state;
+    }
+    let state = Arc::new(GcProcessState {
+        active_epoch: Arc::new(RwLock::new(None)),
+        sequence: Arc::new(AtomicU64::new(0)),
+        publication_barrier: Arc::new(tokio::sync::RwLock::new(())),
+    });
+    states.insert(repository, Arc::downgrade(&state));
+    state
+}
+
+#[async_trait::async_trait]
+impl<P: ObjectPlane> MutableControlObserver for GcDirtyRootObserver<P> {
+    async fn before_compare_exchange(
+        &self,
+        kind: MutableControlKind,
+        request: &CompareExchange,
+    ) -> Result<()> {
+        let epoch = *self
+            .active_epoch
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?;
+        let Some(epoch) = epoch else {
+            return Ok(());
+        };
+        let (namespace, name, target, previous_target, generation, operation, created_at_millis) =
+            match kind {
+                MutableControlKind::BranchRef => {
+                    let value: crate::RefValue = decode_canonical(&request.bytes)?;
+                    (
+                        "branch",
+                        value.inline_reflog.branch,
+                        value.target,
+                        value.previous_target,
+                        value.generation,
+                        value.operation,
+                        value.updated_at_millis,
+                    )
+                }
+                MutableControlKind::TagRef => {
+                    let value: crate::TagValue = decode_canonical(&request.bytes)?;
+                    (
+                        "tag",
+                        value.inline_reflog.branch,
+                        value.target,
+                        value.previous_target,
+                        value.generation,
+                        value.operation,
+                        value.updated_at_millis,
+                    )
+                }
+                _ => return Ok(()),
+            };
+        let sequence = self
+            .sequence
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                current.checked_add(1)
+            })
+            .map(|previous| previous + 1)
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "GC sequence overflow"))?;
+        let event = GcDirtyRoot {
+            repository: self.repository,
+            epoch,
+            sequence,
+            namespace: namespace.to_string(),
+            name,
+            target,
+            previous_target,
+            generation,
+            operation,
+            created_at_millis,
+        };
+        let bytes = encode_canonical(&event)?;
+        self.plane
+            .put_immutable(crate::ImmutablePut {
+                path: gc_dirty_root_path(&self.prefix, &event, crate::codec::sha256(&bytes))?,
+                expected_sha256: crate::codec::sha256(&bytes),
+                bytes,
+            })
+            .await?;
+        Ok(())
+    }
+}
+
 /// Authoritative repository over one reserved object-store prefix.
 ///
 /// This type reads and writes the sole repository format. It does not
@@ -266,6 +642,9 @@ pub struct Repository<P: ObjectPlane> {
     index_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
     local_index_heads: RwLock<BTreeMap<String, CommitId>>,
     index_errors: RwLock<BTreeMap<String, String>>,
+    active_gc_epoch: Arc<RwLock<Option<OperationId>>>,
+    gc_dirty_sequence: Arc<AtomicU64>,
+    gc_publication_barrier: Arc<tokio::sync::RwLock<()>>,
     writable: AtomicBool,
 }
 
@@ -336,6 +715,7 @@ impl<P: ObjectPlane> Repository<P> {
         }
 
         let repository = Self::from_format(plane, options, intent.format)?;
+        repository.restore_gc_state().await?;
         let default_branch = repository.options.default_branch.clone();
         match repository.publisher.load(&default_branch).await {
             Ok(_) => {
@@ -417,6 +797,7 @@ impl<P: ObjectPlane> Repository<P> {
         let format: RepositoryFormat = decode_canonical(&stored.bytes)?;
         validate_format_compatibility(&format, &options)?;
         let repository = Self::from_format(plane, options, format)?;
+        repository.restore_gc_state().await?;
         let branch = repository.options.default_branch.clone();
         repository.locator.register(&branch)?;
         if !repository.options.read_only {
@@ -462,24 +843,39 @@ impl<P: ObjectPlane> Repository<P> {
             Duration::from_millis(options.authority_lease_millis),
             options.mutable_control_versions_to_retain,
         )?);
-        let publisher = ShardedBranchPublisher::new_with_control_retention(
+        let gc_state = gc_process_state(format.repository_id);
+        let active_gc_epoch = gc_state.active_epoch.clone();
+        let gc_dirty_sequence = gc_state.sequence.clone();
+        let gc_publication_barrier = gc_state.publication_barrier.clone();
+        let gc_observer = Arc::new(GcDirtyRootObserver {
+            plane: plane.clone(),
+            prefix: options.repository_prefix.clone(),
+            repository: format.repository_id,
+            active_epoch: active_gc_epoch.clone(),
+            sequence: gc_dirty_sequence.clone(),
+        });
+        let publisher = ShardedBranchPublisher::new_with_gc_controls(
             plane.clone(),
             options.repository_prefix.clone(),
             format.repository_id,
             authority.clone(),
             options.mutable_control_versions_to_retain,
+            Some(gc_observer.clone()),
+            Some(gc_publication_barrier.clone()),
         )?;
         let payloads = ImmutablePayloadStore::new(
             plane.clone(),
             options.repository_prefix.clone(),
             format.repository_id,
         );
-        let tags = TagStore::new_with_control_retention(
+        let tags = TagStore::new_with_gc_controls(
             plane.clone(),
             options.repository_prefix.clone(),
             format.repository_id,
             authority.clone(),
             options.mutable_control_versions_to_retain,
+            Some(gc_observer),
+            Some(gc_publication_barrier.clone()),
         )?;
         let ref_catalog = Arc::new(ShardedRefCatalog::new_with_limits(
             plane.clone(),
@@ -541,6 +937,9 @@ impl<P: ObjectPlane> Repository<P> {
             index_lanes: std::sync::Mutex::new(BTreeMap::new()),
             local_index_heads: RwLock::new(BTreeMap::new()),
             index_errors: RwLock::new(BTreeMap::new()),
+            active_gc_epoch,
+            gc_dirty_sequence,
+            gc_publication_barrier,
             writable: AtomicBool::new(writable),
         })
     }
@@ -559,6 +958,39 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub fn plane(&self) -> Arc<P> {
         self.plane.clone()
+    }
+
+    pub fn node_cache_snapshot(&self) -> crate::NodeCacheSnapshot {
+        self.node_store.node_cache_snapshot()
+    }
+
+    /// Traverse both current-state trees to populate the configured node
+    /// cache. This is an explicit full-snapshot operation; use it during
+    /// startup or controlled prewarming rather than on request paths.
+    pub async fn prewarm_node_cache(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+    ) -> Result<NodeCachePrewarmReport> {
+        validate_branch(branch)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let before = self.node_store.node_cache_snapshot();
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let engine = self.engine(self.node_store.clone());
+        let object_stats = engine
+            .collect_stats(&self.tree_from_root(&commit.state.objects)?)
+            .await?;
+        let version_stats = engine
+            .collect_stats(&self.tree_from_root(&commit.state.versions)?)
+            .await?;
+        Ok(NodeCachePrewarmReport {
+            snapshot,
+            object_nodes: object_stats.num_nodes,
+            version_nodes: version_stats.num_nodes,
+            before,
+            after: self.node_store.node_cache_snapshot(),
+        })
     }
 
     pub async fn head(&self, branch: &str) -> Result<CommitId> {
@@ -670,6 +1102,51 @@ impl<P: ObjectPlane> Repository<P> {
             .await?;
         self.record_tag_catalog(name, &deleted.value).await?;
         Ok(())
+    }
+
+    pub async fn create_retention_pin(&self, name: &str, target: CommitId) -> Result<RetentionPin> {
+        let tag_name = retention_pin_tag(name)?;
+        let tag = self.create_tag(&tag_name, target).await?;
+        Ok(RetentionPin {
+            name: name.to_string(),
+            target: tag.target,
+            generation: tag.generation,
+        })
+    }
+
+    pub async fn retention_pin(&self, name: &str) -> Result<RetentionPin> {
+        let tag = self.tag(&retention_pin_tag(name)?).await?;
+        Ok(RetentionPin {
+            name: name.to_string(),
+            target: tag.target,
+            generation: tag.generation,
+        })
+    }
+
+    pub async fn delete_retention_pin(&self, name: &str, expected: CommitId) -> Result<()> {
+        self.delete_tag(&retention_pin_tag(name)?, expected).await
+    }
+
+    pub async fn list_retention_pins_page(
+        &self,
+        cursor: Option<RefCatalogCursor>,
+        limit: usize,
+    ) -> Result<RetentionPinPage> {
+        let page = self.list_tag_catalog_page(cursor, limit).await?;
+        let mut pins = Vec::new();
+        for tag in page.tags {
+            if let Some(name) = decode_retention_pin_tag(&tag.name)? {
+                pins.push(RetentionPin {
+                    name,
+                    target: tag.target,
+                    generation: tag.generation,
+                });
+            }
+        }
+        Ok(RetentionPinPage {
+            pins,
+            continuation: page.continuation,
+        })
     }
 
     pub async fn list_branch_catalog_page(
@@ -1033,6 +1510,7 @@ impl<P: ObjectPlane> Repository<P> {
                 },
                 headers,
                 user_metadata,
+                tags: BTreeMap::new(),
                 binding,
             })),
         })
@@ -1074,6 +1552,7 @@ impl<P: ObjectPlane> Repository<P> {
                 },
                 headers,
                 user_metadata,
+                tags: BTreeMap::new(),
                 binding,
             })),
         })
@@ -1161,6 +1640,7 @@ impl<P: ObjectPlane> Repository<P> {
                         checksums,
                         headers,
                         user_metadata,
+                        tags,
                         binding,
                         ..
                     } = staged.as_ref();
@@ -1171,7 +1651,7 @@ impl<P: ObjectPlane> Repository<P> {
                             headers: headers.clone(),
                             checksums: checksums.clone(),
                             user_metadata: user_metadata.clone(),
-                            tags: BTreeMap::new(),
+                            tags: tags.clone(),
                         },
                         Some(binding.clone()),
                     )
@@ -1608,6 +2088,195 @@ impl<P: ObjectPlane> Repository<P> {
         }))
     }
 
+    /// Read object metadata without fetching its immutable payload.
+    pub async fn head_object(
+        &self,
+        branch: &str,
+        key: &[u8],
+    ) -> Result<Option<(CommitId, ObjectSummary)>> {
+        let snapshot = self.head(branch).await?;
+        Ok(self
+            .head_object_at(branch, snapshot, key)
+            .await?
+            .map(|summary| (snapshot, summary)))
+    }
+
+    pub async fn head_object_at(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+        key: &[u8],
+    ) -> Result<Option<ObjectSummary>> {
+        self.validate_key(key)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let objects = self.tree_from_root(&commit.state.objects)?;
+        let Some(encoded) = self
+            .engine(self.node_store.clone())
+            .get(&objects, key)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let current: CurrentObject = decode_canonical(&encoded)?;
+        current.version.validate()?;
+        Ok(Some(ObjectSummary {
+            key: key.to_vec(),
+            version: current.version,
+        }))
+    }
+
+    /// Fetch an inclusive byte range from the immutable payload bound to a
+    /// logical snapshot. Range reads validate the binding and provider token;
+    /// callers wanting a full content-hash check should use `get_object`.
+    pub async fn get_object_range(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+        key: &[u8],
+        range: std::ops::RangeInclusive<u64>,
+    ) -> Result<Option<ObjectRangeData>> {
+        if range.start() > range.end() {
+            return Err(Error::new(
+                ErrorCode::InvalidRange,
+                "range start exceeds end",
+            ));
+        }
+        let Some(summary) = self.head_object_at(branch, snapshot, key).await? else {
+            return Ok(None);
+        };
+        let LogicalObjectVersionKind::Live { size, .. } = summary.version.body.kind else {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "current object resolves to a delete marker",
+            ));
+        };
+        if *range.start() >= size {
+            return Err(Error::new(
+                ErrorCode::InvalidRange,
+                "range starts beyond the object payload",
+            ));
+        }
+        let binding = summary.version.binding.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "live object has no payload binding",
+            )
+        })?;
+        if binding.path != self.payloads.path(binding.checksum_sha256)? {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "payload binding path does not match its checksum",
+            ));
+        }
+        let physical_version =
+            binding
+                .provider_version_id
+                .as_ref()
+                .map(|version_id| PhysicalVersion::Versioned {
+                    version_id: version_id.clone(),
+                });
+        let stored = self
+            .plane
+            .get(GetRequest {
+                path: binding.path.clone(),
+                range: Some(range.clone()),
+                physical_version,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "payload is missing"))?;
+        if stored.metadata.sha256 != binding.checksum_sha256
+            || stored.metadata.token.etag != binding.provider_etag
+            || stored.metadata.token.version_id != binding.provider_version_id
+        {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "range response metadata does not match its logical binding",
+            ));
+        }
+        Ok(Some(ObjectRangeData {
+            key: key.to_vec(),
+            version: summary.version,
+            bytes: stored.bytes,
+            snapshot,
+            range,
+        }))
+    }
+
+    /// Copy an object by reusing its immutable payload binding. Only metadata
+    /// nodes and one branch publication are written; the payload is not read
+    /// or uploaded again.
+    pub async fn copy_object(
+        &self,
+        branch: &str,
+        source_snapshot: CommitId,
+        source_key: &[u8],
+        destination_key: Vec<u8>,
+    ) -> Result<CommitReceipt> {
+        self.validate_key(&destination_key)?;
+        let source = self
+            .head_object_at(branch, source_snapshot, source_key)
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::InvalidKey, "copy source does not exist"))?;
+        let LogicalObjectVersionKind::Live {
+            size,
+            logical_etag,
+            headers,
+            checksums,
+            user_metadata,
+            tags,
+        } = source.version.body.kind
+        else {
+            return Err(Error::new(
+                ErrorCode::InvalidRevision,
+                "copy source is a delete marker",
+            ));
+        };
+        let binding = source.version.binding.ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "copy source has no payload binding",
+            )
+        })?;
+        let session = self
+            .begin_commit_session(branch, "CopyObject", 60_000)
+            .await?;
+        let mutation = StagedMutation {
+            body: StagedMutationBody::Put(Box::new(StagedPut {
+                key: destination_key,
+                size,
+                logical_etag,
+                checksums,
+                headers,
+                user_metadata,
+                tags,
+                binding,
+            })),
+        };
+        self.publish_commit_session(session, vec![mutation]).await
+    }
+
+    /// Delete up to the repository's canonical multi-delete bound in one
+    /// atomic commit.
+    pub async fn delete_objects(&self, branch: &str, keys: Vec<Vec<u8>>) -> Result<CommitReceipt> {
+        if keys.is_empty() || keys.len() > self.format.canonical_limits.max_delete_objects as usize
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "multi-delete requires between one key and the canonical delete limit",
+            ));
+        }
+        for key in &keys {
+            self.validate_key(key)?;
+        }
+        let session = self
+            .begin_commit_session(branch, "DeleteObjects", 60_000)
+            .await?;
+        let mutations = keys.into_iter().map(StagedMutation::delete).collect();
+        self.publish_commit_session(session, mutations).await
+    }
+
     pub async fn delete_object(&self, branch: &str, key: Vec<u8>) -> Result<CommitReceipt> {
         let operation = self.options.ids.operation();
         self.delete_object_with_operation(branch, key, operation)
@@ -1750,6 +2419,53 @@ impl<P: ObjectPlane> Repository<P> {
         Ok((snapshot, objects, truncated))
     }
 
+    /// S3-style delimiter projection over a stable ordered object page.
+    pub async fn list_objects_delimited(
+        &self,
+        branch: &str,
+        prefix: &[u8],
+        delimiter: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<DelimitedObjectPage> {
+        if delimiter.is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "list delimiter must not be empty",
+            ));
+        }
+        let (snapshot, candidates, truncated) =
+            self.list_objects(branch, prefix, after, limit).await?;
+        let mut objects = Vec::new();
+        let mut common_prefixes = BTreeSet::new();
+        for object in candidates {
+            let suffix = object.key.get(prefix.len()..).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "prefix listing returned a key outside its prefix",
+                )
+            })?;
+            if let Some(offset) = find_subslice(suffix, delimiter) {
+                let end = prefix
+                    .len()
+                    .checked_add(offset)
+                    .and_then(|end| end.checked_add(delimiter.len()))
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::EntityTooLarge, "common prefix length overflow")
+                    })?;
+                common_prefixes.insert(object.key[..end].to_vec());
+            } else {
+                objects.push(object);
+            }
+        }
+        Ok(DelimitedObjectPage {
+            snapshot,
+            objects,
+            common_prefixes: common_prefixes.into_iter().collect(),
+            truncated,
+        })
+    }
+
     pub async fn list_objects_at(
         &self,
         branch: &str,
@@ -1877,6 +2593,1781 @@ impl<P: ObjectPlane> Repository<P> {
         let truncated = result.len() > limit;
         result.truncate(limit);
         Ok((result, truncated))
+    }
+
+    /// Load and verify one immutable commit object.
+    pub async fn commit(&self, id: CommitId) -> Result<BucketCommit> {
+        Ok(self.load_commit_object(id).await?.commit)
+    }
+
+    /// Return the first-parent history of a branch, newest first.
+    pub async fn log(&self, branch: &str, limit: usize) -> Result<Vec<(CommitId, BucketCommit)>> {
+        let head = self.head(branch).await?;
+        Ok(self
+            .log_page_bounded(branch, head, None, limit, TraversalBudget::default())
+            .await?
+            .commits)
+    }
+
+    /// Traverse first-parent history with a constant-size continuation and
+    /// explicit work, byte, and wall-clock budgets.
+    pub async fn log_page_bounded(
+        &self,
+        branch: &str,
+        start: CommitId,
+        cursor: Option<&HistoryCursor>,
+        requested_limit: usize,
+        budget: TraversalBudget,
+    ) -> Result<CommitPage> {
+        validate_branch(branch)?;
+        if budget.max_commits == 0 || budget.max_decoded_bytes == 0 || budget.max_elapsed.is_zero()
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "history traversal budgets must be greater than zero",
+            ));
+        }
+        if cursor.is_some_and(|cursor| {
+            cursor.repository != self.format.repository_id
+                || cursor.branch != branch
+                || cursor.root != start
+        }) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history cursor belongs to another repository, branch, or root",
+            ));
+        }
+        let limit = requested_limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Ok(CommitPage {
+                commits: Vec::new(),
+                continuation: cursor.cloned(),
+                visited_commits: 0,
+                decoded_bytes: 0,
+                budget_exhausted: false,
+            });
+        }
+        self.locator.register(branch)?;
+        let started = std::time::Instant::now();
+        let mut current = cursor.map_or(start, |cursor| cursor.next);
+        let mut commits = Vec::with_capacity(limit.min(64));
+        let mut visited_commits = 0usize;
+        let mut decoded_bytes = 0u64;
+        let mut budget_exhausted = false;
+        let continuation = loop {
+            if commits.len() >= limit {
+                break Some(HistoryCursor {
+                    repository: self.format.repository_id,
+                    branch: branch.to_string(),
+                    root: start,
+                    next: current,
+                });
+            }
+            if visited_commits >= budget.max_commits || started.elapsed() >= budget.max_elapsed {
+                budget_exhausted = true;
+                break Some(HistoryCursor {
+                    repository: self.format.repository_id,
+                    branch: branch.to_string(),
+                    root: start,
+                    next: current,
+                });
+            }
+            let commit = self.load_commit_object(current).await?.commit;
+            let encoded_len = u64::try_from(encode_canonical(&commit)?.len()).map_err(|_| {
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "encoded commit length exceeds u64",
+                )
+            })?;
+            if decoded_bytes.saturating_add(encoded_len) > budget.max_decoded_bytes {
+                if commits.is_empty() {
+                    return Err(Error::new(
+                        ErrorCode::InvalidLimit,
+                        "history byte budget cannot hold one commit",
+                    ));
+                }
+                budget_exhausted = true;
+                break Some(HistoryCursor {
+                    repository: self.format.repository_id,
+                    branch: branch.to_string(),
+                    root: start,
+                    next: current,
+                });
+            }
+            let parent = commit.parents.first().copied();
+            decoded_bytes = decoded_bytes.checked_add(encoded_len).ok_or_else(|| {
+                Error::new(ErrorCode::EntityTooLarge, "history byte counter overflow")
+            })?;
+            visited_commits += 1;
+            commits.push((current, commit));
+            let Some(parent) = parent else { break None };
+            current = parent;
+        };
+        Ok(CommitPage {
+            commits,
+            continuation,
+            visited_commits,
+            decoded_bytes,
+            budget_exhausted,
+        })
+    }
+
+    /// Start a durable traversal over one or more commit roots.
+    pub async fn start_commit_closure(&self, roots: &[CommitId]) -> Result<CommitClosureCursor> {
+        if roots.is_empty() || roots.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure start requires between 1 and 1,000 roots",
+            ));
+        }
+        let traversal = self.options.ids.operation();
+        let engine = self.commit_closure_engine(traversal)?;
+        let mut cursor = CommitClosureCursor {
+            repository: self.format.repository_id,
+            traversal,
+            state: RootManifest::from_tree(&engine.create())?,
+            next_stack_sequence: u64::MAX,
+        };
+        self.extend_commit_closure(&mut cursor, roots).await?;
+        Ok(cursor)
+    }
+
+    /// Attach a bounded page of additional roots to a durable traversal.
+    pub async fn extend_commit_closure(
+        &self,
+        cursor: &mut CommitClosureCursor,
+        roots: &[CommitId],
+    ) -> Result<()> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if roots.is_empty() || roots.len() > 1_000 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure extension requires between 1 and 1,000 roots",
+            ));
+        }
+        let engine = self.commit_closure_engine(cursor.traversal)?;
+        let mut tree = self.tree_from_root(&cursor.state)?;
+        let mut unique = roots.to_vec();
+        unique.sort_unstable();
+        unique.dedup();
+        let mut mutations = Vec::with_capacity(unique.len());
+        for commit in unique.into_iter().rev() {
+            if engine
+                .get(&tree, &commit_closure_seen_key(commit))
+                .await?
+                .is_some()
+            {
+                continue;
+            }
+            mutations.push(Mutation::Upsert {
+                key: commit_closure_stack_key(cursor.next_stack_sequence),
+                val: encode_canonical(&CommitClosureWork {
+                    commit,
+                    finish: false,
+                })?,
+            });
+            cursor.next_stack_sequence =
+                cursor.next_stack_sequence.checked_sub(1).ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::HistoryLimitExceeded,
+                        "commit-closure stack sequence is exhausted",
+                    )
+                })?;
+        }
+        if !mutations.is_empty() {
+            tree = engine.batch(&tree, mutations).await?;
+            cursor.state = RootManifest::from_tree(&tree)?;
+        }
+        Ok(())
+    }
+
+    /// Advance a durable DAG traversal under explicit work and output bounds.
+    /// Commits are emitted parent-before-child and exactly once.
+    pub async fn commit_closure_page(
+        &self,
+        cursor: &CommitClosureCursor,
+        max_steps: usize,
+        max_commits: usize,
+    ) -> Result<CommitClosurePage> {
+        self.validate_commit_closure_cursor(cursor)?;
+        if !(1..=100_000).contains(&max_steps) || !(1..=1_000).contains(&max_commits) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "commit-closure page requires 1..=100,000 steps and 1..=1,000 commits",
+            ));
+        }
+        let engine = self.commit_closure_engine(cursor.traversal)?;
+        let mut tree = self.tree_from_root(&cursor.state)?;
+        let mut next_cursor = cursor.clone();
+        let mut commits = Vec::with_capacity(max_commits.min(64));
+        let mut steps = 0usize;
+        while steps < max_steps && commits.len() < max_commits {
+            let mut queue = engine.prefix(&tree, COMMIT_CLOSURE_QUEUE_PREFIX).await?;
+            let Some(entry) = queue.next().await else {
+                break;
+            };
+            let (stack_key, encoded) = entry?;
+            drop(queue);
+            let work: CommitClosureWork = decode_canonical(&encoded)?;
+            let seen_key = commit_closure_seen_key(work.commit);
+            let state = engine.get(&tree, &seen_key).await?;
+            let mut mutations = vec![Mutation::Delete { key: stack_key }];
+            if work.finish {
+                match state.as_deref() {
+                    Some([1]) => {}
+                    Some([0]) => {
+                        let commit = self.load_commit_object(work.commit).await?.commit;
+                        mutations.push(Mutation::Upsert {
+                            key: seen_key,
+                            val: vec![1],
+                        });
+                        commits.push((work.commit, commit));
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit-closure finish record has invalid state",
+                        ));
+                    }
+                }
+            } else {
+                match state.as_deref() {
+                    Some([1]) => {}
+                    Some([0]) => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit graph contains a cycle",
+                        ));
+                    }
+                    None => {
+                        let commit = self.load_commit_object(work.commit).await?.commit;
+                        mutations.push(Mutation::Upsert {
+                            key: seen_key,
+                            val: vec![0],
+                        });
+                        push_commit_closure_work(
+                            &mut next_cursor,
+                            &mut mutations,
+                            work.commit,
+                            true,
+                        )?;
+                        for parent in commit.parents.iter().rev() {
+                            push_commit_closure_work(
+                                &mut next_cursor,
+                                &mut mutations,
+                                *parent,
+                                false,
+                            )?;
+                        }
+                    }
+                    _ => {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "commit-closure visited state is malformed",
+                        ));
+                    }
+                }
+            }
+            tree = engine.batch(&tree, mutations).await?;
+            steps += 1;
+        }
+        next_cursor.state = RootManifest::from_tree(&tree)?;
+        let mut remaining = engine.prefix(&tree, COMMIT_CLOSURE_QUEUE_PREFIX).await?;
+        let complete = remaining.next().await.is_none();
+        Ok(CommitClosurePage {
+            commits,
+            cursor: next_cursor,
+            steps,
+            complete,
+            budget_exhausted: !complete && steps == max_steps,
+        })
+    }
+
+    /// Start a bounded concurrent collector for immutable repository data.
+    /// `grace_millis` must exceed the longest allowed unpublished operation.
+    pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {
+        if grace_millis == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "GC grace period must be greater than zero",
+            ));
+        }
+        if !self.writable.load(Ordering::Acquire) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC requires a writable repository handle",
+            ));
+        }
+        let epoch = self.options.ids.operation();
+        let now = self.options.clock.now_millis()?;
+        let cutoff_millis = now.checked_sub(grace_millis).ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidLimit,
+                "GC grace period exceeds the current repository clock",
+            )
+        })?;
+        {
+            let mut active = self
+                .active_gc_epoch
+                .write()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?;
+            if active.is_some() {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "another GC epoch is active",
+                ));
+            }
+            *active = Some(epoch);
+        }
+        let result = self.publish_gc_coordinator(Some(epoch), now).await;
+        if let Err(error) = result {
+            *self.active_gc_epoch.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+            })? = None;
+            return Err(error);
+        }
+        let work = self.gc_work_engine(epoch)?.create();
+        Ok(GcCursor {
+            repository: self.format.repository_id,
+            epoch,
+            cutoff_millis,
+            phase: GcPhase::DiscoverBranches,
+            continuation: None,
+            work: RootManifest::from_tree(&work)?,
+            dirty_sequence: self.gc_dirty_sequence.load(Ordering::Acquire),
+            dirty_target_sequence: 0,
+            initial_scan_complete: false,
+            sweep_after: None,
+            report: crate::GcReport::default(),
+        })
+    }
+
+    /// Advance root discovery, reachability marking, candidate discovery, or
+    /// dirty-root catch-up by a bounded number of physical/tree records.
+    pub async fn advance_gc(&self, cursor: &GcCursor, max_steps: usize) -> Result<GcPage> {
+        self.validate_gc_cursor(cursor)?;
+        if !(1..=1_000).contains(&max_steps) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "GC page size must be between 1 and 1,000",
+            ));
+        }
+        if matches!(cursor.phase, GcPhase::Ready | GcPhase::Sweeping) {
+            return Ok(GcPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                complete: false,
+                restarted_for_new_roots: false,
+            });
+        }
+        if cursor.phase == GcPhase::Complete {
+            return Ok(GcPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                complete: true,
+                restarted_for_new_roots: false,
+            });
+        }
+        let mut next = cursor.clone();
+        let processed = match next.phase {
+            GcPhase::DiscoverBranches => self.gc_discover_refs(&mut next, false, max_steps).await?,
+            GcPhase::DiscoverTags => self.gc_discover_refs(&mut next, true, max_steps).await?,
+            GcPhase::MarkCommits => self.gc_mark_commits(&mut next, max_steps).await?,
+            GcPhase::MarkNodes => self.gc_mark_nodes(&mut next, max_steps).await?,
+            GcPhase::ScanCandidates => self.gc_scan_candidates(&mut next, max_steps).await?,
+            GcPhase::CatchUpDirtyRoots => {
+                self.gc_catch_up_dirty_roots(&mut next, max_steps).await?
+            }
+            GcPhase::Cleanup => self.gc_cleanup(&mut next, max_steps).await?,
+            GcPhase::Ready | GcPhase::Sweeping | GcPhase::Complete => 0,
+        };
+        Ok(GcPage {
+            complete: next.phase == GcPhase::Complete,
+            cursor: next,
+            processed,
+            restarted_for_new_roots: false,
+        })
+    }
+
+    /// Delete at most `max_candidates` exact immutable physical versions.
+    /// A publication that appeared after marking schedules catch-up first.
+    pub async fn sweep_gc(&self, cursor: &GcCursor, max_candidates: usize) -> Result<GcPage> {
+        self.validate_gc_cursor(cursor)?;
+        if !(1..=1_000).contains(&max_candidates) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "GC sweep batch must contain between 1 and 1,000 candidates",
+            ));
+        }
+        if !matches!(cursor.phase, GcPhase::Ready | GcPhase::Sweeping) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC must finish marking before sweeping",
+            ));
+        }
+        let _barrier = self.gc_publication_barrier.write().await;
+        let dirty_target = self.gc_dirty_sequence.load(Ordering::Acquire);
+        if dirty_target > cursor.dirty_sequence {
+            let mut next = cursor.clone();
+            next.phase = GcPhase::CatchUpDirtyRoots;
+            next.dirty_target_sequence = dirty_target;
+            next.continuation = None;
+            return Ok(GcPage {
+                cursor: next,
+                processed: 0,
+                complete: false,
+                restarted_for_new_roots: true,
+            });
+        }
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let tree = self.tree_from_root(&cursor.work)?;
+        let start = cursor.sweep_after.as_deref().unwrap_or(b"d/");
+        let mut entries = engine.range(&tree, start, None).await?;
+        let mut next = cursor.clone();
+        next.phase = GcPhase::Sweeping;
+        let mut processed = 0usize;
+        let mut exhausted = true;
+        while processed < max_candidates {
+            let Some(entry) = entries.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if !key.starts_with(b"d/") {
+                break;
+            }
+            if next
+                .sweep_after
+                .as_ref()
+                .is_some_and(|after| key.as_slice() <= after.as_slice())
+            {
+                continue;
+            }
+            exhausted = false;
+            let candidate: GcCandidate = decode_canonical(&encoded)?;
+            let retained = engine
+                .get(&tree, &gc_path_mark_key(&candidate.path))
+                .await?
+                .is_some()
+                || match &candidate.physical_version {
+                    PhysicalVersion::Versioned { version_id } => engine
+                        .get(&tree, &gc_physical_mark_key(&candidate.path, version_id))
+                        .await?
+                        .is_some(),
+                    PhysicalVersion::Unversioned { .. } => false,
+                };
+            if retained {
+                next.report.skipped_reachable = next.report.skipped_reachable.saturating_add(1);
+            } else {
+                match self
+                    .plane
+                    .delete_exact(&candidate.path, candidate.physical_version)
+                    .await?
+                {
+                    DeleteOutcome::Deleted => {
+                        next.report.deleted_versions =
+                            next.report.deleted_versions.saturating_add(1);
+                        next.report.deleted_bytes =
+                            next.report.deleted_bytes.saturating_add(candidate.len);
+                        *next
+                            .report
+                            .deleted_by_kind
+                            .entry(candidate.kind)
+                            .or_default() += 1;
+                    }
+                    DeleteOutcome::NotFound => {
+                        next.report.already_missing = next.report.already_missing.saturating_add(1);
+                    }
+                    DeleteOutcome::TokenMismatch => {
+                        return Err(Error::new(
+                            ErrorCode::PreconditionFailed,
+                            "GC candidate changed before exact deletion",
+                        ));
+                    }
+                }
+            }
+            next.sweep_after = Some(key);
+            processed += 1;
+        }
+        if processed < max_candidates && !exhausted {
+            let mut probe = engine
+                .range(&tree, next.sweep_after.as_deref().unwrap(), None)
+                .await?;
+            exhausted = loop {
+                let Some(entry) = probe.next().await else {
+                    break true;
+                };
+                let (key, _) = entry?;
+                if key.starts_with(b"d/") && Some(&key) != next.sweep_after.as_ref() {
+                    break false;
+                }
+                if !key.starts_with(b"d/") {
+                    break true;
+                }
+            };
+        }
+        if exhausted {
+            next.phase = GcPhase::Cleanup;
+            next.continuation = None;
+        }
+        Ok(GcPage {
+            complete: false,
+            cursor: next,
+            processed,
+            restarted_for_new_roots: false,
+        })
+    }
+
+    /// Start a restartable integrity check for one stable branch snapshot.
+    /// Deep mode additionally streams every reachable payload and verifies its
+    /// content checksum; metadata mode verifies immutable paths and provider
+    /// metadata without downloading object bodies.
+    pub async fn start_fsck(&self, branch: &str, deep: bool) -> Result<FsckCursor> {
+        validate_branch(branch)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let snapshot = self.head(branch).await?;
+        Ok(FsckCursor {
+            repository: self.format.repository_id,
+            branch: branch.to_string(),
+            snapshot,
+            closure: self.start_commit_closure(&[snapshot]).await?,
+            phase: FsckPhase::DiscoverCommits,
+            after: None,
+            deep,
+            report: FsckReport::default(),
+        })
+    }
+
+    /// Advance an integrity check by at most `max_steps` commit-work records,
+    /// current objects, or logical versions. Persist the returned cursor after
+    /// every page.
+    pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
+        if !(1..=1_000).contains(&max_steps) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "fsck page size must be between 1 and 1,000",
+            ));
+        }
+        if cursor.repository != self.format.repository_id {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck cursor belongs to another repository",
+            ));
+        }
+        validate_branch(&cursor.branch)?;
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        self.locator.register(&cursor.branch)?;
+        let mut next = cursor.clone();
+        let mut processed = 0usize;
+        match next.phase {
+            FsckPhase::DiscoverCommits => {
+                let page = self
+                    .commit_closure_page(&next.closure, max_steps, max_steps.min(1_000))
+                    .await?;
+                processed = page.steps;
+                for (_, commit) in &page.commits {
+                    next.report.commits = next.report.commits.checked_add(1).ok_or_else(|| {
+                        Error::new(ErrorCode::EntityTooLarge, "fsck commit counter overflow")
+                    })?;
+                    let nodes = commit
+                        .node_pack
+                        .as_ref()
+                        .map_or(0_u64, |pack| u64::from(pack.node_count));
+                    next.report.reachable_nodes = next
+                        .report
+                        .reachable_nodes
+                        .checked_add(nodes)
+                        .ok_or_else(|| {
+                            Error::new(ErrorCode::EntityTooLarge, "fsck node counter overflow")
+                        })?;
+                }
+                next.closure = page.cursor;
+                if page.complete {
+                    next.phase = FsckPhase::VerifyObjects;
+                }
+            }
+            FsckPhase::VerifyObjects => {
+                let commit = self.load_commit_object(next.snapshot).await?.commit;
+                let tree = self.tree_from_root(&commit.state.objects)?;
+                let engine = self.engine(self.node_store.clone());
+                let mut entries = match next.after.as_deref() {
+                    Some(after) => engine.range_after(&tree, after, None).await?,
+                    None => engine.prefix(&tree, b"").await?,
+                };
+                while processed < max_steps {
+                    let Some(entry) = entries.next().await else {
+                        next.phase = FsckPhase::VerifyVersions;
+                        next.after = None;
+                        break;
+                    };
+                    let (key, encoded) = entry?;
+                    let current: CurrentObject = decode_canonical(&encoded)?;
+                    current.version.validate()?;
+                    let (payloads, bytes, deep_bytes) = self
+                        .verify_payload_metadata(&current.version, next.deep)
+                        .await?;
+                    next.report.current_objects =
+                        checked_fsck_add(next.report.current_objects, 1, "current-object")?;
+                    next.report.payloads_verified =
+                        checked_fsck_add(next.report.payloads_verified, payloads, "payload")?;
+                    next.report.payload_bytes_verified = checked_fsck_add(
+                        next.report.payload_bytes_verified,
+                        bytes,
+                        "payload-byte",
+                    )?;
+                    next.report.deep_content_bytes_verified = checked_fsck_add(
+                        next.report.deep_content_bytes_verified,
+                        deep_bytes,
+                        "deep-content-byte",
+                    )?;
+                    next.after = Some(key);
+                    processed += 1;
+                }
+            }
+            FsckPhase::VerifyVersions => {
+                let commit = self.load_commit_object(next.snapshot).await?.commit;
+                let tree = self.tree_from_root(&commit.state.versions)?;
+                let engine = self.engine(self.node_store.clone());
+                let mut entries = match next.after.as_deref() {
+                    Some(after) => engine.range_after(&tree, after, None).await?,
+                    None => engine.prefix(&tree, b"").await?,
+                };
+                while processed < max_steps {
+                    let Some(entry) = entries.next().await else {
+                        next.phase = FsckPhase::Complete;
+                        next.after = None;
+                        break;
+                    };
+                    let (key, encoded) = entry?;
+                    let version: ObjectVersion = decode_canonical(&encoded)?;
+                    version.validate()?;
+                    let (payloads, bytes, deep_bytes) =
+                        self.verify_payload_metadata(&version, next.deep).await?;
+                    next.report.logical_versions =
+                        checked_fsck_add(next.report.logical_versions, 1, "logical-version")?;
+                    next.report.payloads_verified =
+                        checked_fsck_add(next.report.payloads_verified, payloads, "payload")?;
+                    next.report.payload_bytes_verified = checked_fsck_add(
+                        next.report.payload_bytes_verified,
+                        bytes,
+                        "payload-byte",
+                    )?;
+                    next.report.deep_content_bytes_verified = checked_fsck_add(
+                        next.report.deep_content_bytes_verified,
+                        deep_bytes,
+                        "deep-content-byte",
+                    )?;
+                    next.after = Some(key);
+                    processed += 1;
+                }
+            }
+            FsckPhase::Complete => {}
+        }
+        Ok(FsckPage {
+            complete: next.phase == FsckPhase::Complete,
+            cursor: next,
+            processed,
+        })
+    }
+
+    /// Start a restartable logical transfer that preserves the complete source
+    /// commit DAG. Commit and object-version IDs are mapped because repository
+    /// identity, authority stamps, and provider bindings are destination-local.
+    pub async fn start_history_transfer_from<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        source_branch: &str,
+        source_head: CommitId,
+        destination_branch: &str,
+        expected_destination_head: CommitId,
+    ) -> Result<HistoryTransferCursor> {
+        validate_branch(source_branch)?;
+        validate_branch(destination_branch)?;
+        source.locator.register(source_branch)?;
+        source.require_branch_indexes_ready(source_branch).await?;
+        source.load_commit_object(source_head).await?;
+        self.locator.register(destination_branch)?;
+        self.require_branch_indexes_ready(destination_branch)
+            .await?;
+        if self.head(destination_branch).await? != expected_destination_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "destination head does not match history-transfer expectation",
+            ));
+        }
+        let job = self.options.ids.operation();
+        let mappings = self.history_transfer_mapping_engine(job)?.create();
+        let cursor = HistoryTransferCursor {
+            source_repository: source.format.repository_id,
+            destination_repository: self.format.repository_id,
+            job,
+            source_branch: source_branch.to_string(),
+            destination_branch: destination_branch.to_string(),
+            source_head,
+            expected_destination_head,
+            closure: source.start_commit_closure(&[source_head]).await?,
+            mappings: RootManifest::from_tree(&mappings)?,
+            pending: None,
+            mapped_head: None,
+            report: HistoryTransferReport::default(),
+            complete: false,
+        };
+        self.validate_history_transfer_cursor(source, &cursor)?;
+        Ok(cursor)
+    }
+
+    /// Advance a history transfer by bounded traversal or tree-mutation work.
+    /// Persist the returned cursor before discarding its predecessor.
+    pub async fn advance_history_transfer_from<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &HistoryTransferCursor,
+        max_steps: usize,
+    ) -> Result<HistoryTransferPage> {
+        if !(1..=1_000).contains(&max_steps) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "history-transfer page size must be between 1 and 1,000",
+            ));
+        }
+        self.validate_history_transfer_cursor(source, cursor)?;
+        if cursor.complete {
+            return Ok(HistoryTransferPage {
+                cursor: cursor.clone(),
+                traversal_steps: 0,
+                mutation_steps: 0,
+                imported_commits: 0,
+                complete: true,
+            });
+        }
+        if self.head(&cursor.destination_branch).await? != cursor.expected_destination_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "destination branch moved during history transfer",
+            ));
+        }
+        let mut next = cursor.clone();
+        if next.pending.is_none() {
+            let page = source
+                .commit_closure_page(&next.closure, max_steps, 1)
+                .await?;
+            let traversal_steps = page.steps;
+            let Some((source_id, source_commit)) = page.commits.into_iter().next() else {
+                next.closure = page.cursor;
+                if page.complete {
+                    if next.mapped_head.is_none() {
+                        return Err(Error::new(
+                            ErrorCode::MissingClosure,
+                            "history transfer completed without mapping its source head",
+                        ));
+                    }
+                    next.complete = true;
+                }
+                return Ok(HistoryTransferPage {
+                    complete: next.complete,
+                    cursor: next,
+                    traversal_steps,
+                    mutation_steps: 0,
+                    imported_commits: 0,
+                });
+            };
+            let mapping_engine = self.history_transfer_mapping_engine(next.job)?;
+            let mapping_tree = self.tree_from_root(&next.mappings)?;
+            let mut mapped_parents = Vec::with_capacity(source_commit.parents.len());
+            for parent in &source_commit.parents {
+                let encoded = mapping_engine
+                    .get(&mapping_tree, &commit_mapping_key(*parent))
+                    .await?
+                    .ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::MissingClosure,
+                            "parent commit was not mapped before its child",
+                        )
+                    })?;
+                let hash: [u8; 32] = encoded.try_into().map_err(|_| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "mapped commit ID has wrong length",
+                    )
+                })?;
+                mapped_parents.push(CommitId::from_hash(hash));
+            }
+            let (objects, versions) = if let Some(first_parent) = mapped_parents.first() {
+                let parent = self.load_commit_object(*first_parent).await?.commit;
+                (parent.state.objects, parent.state.versions)
+            } else {
+                let engine = self.merge_state_engine();
+                (
+                    RootManifest::from_tree(&engine.create())?,
+                    RootManifest::from_tree(&engine.create())?,
+                )
+            };
+            let delta =
+                RootManifest::from_tree(&self.history_transfer_delta_engine(next.job)?.create())?;
+            next.pending = Some(PendingHistoryTransferCommit {
+                source: source_id,
+                next_closure: page.cursor,
+                mapped_parents,
+                objects,
+                versions,
+                delta,
+                phase: if source_commit.parents.len() > 1 {
+                    HistoryTransferPhase::UnionParentVersions
+                } else {
+                    HistoryTransferPhase::ApplyTransitions
+                },
+                union_parent_index: 1,
+                union_base: None,
+                union_diff: None,
+                inline_index: 0,
+                external_after: None,
+                transitions_applied: 0,
+            });
+            return Ok(HistoryTransferPage {
+                cursor: next,
+                traversal_steps,
+                mutation_steps: 0,
+                imported_commits: 0,
+                complete: false,
+            });
+        }
+        let phase = next
+            .pending
+            .as_ref()
+            .expect("pending transfer checked")
+            .phase;
+        let (mutation_steps, imported_commits) = match phase {
+            HistoryTransferPhase::UnionParentVersions => (
+                self.advance_history_transfer_union(&mut next, max_steps)
+                    .await?,
+                0,
+            ),
+            HistoryTransferPhase::ApplyTransitions => (
+                self.advance_history_transfer_transitions(source, &mut next, max_steps)
+                    .await?,
+                0,
+            ),
+            HistoryTransferPhase::FinalizeCommit => {
+                self.finalize_history_transfer_commit(source, &mut next)
+                    .await?;
+                (0, 1)
+            }
+        };
+        Ok(HistoryTransferPage {
+            complete: next.complete,
+            cursor: next,
+            traversal_steps: 0,
+            mutation_steps,
+            imported_commits,
+        })
+    }
+
+    /// Publish the mapped source head by an audited ref movement after every
+    /// source commit is durable at the destination.
+    pub async fn publish_history_transfer(
+        &self,
+        cursor: &HistoryTransferCursor,
+        reason: &str,
+    ) -> Result<RefMoveReceipt> {
+        if !cursor.complete || cursor.pending.is_some() {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "history transfer is not complete",
+            ));
+        }
+        let mapped = cursor
+            .mapped_head
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "mapped source head is absent"))?;
+        self.reset_branch(
+            &cursor.destination_branch,
+            mapped,
+            cursor.expected_destination_head,
+            reason,
+        )
+        .await
+    }
+
+    pub async fn history_transfer_mapping(
+        &self,
+        cursor: &HistoryTransferCursor,
+        source: CommitId,
+    ) -> Result<Option<crate::HistoryTransferMapping>> {
+        if cursor.destination_repository != self.format.repository_id || cursor.job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history-transfer cursor belongs to another destination",
+            ));
+        }
+        let engine = self.history_transfer_mapping_engine(cursor.job)?;
+        let tree = self.tree_from_root(&cursor.mappings)?;
+        let Some(encoded) = engine.get(&tree, &commit_mapping_key(source)).await? else {
+            return Ok(None);
+        };
+        let hash: [u8; 32] = encoded.try_into().map_err(|_| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "mapped commit ID has wrong length",
+            )
+        })?;
+        Ok(Some(crate::HistoryTransferMapping {
+            source,
+            destination: CommitId::from_hash(hash),
+        }))
+    }
+
+    /// Start a logical source-assisted repair. Provider-specific bindings are
+    /// never copied: payload bytes are verified by the source and rebound by
+    /// the destination into new logical versions.
+    pub async fn start_repair_from<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        source_branch: &str,
+        source_snapshot: CommitId,
+        destination_branch: &str,
+        expected_head: CommitId,
+        message: impl Into<String>,
+    ) -> Result<RepairCursor> {
+        validate_branch(source_branch)?;
+        validate_branch(destination_branch)?;
+        let message = message.into();
+        if message.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "repair message must not be empty",
+            ));
+        }
+        source.locator.register(source_branch)?;
+        source.require_branch_indexes_ready(source_branch).await?;
+        source.load_commit_object(source_snapshot).await?;
+        self.locator.register(destination_branch)?;
+        self.require_branch_indexes_ready(destination_branch)
+            .await?;
+        if self.head(destination_branch).await? != expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "destination head does not match repair expectation",
+            ));
+        }
+        let checkpoint = self
+            .begin_durable_commit_session(destination_branch, message.clone(), 24 * 60 * 60 * 1_000)
+            .await?;
+        Ok(RepairCursor {
+            source_repository: source.format.repository_id,
+            destination_repository: self.format.repository_id,
+            source_branch: source_branch.to_string(),
+            destination_branch: destination_branch.to_string(),
+            source_snapshot,
+            destination_snapshot: expected_head,
+            expected_head,
+            source_after: None,
+            destination_after: None,
+            phase: RepairPhase::CopySource,
+            batch: checkpoint.session.id,
+            checkpoint_sequence: checkpoint.sequence,
+            message,
+            report: RepairReport::default(),
+        })
+    }
+
+    pub async fn advance_repair_from<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &RepairCursor,
+        max_steps: usize,
+    ) -> Result<RepairPage> {
+        if cursor.source_repository != source.format.repository_id
+            || cursor.destination_repository != self.format.repository_id
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "repair cursor belongs to another source or destination",
+            ));
+        }
+        if cursor.phase == RepairPhase::Complete {
+            return Ok(RepairPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                receipt: None,
+                complete: true,
+            });
+        }
+        if max_steps == 0 || max_steps > self.format.canonical_limits.max_list_page as usize {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "repair page size exceeds the canonical list limit",
+            ));
+        }
+        if self.head(&cursor.destination_branch).await? != cursor.expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "destination branch moved during repair",
+            ));
+        }
+        let checkpoint = self.resume_commit_session(cursor.batch).await?;
+        if checkpoint.sequence != cursor.checkpoint_sequence
+            || checkpoint.session.base_commit != cursor.expected_head
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "repair cursor is stale relative to its checkpoint",
+            ));
+        }
+        let remaining = (self.format.canonical_limits.max_mutations_per_commit as usize)
+            .checked_sub(checkpoint.mutations.len())
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "repair checkpoint exceeds its mutation limit",
+                )
+            })?;
+        if remaining == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "repair checkpoint is full but unpublished",
+            ));
+        }
+        let limit = max_steps.min(remaining);
+        let mut next = cursor.clone();
+        let mut mutations = checkpoint.mutations;
+        let processed;
+        match cursor.phase {
+            RepairPhase::CopySource => {
+                let (objects, truncated) = source
+                    .list_objects_at(
+                        &cursor.source_branch,
+                        cursor.source_snapshot,
+                        b"",
+                        cursor.source_after.as_deref(),
+                        limit,
+                    )
+                    .await?;
+                processed = objects.len();
+                next.source_after = objects.last().map(|object| object.key.clone());
+                next.report.scanned_source_objects = checked_fsck_add(
+                    next.report.scanned_source_objects,
+                    processed as u64,
+                    "repair-source-object",
+                )?;
+                for object in objects {
+                    let existing = self
+                        .head_object_at(
+                            &cursor.destination_branch,
+                            cursor.destination_snapshot,
+                            &object.key,
+                        )
+                        .await?;
+                    if existing
+                        .as_ref()
+                        .is_some_and(|value| value.version.body.kind == object.version.body.kind)
+                    {
+                        continue;
+                    }
+                    let data = source
+                        .get_object_at(&cursor.source_branch, cursor.source_snapshot, &object.key)
+                        .await?
+                        .ok_or_else(|| {
+                            Error::new(
+                                ErrorCode::CorruptCommit,
+                                "repair listing points to a missing source object",
+                            )
+                        })?;
+                    let size = u64::try_from(data.bytes.len()).map_err(|_| {
+                        Error::new(ErrorCode::EntityTooLarge, "repair payload exceeds u64")
+                    })?;
+                    let binding = self.payloads.put(data.bytes).await?;
+                    let LogicalObjectVersionKind::Live {
+                        logical_etag,
+                        headers,
+                        checksums,
+                        user_metadata,
+                        tags,
+                        ..
+                    } = data.version.body.kind
+                    else {
+                        return Err(Error::new(
+                            ErrorCode::CorruptCommit,
+                            "repair source current object is a delete marker",
+                        ));
+                    };
+                    mutations.push(StagedMutation {
+                        body: StagedMutationBody::Put(Box::new(StagedPut {
+                            key: object.key,
+                            size,
+                            logical_etag,
+                            checksums,
+                            headers,
+                            user_metadata,
+                            tags,
+                            binding,
+                        })),
+                    });
+                    next.report.copied_objects =
+                        checked_fsck_add(next.report.copied_objects, 1, "repair-copied-object")?;
+                    next.report.copied_bytes =
+                        checked_fsck_add(next.report.copied_bytes, size, "repair-copied-byte")?;
+                }
+                if !truncated {
+                    next.phase = RepairPhase::DeleteDestinationOnly;
+                    next.source_after = None;
+                }
+            }
+            RepairPhase::DeleteDestinationOnly => {
+                let (objects, truncated) = self
+                    .list_objects_at(
+                        &cursor.destination_branch,
+                        cursor.destination_snapshot,
+                        b"",
+                        cursor.destination_after.as_deref(),
+                        limit,
+                    )
+                    .await?;
+                processed = objects.len();
+                next.destination_after = objects.last().map(|object| object.key.clone());
+                next.report.scanned_destination_objects = checked_fsck_add(
+                    next.report.scanned_destination_objects,
+                    processed as u64,
+                    "repair-destination-object",
+                )?;
+                for object in objects {
+                    if source
+                        .head_object_at(&cursor.source_branch, cursor.source_snapshot, &object.key)
+                        .await?
+                        .is_none()
+                    {
+                        mutations.push(StagedMutation::delete(object.key));
+                        next.report.deleted_objects = checked_fsck_add(
+                            next.report.deleted_objects,
+                            1,
+                            "repair-deleted-object",
+                        )?;
+                    }
+                }
+                if !truncated {
+                    next.phase = RepairPhase::Complete;
+                    next.destination_after = None;
+                }
+            }
+            RepairPhase::Complete => unreachable!(),
+        }
+        let full =
+            mutations.len() >= self.format.canonical_limits.max_mutations_per_commit as usize;
+        if !full && next.phase != RepairPhase::Complete {
+            let sequence = checkpoint.sequence.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "repair checkpoint sequence overflow",
+                )
+            })?;
+            let saved = self
+                .checkpoint_commit_session(&checkpoint.session, mutations, sequence)
+                .await?;
+            next.checkpoint_sequence = saved.sequence;
+            return Ok(RepairPage {
+                cursor: next,
+                processed,
+                receipt: None,
+                complete: false,
+            });
+        }
+        if mutations.is_empty() {
+            self.abort_commit_session(checkpoint.session, mutations, checkpoint.sequence)
+                .await?;
+            return Ok(RepairPage {
+                cursor: next,
+                processed,
+                receipt: None,
+                complete: true,
+            });
+        }
+        let receipt = self
+            .publish_commit_session(checkpoint.session, mutations)
+            .await?;
+        next.expected_head = receipt.id;
+        next.report.published_commits =
+            checked_fsck_add(next.report.published_commits, 1, "repair-published-commit")?;
+        let complete = next.phase == RepairPhase::Complete;
+        if !complete {
+            let new_checkpoint = self
+                .begin_durable_commit_session(
+                    &cursor.destination_branch,
+                    cursor.message.clone(),
+                    24 * 60 * 60 * 1_000,
+                )
+                .await?;
+            next.batch = new_checkpoint.session.id;
+            next.checkpoint_sequence = new_checkpoint.sequence;
+        }
+        Ok(RepairPage {
+            cursor: next,
+            processed,
+            receipt: Some(receipt),
+            complete,
+        })
+    }
+
+    pub async fn start_backup_verification<Q: ObjectPlane>(
+        &self,
+        destination: &Repository<Q>,
+        source_branch: &str,
+        source_snapshot: CommitId,
+        destination_branch: &str,
+        destination_snapshot: CommitId,
+    ) -> Result<BackupVerificationCursor> {
+        validate_branch(source_branch)?;
+        validate_branch(destination_branch)?;
+        self.locator.register(source_branch)?;
+        destination.locator.register(destination_branch)?;
+        self.require_branch_indexes_ready(source_branch).await?;
+        destination
+            .require_branch_indexes_ready(destination_branch)
+            .await?;
+        self.load_commit_object(source_snapshot).await?;
+        destination.load_commit_object(destination_snapshot).await?;
+        Ok(BackupVerificationCursor {
+            source_repository: self.format.repository_id,
+            destination_repository: destination.format.repository_id,
+            source_branch: source_branch.to_string(),
+            destination_branch: destination_branch.to_string(),
+            source_snapshot,
+            destination_snapshot,
+            source_after: None,
+            destination_after: None,
+            report: BackupVerificationReport::default(),
+            complete: false,
+        })
+    }
+
+    /// Deeply compare one bounded page of two logical snapshots, including
+    /// payload bytes. This qualifies a logical backup even when provider
+    /// version IDs and immutable physical paths differ.
+    pub async fn advance_backup_verification<Q: ObjectPlane>(
+        &self,
+        destination: &Repository<Q>,
+        cursor: &BackupVerificationCursor,
+        limit: usize,
+    ) -> Result<BackupVerificationPage> {
+        if cursor.complete {
+            return Ok(BackupVerificationPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                complete: true,
+            });
+        }
+        if cursor.source_repository != self.format.repository_id
+            || cursor.destination_repository != destination.format.repository_id
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "backup verification cursor belongs to another repository pair",
+            ));
+        }
+        if limit == 0 || limit > self.format.canonical_limits.max_list_page as usize {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "backup verification page size exceeds the canonical list limit",
+            ));
+        }
+        let (source_objects, source_truncated) = self
+            .list_objects_at(
+                &cursor.source_branch,
+                cursor.source_snapshot,
+                b"",
+                cursor.source_after.as_deref(),
+                limit,
+            )
+            .await?;
+        let (destination_objects, destination_truncated) = destination
+            .list_objects_at(
+                &cursor.destination_branch,
+                cursor.destination_snapshot,
+                b"",
+                cursor.destination_after.as_deref(),
+                limit,
+            )
+            .await?;
+        if source_objects.len() != destination_objects.len()
+            || source_truncated != destination_truncated
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "backup snapshots have different object-key cardinality",
+            ));
+        }
+        let processed = source_objects.len();
+        let mut next = cursor.clone();
+        next.source_after = source_objects.last().map(|object| object.key.clone());
+        next.destination_after = destination_objects.last().map(|object| object.key.clone());
+        for (source_object, destination_object) in
+            source_objects.into_iter().zip(destination_objects)
+        {
+            if source_object.key != destination_object.key
+                || source_object.version.body.kind != destination_object.version.body.kind
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "backup snapshots have different logical object metadata",
+                ));
+            }
+            let source_data = self
+                .get_object_at(
+                    &cursor.source_branch,
+                    cursor.source_snapshot,
+                    &source_object.key,
+                )
+                .await?
+                .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "source object is missing"))?;
+            let destination_data = destination
+                .get_object_at(
+                    &cursor.destination_branch,
+                    cursor.destination_snapshot,
+                    &destination_object.key,
+                )
+                .await?
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "destination object is missing")
+                })?;
+            if source_data.bytes != destination_data.bytes {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "backup snapshots have different payload bytes",
+                ));
+            }
+            next.report.objects_verified =
+                checked_fsck_add(next.report.objects_verified, 1, "backup-verified-object")?;
+            next.report.content_bytes_verified = checked_fsck_add(
+                next.report.content_bytes_verified,
+                source_data.bytes.len() as u64,
+                "backup-verified-byte",
+            )?;
+        }
+        next.complete = !source_truncated;
+        if next.complete {
+            next.source_after = None;
+            next.destination_after = None;
+        }
+        Ok(BackupVerificationPage {
+            complete: next.complete,
+            cursor: next,
+            processed,
+        })
+    }
+
+    /// Return all current-object changes between two immutable snapshots.
+    pub async fn diff(
+        &self,
+        branch: &str,
+        from: CommitId,
+        to: CommitId,
+    ) -> Result<Vec<ObjectDiff>> {
+        validate_branch(branch)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let from_commit = self.load_commit_object(from).await?.commit;
+        let to_commit = self.load_commit_object(to).await?.commit;
+        let from_tree = self.tree_from_root(&from_commit.state.objects)?;
+        let to_tree = self.tree_from_root(&to_commit.state.objects)?;
+        self.engine(self.node_store.clone())
+            .diff(&from_tree, &to_tree)
+            .await?
+            .into_iter()
+            .map(object_diff_from_prolly)
+            .collect()
+    }
+
+    /// Return one CID-pruned diff page without rediscovering the previous
+    /// structural frontier when the caller resumes.
+    pub async fn diff_page_bounded(
+        &self,
+        branch: &str,
+        from: CommitId,
+        to: CommitId,
+        cursor: Option<&ObjectDiffCursor>,
+        requested_limit: usize,
+    ) -> Result<ObjectDiffPage> {
+        validate_branch(branch)?;
+        if cursor.is_some_and(|cursor| {
+            cursor.repository != self.format.repository_id
+                || cursor.branch != branch
+                || cursor.from != from
+                || cursor.to != to
+        }) {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "diff cursor belongs to another repository, branch, or snapshot pair",
+            ));
+        }
+        let limit = requested_limit.min(self.format.canonical_limits.max_list_page as usize);
+        if limit == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "bounded diff page limit must be greater than zero",
+            ));
+        }
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let from_commit = self.load_commit_object(from).await?.commit;
+        let to_commit = self.load_commit_object(to).await?.commit;
+        let from_tree = self.tree_from_root(&from_commit.state.objects)?;
+        let to_tree = self.tree_from_root(&to_commit.state.objects)?;
+        let page = self
+            .engine(self.node_store.clone())
+            .structural_diff_page(
+                &from_tree,
+                &to_tree,
+                cursor.map(|cursor| &cursor.traversal),
+                limit,
+            )
+            .await?;
+        let changes = page
+            .diffs
+            .into_iter()
+            .map(object_diff_from_prolly)
+            .collect::<Result<Vec<_>>>()?;
+        Ok(ObjectDiffPage {
+            changes,
+            continuation: page.next_cursor.map(|traversal| ObjectDiffCursor {
+                repository: self.format.repository_id,
+                branch: branch.to_string(),
+                from,
+                to,
+                traversal,
+            }),
+            compared_nodes: page.stats.compared_nodes,
+            reused_subtrees: page.stats.reused_subtrees,
+        })
+    }
+
+    /// Open a stable snapshot of the immutable branch reflog.
+    pub async fn open_reflog(&self, branch: &str) -> Result<crate::PublicationJournalCursor> {
+        self.publisher.open_journal(branch).await
+    }
+
+    /// Read one newest-to-oldest page from a stable reflog snapshot.
+    pub async fn read_reflog_page(
+        &self,
+        cursor: &crate::PublicationJournalCursor,
+        limit: usize,
+    ) -> Result<crate::PublicationJournalPage> {
+        self.publisher.read_journal_page(cursor, limit).await
+    }
+
+    /// Administratively move a branch ref to an existing commit. The move is
+    /// fenced, CAS-protected, and recorded in the immutable publication log.
+    pub async fn reset_branch(
+        &self,
+        branch: &str,
+        to: CommitId,
+        expected_head: CommitId,
+        reason: &str,
+    ) -> Result<RefMoveReceipt> {
+        if !self.writable.load(Ordering::Acquire) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "repository is read-only",
+            ));
+        }
+        validate_branch(branch)?;
+        if reason.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "administrative ref movement requires a non-empty reason",
+            ));
+        }
+        let _lane = self.lock_branch(branch).await;
+        let now = self.options.clock.now_millis()?;
+        let permit = self.active_permit(branch, now).await?;
+        self.authority.validate_active(&permit, now).await?;
+        self.load_commit_object(to).await?;
+        let current = self.publisher.load(branch).await?;
+        if current.value.target != expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch head does not match reset expectation",
+            ));
+        }
+        let operation = self.options.ids.operation();
+        let old_target = current.value.target;
+        let moved = self
+            .publisher
+            .move_target(
+                current,
+                BranchMovement {
+                    permit: &permit,
+                    branch,
+                    target: to,
+                    operation,
+                    message: reason,
+                    now_millis: now,
+                },
+            )
+            .await?;
+        self.record_branch_catalog(&moved).await?;
+        self.advance_branch_indexes(branch).await?;
+        Ok(RefMoveReceipt {
+            branch: branch.to_string(),
+            old_target,
+            new_target: to,
+            operation,
+            generation: moved.value.generation,
+        })
+    }
+
+    /// Recover the previous target named by a reflog entry. The selected entry
+    /// is found through bounded pages of the immutable publication journal.
+    pub async fn recover_branch(
+        &self,
+        branch: &str,
+        reflog: crate::ReflogEntryId,
+        expected_head: CommitId,
+        reason: &str,
+    ) -> Result<RefMoveReceipt> {
+        let mut cursor = Some(self.open_reflog(branch).await?);
+        let mut target = None;
+        while let Some(current) = cursor {
+            let page = self.read_reflog_page(&current, 1_000).await?;
+            if let Some(event) = page
+                .entries
+                .iter()
+                .find(|entry| entry.event.reflog == reflog)
+            {
+                target = event.event.old_target;
+                break;
+            }
+            cursor = page.continuation;
+        }
+        let target = target.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidRevision,
+                "selected reflog entry has no recoverable previous target",
+            )
+        })?;
+        self.reset_branch(branch, target, expected_head, reason)
+            .await
+    }
+
+    /// Start a restartable snapshot restore. Changed keys reuse immutable
+    /// payload bindings, receive fresh logical versions, and are published in
+    /// bounded atomic commits while preserving the branch's existing history.
+    pub async fn start_restore(
+        &self,
+        branch: &str,
+        source: CommitId,
+        expected_head: CommitId,
+        message: impl Into<String>,
+    ) -> Result<RestoreCursor> {
+        validate_branch(branch)?;
+        let message = message.into();
+        if message.trim().is_empty() {
+            return Err(Error::new(
+                ErrorCode::InvalidRequest,
+                "restore message must not be empty",
+            ));
+        }
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        self.load_commit_object(source).await?;
+        if self.head(branch).await? != expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch head does not match restore expectation",
+            ));
+        }
+        let checkpoint = self
+            .begin_durable_commit_session(branch, message.clone(), 24 * 60 * 60 * 1_000)
+            .await?;
+        Ok(RestoreCursor {
+            repository: self.format.repository_id,
+            branch: branch.to_string(),
+            source,
+            original_head: expected_head,
+            expected_head,
+            batch: checkpoint.session.id,
+            checkpoint_sequence: checkpoint.sequence,
+            diff: None,
+            message,
+            complete: false,
+        })
+    }
+
+    /// Advance a restore by one structural-diff page. A full atomic batch is
+    /// published as soon as it reaches the canonical mutation limit; larger
+    /// restores continue in subsequent commits from the same diff cursor.
+    pub async fn advance_restore(
+        &self,
+        cursor: &RestoreCursor,
+        max_steps: usize,
+    ) -> Result<RestorePage> {
+        if cursor.complete {
+            return Ok(RestorePage {
+                cursor: cursor.clone(),
+                processed: 0,
+                receipt: None,
+                complete: true,
+            });
+        }
+        if cursor.repository != self.format.repository_id {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "restore cursor belongs to another repository",
+            ));
+        }
+        validate_branch(&cursor.branch)?;
+        if max_steps == 0 || max_steps > self.format.canonical_limits.max_list_page as usize {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "restore page size exceeds the canonical list limit",
+            ));
+        }
+        if self.head(&cursor.branch).await? != cursor.expected_head {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "branch moved while restore was in progress",
+            ));
+        }
+        let checkpoint = self.resume_commit_session(cursor.batch).await?;
+        if checkpoint.sequence != cursor.checkpoint_sequence
+            || checkpoint.session.base_commit != cursor.expected_head
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "restore cursor is stale relative to its durable checkpoint",
+            ));
+        }
+        let remaining = (self.format.canonical_limits.max_mutations_per_commit as usize)
+            .checked_sub(checkpoint.mutations.len())
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "restore checkpoint exceeds the canonical mutation limit",
+                )
+            })?;
+        if remaining == 0 {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "restore checkpoint is full without having been published",
+            ));
+        }
+        let page = self
+            .diff_page_bounded(
+                &cursor.branch,
+                cursor.original_head,
+                cursor.source,
+                cursor.diff.as_ref(),
+                max_steps.min(remaining),
+            )
+            .await?;
+        let processed = page.changes.len();
+        let mut mutations = checkpoint.mutations;
+        for change in page.changes {
+            if change.to.is_none() {
+                mutations.push(StagedMutation::delete(change.key));
+                continue;
+            }
+            let source = self
+                .head_object_at(&cursor.branch, cursor.source, &change.key)
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::CorruptCommit,
+                        "restore diff points to a missing source object",
+                    )
+                })?;
+            if Some(source.version.id) != change.to {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "restore diff and source object version disagree",
+                ));
+            }
+            let LogicalObjectVersionKind::Live {
+                size,
+                logical_etag,
+                headers,
+                checksums,
+                user_metadata,
+                tags,
+            } = source.version.body.kind
+            else {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "restore source current object is a delete marker",
+                ));
+            };
+            let binding = source.version.binding.ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "restore source object has no payload binding",
+                )
+            })?;
+            mutations.push(StagedMutation {
+                body: StagedMutationBody::Put(Box::new(StagedPut {
+                    key: change.key,
+                    size,
+                    logical_etag,
+                    checksums,
+                    headers,
+                    user_metadata,
+                    tags,
+                    binding,
+                })),
+            });
+        }
+        let mut next = cursor.clone();
+        next.diff = page.continuation;
+        let at_batch_limit =
+            mutations.len() >= self.format.canonical_limits.max_mutations_per_commit as usize;
+        let diff_complete = next.diff.is_none();
+        if !at_batch_limit && !diff_complete {
+            let sequence = checkpoint.sequence.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "restore checkpoint sequence overflow",
+                )
+            })?;
+            let checkpoint = self
+                .checkpoint_commit_session(&checkpoint.session, mutations, sequence)
+                .await?;
+            next.checkpoint_sequence = checkpoint.sequence;
+            return Ok(RestorePage {
+                cursor: next,
+                processed,
+                receipt: None,
+                complete: false,
+            });
+        }
+        if mutations.is_empty() {
+            self.abort_commit_session(checkpoint.session, mutations, checkpoint.sequence)
+                .await?;
+            next.complete = true;
+            return Ok(RestorePage {
+                cursor: next,
+                processed,
+                receipt: None,
+                complete: true,
+            });
+        }
+        let receipt = self
+            .publish_commit_session(checkpoint.session, mutations)
+            .await?;
+        next.expected_head = receipt.id;
+        if diff_complete {
+            next.complete = true;
+        } else {
+            let checkpoint = self
+                .begin_durable_commit_session(
+                    &cursor.branch,
+                    cursor.message.clone(),
+                    24 * 60 * 60 * 1_000,
+                )
+                .await?;
+            next.batch = checkpoint.session.id;
+            next.checkpoint_sequence = checkpoint.sequence;
+        }
+        Ok(RestorePage {
+            complete: next.complete,
+            cursor: next,
+            processed,
+            receipt: Some(receipt),
+        })
     }
 
     /// Start a durable merge between two branch snapshots.
@@ -2936,6 +5427,1120 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
+    async fn verify_payload_metadata(
+        &self,
+        version: &ObjectVersion,
+        deep: bool,
+    ) -> Result<(u64, u64, u64)> {
+        let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
+            return Ok((0, 0, 0));
+        };
+        let binding = version.binding.as_ref().ok_or_else(|| {
+            Error::new(
+                ErrorCode::CorruptCommit,
+                "live object version has no payload binding",
+            )
+        })?;
+        if binding.path != self.payloads.path(binding.checksum_sha256)? {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "payload binding path does not match its content checksum",
+            ));
+        }
+        let metadata =
+            self.plane.head(&binding.path).await?.ok_or_else(|| {
+                Error::new(ErrorCode::MissingClosure, "immutable payload is missing")
+            })?;
+        if metadata.len != *size
+            || metadata.sha256 != binding.checksum_sha256
+            || metadata.token.etag != binding.provider_etag
+            || metadata.token.version_id != binding.provider_version_id
+        {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "immutable payload metadata does not match its logical binding",
+            ));
+        }
+        let deep_bytes = if deep {
+            u64::try_from(self.payloads.get(binding).await?.len())
+                .map_err(|_| Error::new(ErrorCode::EntityTooLarge, "payload length exceeds u64"))?
+        } else {
+            0
+        };
+        Ok((1, *size, deep_bytes))
+    }
+
+    fn gc_work_engine(&self, epoch: OperationId) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if epoch.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "GC epoch ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new(
+            self.plane.clone(),
+            format!(
+                "{}/administration/gc/{epoch}/tree",
+                self.options.repository_prefix
+            ),
+        )))
+    }
+
+    fn validate_gc_cursor(&self, cursor: &GcCursor) -> Result<()> {
+        if cursor.repository != self.format.repository_id
+            || cursor.epoch.is_nil()
+            || cursor.work.format_digest != tree_format_digest(&self.format.state_tree_format)?
+            || *self
+                .active_gc_epoch
+                .read()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?
+                != Some(cursor.epoch)
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "GC cursor is malformed or is not the active epoch",
+            ));
+        }
+        self.tree_from_root(&cursor.work)?;
+        Ok(())
+    }
+
+    async fn gc_discover_refs(
+        &self,
+        cursor: &mut GcCursor,
+        tags: bool,
+        max_steps: usize,
+    ) -> Result<usize> {
+        let prefix = format!(
+            "{}/refs/{}/",
+            self.options.repository_prefix,
+            if tags { "tags" } else { "heads" }
+        );
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix,
+                continuation: cursor.continuation.clone(),
+                limit: max_steps,
+                include_versions: false,
+            })
+            .await?;
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        let mut mutations = Vec::new();
+        for entry in &page.entries {
+            let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
+                continue;
+            };
+            let (target, previous, tombstone) = if tags {
+                let value: crate::TagValue = decode_canonical(&stored.bytes)?;
+                value.validate(self.format.repository_id, &value.inline_reflog.branch)?;
+                (value.target, value.previous_target, value.tombstone)
+            } else {
+                let value: crate::RefValue = decode_canonical(&stored.bytes)?;
+                value.validate(self.format.repository_id, &value.inline_reflog.branch)?;
+                self.locator.register(&value.inline_reflog.branch)?;
+                (value.target, value.previous_target, value.tombstone)
+            };
+            if !tombstone {
+                for root in std::iter::once(target).chain(previous) {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_commit_queue_key(root),
+                        val: root.as_bytes().to_vec(),
+                    });
+                    cursor.report.roots = cursor.report.roots.saturating_add(1);
+                }
+            }
+        }
+        if !mutations.is_empty() {
+            tree = engine.batch(&tree, mutations).await?;
+            cursor.work = RootManifest::from_tree(&tree)?;
+        }
+        cursor.continuation = page.continuation;
+        if cursor.continuation.is_none() {
+            cursor.phase = if tags {
+                GcPhase::MarkCommits
+            } else {
+                GcPhase::DiscoverTags
+            };
+        }
+        Ok(page.entries.len())
+    }
+
+    async fn gc_mark_commits(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        let mut processed = 0usize;
+        while processed < max_steps {
+            let mut queue = engine.prefix(&tree, b"cq/").await?;
+            let Some(entry) = queue.next().await else {
+                cursor.phase = GcPhase::MarkNodes;
+                break;
+            };
+            let (queue_key, encoded) = entry?;
+            drop(queue);
+            let hash: [u8; 32] = encoded.try_into().map_err(|_| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "GC commit work ID has wrong length",
+                )
+            })?;
+            let id = CommitId::from_hash(hash);
+            let mark_key = gc_commit_mark_key(id);
+            let mut mutations = vec![Mutation::Delete { key: queue_key }];
+            if engine.get(&tree, &mark_key).await?.is_none() {
+                let commit = self.load_commit_object(id).await?.commit;
+                mutations.push(Mutation::Upsert {
+                    key: mark_key,
+                    val: Vec::new(),
+                });
+                mutations.push(Mutation::Upsert {
+                    key: gc_path_mark_key(&commit_path(&self.options.repository_prefix, id)?),
+                    val: Vec::new(),
+                });
+                for parent in commit.parents {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_commit_queue_key(parent),
+                        val: parent.as_bytes().to_vec(),
+                    });
+                }
+                if let Some(root) = commit.state.objects.root {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_node_queue_key(&root, false),
+                        val: encode_canonical(&GcNodeWork {
+                            cid: root,
+                            scan_versions: false,
+                        })?,
+                    });
+                }
+                if let Some(root) = commit.state.versions.root {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_node_queue_key(&root, true),
+                        val: encode_canonical(&GcNodeWork {
+                            cid: root,
+                            scan_versions: true,
+                        })?,
+                    });
+                }
+                cursor.report.commits = cursor.report.commits.saturating_add(1);
+            }
+            tree = engine.batch(&tree, mutations).await?;
+            processed += 1;
+        }
+        cursor.work = RootManifest::from_tree(&tree)?;
+        Ok(processed)
+    }
+
+    async fn gc_mark_nodes(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        let mut processed = 0usize;
+        while processed < max_steps {
+            let mut queue = engine.prefix(&tree, b"nq/").await?;
+            let Some(entry) = queue.next().await else {
+                cursor.phase = if cursor.initial_scan_complete {
+                    GcPhase::CatchUpDirtyRoots
+                } else {
+                    GcPhase::ScanCandidates
+                };
+                break;
+            };
+            let (queue_key, encoded) = entry?;
+            drop(queue);
+            let work: GcNodeWork = decode_canonical(&encoded)?;
+            let mark_key = gc_node_mark_key(&work.cid, work.scan_versions);
+            let mut mutations = vec![Mutation::Delete { key: queue_key }];
+            if engine.get(&tree, &mark_key).await?.is_none() {
+                mutations.push(Mutation::Upsert {
+                    key: mark_key,
+                    val: Vec::new(),
+                });
+                mutations.push(Mutation::Upsert {
+                    key: gc_path_mark_key(&self.node_store.direct_node_path(&work.cid)?),
+                    val: Vec::new(),
+                });
+                let bytes = self
+                    .node_store
+                    .get(work.cid.as_bytes())
+                    .await?
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::MissingClosure, "reachable node is missing")
+                    })?;
+                let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                    .map_err(|error| {
+                        Error::new(
+                            ErrorCode::CorruptNode,
+                            format!("reachable node could not be decoded: {error}"),
+                        )
+                    })?;
+                if node.leaf {
+                    if work.scan_versions {
+                        for encoded in node.vals {
+                            let version: ObjectVersion = decode_canonical(&encoded)?;
+                            version.validate()?;
+                            if let Some(binding) = version.binding {
+                                mutations.push(Mutation::Upsert {
+                                    key: binding.provider_version_id.as_ref().map_or_else(
+                                        || gc_path_mark_key(&binding.path),
+                                        |version| gc_physical_mark_key(&binding.path, version),
+                                    ),
+                                    val: Vec::new(),
+                                });
+                            }
+                            cursor.report.logical_versions =
+                                cursor.report.logical_versions.saturating_add(1);
+                        }
+                    }
+                } else {
+                    for child in node.vals {
+                        let cid = prolly::Cid(child.try_into().map_err(|_| {
+                            Error::new(ErrorCode::CorruptNode, "internal node child CID is invalid")
+                        })?);
+                        mutations.push(Mutation::Upsert {
+                            key: gc_node_queue_key(&cid, work.scan_versions),
+                            val: encode_canonical(&GcNodeWork {
+                                cid,
+                                scan_versions: work.scan_versions,
+                            })?,
+                        });
+                    }
+                }
+                cursor.report.nodes = cursor.report.nodes.saturating_add(1);
+            }
+            tree = engine.batch(&tree, mutations).await?;
+            processed += 1;
+        }
+        cursor.work = RootManifest::from_tree(&tree)?;
+        Ok(processed)
+    }
+
+    async fn gc_scan_candidates(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: format!("{}/", self.options.repository_prefix),
+                continuation: cursor.continuation.clone(),
+                limit: max_steps,
+                include_versions: true,
+            })
+            .await?;
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        for entry in &page.entries {
+            let Some(kind) = gc_managed_kind(&self.options.repository_prefix, &entry.path) else {
+                continue;
+            };
+            if entry.metadata.last_modified_millis > cursor.cutoff_millis {
+                continue;
+            }
+            let path_retained = engine
+                .get(&tree, &gc_path_mark_key(&entry.path))
+                .await?
+                .is_some();
+            let physical_retained = match entry.metadata.token.version_id.as_deref() {
+                Some(version) => engine
+                    .get(&tree, &gc_physical_mark_key(&entry.path, version))
+                    .await?
+                    .is_some(),
+                None => false,
+            };
+            let retained = path_retained || physical_retained;
+            if retained {
+                continue;
+            }
+            let physical_version = entry
+                .metadata
+                .token
+                .version_id
+                .clone()
+                .map(|version_id| PhysicalVersion::Versioned { version_id })
+                .unwrap_or_else(|| PhysicalVersion::Unversioned {
+                    token: Some(entry.metadata.token.clone()),
+                });
+            let candidate = GcCandidate {
+                path: entry.path.clone(),
+                physical_version,
+                len: entry.metadata.len,
+                last_modified_millis: entry.metadata.last_modified_millis,
+                kind: kind.to_string(),
+            };
+            let key = gc_candidate_key(&candidate)?;
+            if engine.get(&tree, &key).await?.is_none() {
+                tree = engine
+                    .put(&tree, key, encode_canonical(&candidate)?)
+                    .await?;
+                cursor.report.candidates = cursor.report.candidates.saturating_add(1);
+                cursor.report.candidate_bytes =
+                    cursor.report.candidate_bytes.saturating_add(candidate.len);
+                *cursor
+                    .report
+                    .candidates_by_kind
+                    .entry(kind.to_string())
+                    .or_default() += 1;
+            }
+        }
+        cursor.work = RootManifest::from_tree(&tree)?;
+        cursor.continuation = page.continuation;
+        if cursor.continuation.is_none() {
+            cursor.initial_scan_complete = true;
+            cursor.phase = GcPhase::CatchUpDirtyRoots;
+        }
+        Ok(page.entries.len())
+    }
+
+    async fn gc_catch_up_dirty_roots(
+        &self,
+        cursor: &mut GcCursor,
+        max_steps: usize,
+    ) -> Result<usize> {
+        if cursor.dirty_target_sequence == 0 {
+            let _barrier = self.gc_publication_barrier.write().await;
+            cursor.dirty_target_sequence = self.gc_dirty_sequence.load(Ordering::Acquire);
+        }
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        let mut processed = 0usize;
+        while processed < max_steps && cursor.dirty_sequence < cursor.dirty_target_sequence {
+            let sequence = cursor.dirty_sequence.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "GC dirty sequence overflow")
+            })?;
+            let page = self
+                .plane
+                .list(ListRequest {
+                    prefix: gc_dirty_root_sequence_prefix(
+                        &self.options.repository_prefix,
+                        cursor.epoch,
+                        sequence,
+                    ),
+                    continuation: None,
+                    limit: 2,
+                    include_versions: false,
+                })
+                .await?;
+            for listed in page.entries {
+                let stored = self
+                    .plane
+                    .get(GetRequest {
+                        path: listed.path,
+                        range: None,
+                        physical_version: None,
+                    })
+                    .await?
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::MissingClosure, "GC dirty-root event disappeared")
+                    })?;
+                let event: GcDirtyRoot = decode_canonical(&stored.bytes)?;
+                if event.repository != self.format.repository_id
+                    || event.epoch != cursor.epoch
+                    || event.sequence != sequence
+                {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "GC dirty-root event does not match its path",
+                    ));
+                }
+                for root in std::iter::once(event.target).chain(event.previous_target) {
+                    tree = engine
+                        .put(&tree, gc_commit_queue_key(root), root.as_bytes().to_vec())
+                        .await?;
+                    cursor.report.dirty_roots = cursor.report.dirty_roots.saturating_add(1);
+                }
+            }
+            cursor.dirty_sequence = sequence;
+            processed += 1;
+        }
+        cursor.work = RootManifest::from_tree(&tree)?;
+        if engine.prefix(&tree, b"cq/").await?.next().await.is_some() {
+            cursor.phase = GcPhase::MarkCommits;
+        } else if cursor.dirty_sequence >= cursor.dirty_target_sequence {
+            cursor.phase = GcPhase::Ready;
+            cursor.dirty_target_sequence = 0;
+        }
+        Ok(processed)
+    }
+
+    async fn gc_cleanup(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        self.publish_gc_coordinator(None, self.options.clock.now_millis()?)
+            .await?;
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: gc_dirty_root_prefix(&self.options.repository_prefix, cursor.epoch),
+                continuation: None,
+                limit: max_steps,
+                include_versions: false,
+            })
+            .await?;
+        let targets = page
+            .entries
+            .into_iter()
+            .map(|entry| {
+                let token = entry.metadata.token;
+                let physical = token
+                    .version_id
+                    .clone()
+                    .map(|version_id| PhysicalVersion::Versioned { version_id })
+                    .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+                (entry.path, physical)
+            })
+            .collect::<Vec<_>>();
+        let processed = targets.len();
+        for outcome in self.plane.delete_exact_batch(targets).await? {
+            if outcome == DeleteOutcome::TokenMismatch {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "GC dirty-root event changed during cleanup",
+                ));
+            }
+        }
+        if processed == 0 {
+            cursor.phase = GcPhase::Complete;
+            *self.active_gc_epoch.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+            })? = None;
+        }
+        Ok(processed)
+    }
+
+    async fn publish_gc_coordinator(
+        &self,
+        active_epoch: Option<OperationId>,
+        now_millis: u64,
+    ) -> Result<()> {
+        let path = gc_coordinator_path(&self.options.repository_prefix)?;
+        let current = self.plane.load_mutable(&path).await?;
+        let (expected, generation, current_epoch) = match current {
+            Some(stored) => {
+                let value: GcCoordinator = decode_canonical(&stored.bytes)?;
+                if value.repository != self.format.repository_id || value.generation == 0 {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "GC coordinator is malformed",
+                    ));
+                }
+                (
+                    Some(stored.metadata.token),
+                    value.generation.checked_add(1).ok_or_else(|| {
+                        Error::new(ErrorCode::InternalInvariant, "GC coordinator overflow")
+                    })?,
+                    value.active_epoch,
+                )
+            }
+            None => (None, 1, None),
+        };
+        if active_epoch.is_some() && current_epoch.is_some() {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "another GC epoch is active",
+            ));
+        }
+        if active_epoch.is_none()
+            && current_epoch.is_some()
+            && current_epoch
+                != *self.active_gc_epoch.read().map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+                })?
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC coordinator belongs to another epoch",
+            ));
+        }
+        let value = GcCoordinator {
+            repository: self.format.repository_id,
+            generation,
+            active_epoch,
+            updated_at_millis: now_millis,
+        };
+        let controls = MutableControlStore::new(
+            self.plane.clone(),
+            self.options.repository_prefix.clone(),
+            self.options.mutable_control_versions_to_retain,
+        )?;
+        match controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected,
+                bytes: encode_canonical(&value)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(()),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "GC coordinator changed concurrently",
+            )),
+        }
+    }
+
+    async fn restore_gc_state(&self) -> Result<()> {
+        let active = match self
+            .plane
+            .load_mutable(&gc_coordinator_path(&self.options.repository_prefix)?)
+            .await?
+        {
+            Some(stored) => {
+                let value: GcCoordinator = decode_canonical(&stored.bytes)?;
+                if value.repository != self.format.repository_id || value.generation == 0 {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "GC coordinator is malformed",
+                    ));
+                }
+                value.active_epoch
+            }
+            None => None,
+        };
+        if active.is_some() {
+            *self.active_gc_epoch.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+            })? = active;
+        }
+        if let Some(epoch) = active {
+            let mut continuation = None;
+            let mut maximum = 0_u64;
+            loop {
+                let page = self
+                    .plane
+                    .list(ListRequest {
+                        prefix: gc_dirty_root_prefix(&self.options.repository_prefix, epoch),
+                        continuation,
+                        limit: 1_000,
+                        include_versions: false,
+                    })
+                    .await?;
+                for entry in &page.entries {
+                    let sequence = entry
+                        .path
+                        .as_str()
+                        .rsplit('/')
+                        .nth(2)
+                        .and_then(|value| value.parse::<u64>().ok())
+                        .ok_or_else(|| {
+                            Error::new(ErrorCode::CorruptCommit, "GC dirty-root path is malformed")
+                        })?;
+                    maximum = maximum.max(sequence);
+                }
+                continuation = page.continuation;
+                if continuation.is_none() {
+                    break;
+                }
+            }
+            self.gc_dirty_sequence.fetch_max(maximum, Ordering::AcqRel);
+        }
+        Ok(())
+    }
+
+    fn commit_closure_engine(
+        &self,
+        traversal: OperationId,
+    ) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if traversal.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "commit-closure traversal ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new(
+            self.plane.clone(),
+            format!(
+                "{}/administration/closure/{traversal}/tree",
+                self.options.repository_prefix
+            ),
+        )))
+    }
+
+    fn history_transfer_mapping_engine(
+        &self,
+        job: OperationId,
+    ) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history-transfer job ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new(
+            self.plane.clone(),
+            format!(
+                "{}/administration/transfer/{job}/mappings",
+                self.options.repository_prefix
+            ),
+        )))
+    }
+
+    fn history_transfer_delta_engine(
+        &self,
+        job: OperationId,
+    ) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history-transfer job ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new(
+            self.plane.clone(),
+            format!(
+                "{}/administration/transfer/{job}/delta",
+                self.options.repository_prefix
+            ),
+        )))
+    }
+
+    fn validate_history_transfer_cursor<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &HistoryTransferCursor,
+    ) -> Result<()> {
+        validate_branch(&cursor.source_branch)?;
+        validate_branch(&cursor.destination_branch)?;
+        source.validate_commit_closure_cursor(&cursor.closure)?;
+        if cursor.source_repository != source.format.repository_id
+            || cursor.destination_repository != self.format.repository_id
+            || cursor.job.is_nil()
+            || cursor.mappings.format_digest != tree_format_digest(&self.format.state_tree_format)?
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "history-transfer cursor belongs to another repository pair",
+            ));
+        }
+        if let Some(pending) = &cursor.pending {
+            self.tree_from_root(&pending.objects)?;
+            self.tree_from_root(&pending.versions)?;
+            self.tree_from_root(&pending.delta)?;
+            if let Some(union_base) = &pending.union_base {
+                self.tree_from_root(union_base)?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn advance_history_transfer_union(
+        &self,
+        cursor: &mut HistoryTransferCursor,
+        max_steps: usize,
+    ) -> Result<usize> {
+        let mut pending = cursor.pending.take().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit is absent",
+            )
+        })?;
+        if pending.union_parent_index >= pending.mapped_parents.len() {
+            pending.phase = HistoryTransferPhase::ApplyTransitions;
+            cursor.pending = Some(pending);
+            return Ok(0);
+        }
+        let parent = self
+            .load_commit_object(pending.mapped_parents[pending.union_parent_index])
+            .await?
+            .commit;
+        let current_tree = self.tree_from_root(&pending.versions)?;
+        let union_base = pending
+            .union_base
+            .get_or_insert_with(|| pending.versions.clone())
+            .clone();
+        let base_tree = self.tree_from_root(&union_base)?;
+        let parent_tree = self.tree_from_root(&parent.state.versions)?;
+        let read_engine = self.engine(self.node_store.clone());
+        let page = read_engine
+            .structural_diff_page(
+                &base_tree,
+                &parent_tree,
+                pending.union_diff.as_ref(),
+                max_steps,
+            )
+            .await?;
+        let processed = page.diffs.len();
+        let mut mutations = Vec::new();
+        for diff in page.diffs {
+            match diff {
+                Diff::Added { key, val } => mutations.push(Mutation::Upsert { key, val }),
+                Diff::Removed { .. } => {}
+                Diff::Changed { .. } => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "mapped parent version trees disagree on an immutable version key",
+                    ));
+                }
+            }
+        }
+        let mut versions = current_tree;
+        if !mutations.is_empty() {
+            versions = self
+                .merge_state_engine()
+                .batch(&versions, mutations)
+                .await?;
+            pending.versions = RootManifest::from_tree(&versions)?;
+        }
+        pending.union_diff = page.next_cursor;
+        if pending.union_diff.is_none() {
+            pending.union_parent_index += 1;
+            pending.union_base = None;
+            if pending.union_parent_index >= pending.mapped_parents.len() {
+                pending.phase = HistoryTransferPhase::ApplyTransitions;
+            }
+        }
+        cursor.pending = Some(pending);
+        Ok(processed)
+    }
+
+    async fn advance_history_transfer_transitions<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &mut HistoryTransferCursor,
+        max_steps: usize,
+    ) -> Result<usize> {
+        let mut pending = cursor.pending.take().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit is absent",
+            )
+        })?;
+        let source_commit = source.load_commit_object(pending.source).await?.commit;
+        let mut transitions = Vec::new();
+        let mut complete = false;
+        if let Some(root) = &source_commit.delta.changes_root {
+            let tree = source.tree_from_root(root)?;
+            let engine = source.engine(source.node_store.clone());
+            let mut entries = match pending.external_after.as_deref() {
+                Some(after) => engine.range_after(&tree, after, None).await?,
+                None => engine.prefix(&tree, b"").await?,
+            };
+            while transitions.len() < max_steps {
+                let Some(entry) = entries.next().await else {
+                    complete = true;
+                    break;
+                };
+                let (key, encoded) = entry?;
+                let transition: ObjectTransition = decode_canonical(&encoded)?;
+                if transition.key != key {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "external transfer delta key disagrees with its transition",
+                    ));
+                }
+                pending.external_after = Some(key);
+                transitions.push(transition);
+            }
+        } else {
+            let start = pending.inline_index;
+            let end = start
+                .saturating_add(max_steps)
+                .min(source_commit.delta.changes.len());
+            transitions.extend_from_slice(&source_commit.delta.changes[start..end]);
+            pending.inline_index = end;
+            complete = end == source_commit.delta.changes.len();
+        }
+        let processed = transitions.len();
+        cursor.pending = Some(pending);
+        for transition in transitions {
+            self.import_history_transition(source, cursor, &source_commit, transition)
+                .await?;
+        }
+        let pending = cursor.pending.as_mut().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit disappeared",
+            )
+        })?;
+        if complete {
+            if pending.transitions_applied != source_commit.delta.logical_change_count() {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "history transfer did not consume the source commit delta exactly",
+                ));
+            }
+            pending.phase = HistoryTransferPhase::FinalizeCommit;
+        }
+        Ok(processed)
+    }
+
+    async fn import_history_transition<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &mut HistoryTransferCursor,
+        source_commit: &BucketCommit,
+        transition: ObjectTransition,
+    ) -> Result<()> {
+        let mut pending = cursor.pending.take().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit is absent",
+            )
+        })?;
+        let ordinal = u32::try_from(pending.transitions_applied).map_err(|_| {
+            Error::new(
+                ErrorCode::InvalidLimit,
+                "history-transfer mutation ordinal exceeds u32",
+            )
+        })?;
+        let source_version = if transition.delete_marker {
+            let versions = source.tree_from_root(&source_commit.state.versions)?;
+            let encoded = source
+                .engine(source.node_store.clone())
+                .get(
+                    &versions,
+                    &version_tree_key(
+                        &transition.key,
+                        ObjectVersionOrder {
+                            commit_generation: source_commit.generation,
+                            mutation_ordinal: ordinal,
+                        },
+                        transition.next,
+                    ),
+                )
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "source delete version is missing from its commit",
+                    )
+                })?;
+            decode_canonical::<ObjectVersion>(&encoded)?
+        } else {
+            let objects = source.tree_from_root(&source_commit.state.objects)?;
+            let encoded = source
+                .engine(source.node_store.clone())
+                .get(&objects, &transition.key)
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::MissingClosure,
+                        "source live version is missing from its commit",
+                    )
+                })?;
+            decode_canonical::<CurrentObject>(&encoded)?.version
+        };
+        source_version.validate()?;
+        if source_version.id != transition.next {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "source transition and object version disagree",
+            ));
+        }
+        let mapping_engine = self.history_transfer_mapping_engine(cursor.job)?;
+        let mut mapping_tree = self.tree_from_root(&cursor.mappings)?;
+        let mapped_version = if let Some(encoded) = mapping_engine
+            .get(&mapping_tree, &version_mapping_key(source_version.id))
+            .await?
+        {
+            let version: ObjectVersion = decode_canonical(&encoded)?;
+            version.validate()?;
+            version
+        } else {
+            let binding = match &source_version.body.kind {
+                LogicalObjectVersionKind::Live { size, .. } => {
+                    let source_binding = source_version.binding.as_ref().ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::CorruptCommit,
+                            "source live version has no payload binding",
+                        )
+                    })?;
+                    let bytes = source.payloads.get(source_binding).await?;
+                    if bytes.len() as u64 != *size {
+                        return Err(Error::new(
+                            ErrorCode::ChecksumMismatch,
+                            "source payload length disagrees with its logical version",
+                        ));
+                    }
+                    cursor.report.copied_payloads = checked_fsck_add(
+                        cursor.report.copied_payloads,
+                        1,
+                        "history-transfer-payload",
+                    )?;
+                    cursor.report.copied_payload_bytes = checked_fsck_add(
+                        cursor.report.copied_payload_bytes,
+                        *size,
+                        "history-transfer-payload-byte",
+                    )?;
+                    Some(self.payloads.put(bytes).await?)
+                }
+                LogicalObjectVersionKind::DeleteMarker => None,
+            };
+            let version = ObjectVersion::derive(
+                self.format.repository_id,
+                &transition.key,
+                history_transfer_version_operation(self.format.repository_id, source_version.id),
+                source_version.body.clone(),
+                binding,
+            )?;
+            mapping_tree = mapping_engine
+                .put(
+                    &mapping_tree,
+                    version_mapping_key(source_version.id),
+                    encode_canonical(&version)?,
+                )
+                .await?;
+            cursor.mappings = RootManifest::from_tree(&mapping_tree)?;
+            cursor.report.rebound_versions = checked_fsck_add(
+                cursor.report.rebound_versions,
+                1,
+                "history-transfer-version",
+            )?;
+            version
+        };
+        let state_engine = self.merge_state_engine();
+        let mut objects = self.tree_from_root(&pending.objects)?;
+        let mut versions = self.tree_from_root(&pending.versions)?;
+        let previous = state_engine
+            .get(&objects, &transition.key)
+            .await?
+            .map(|encoded| decode_canonical::<CurrentObject>(&encoded))
+            .transpose()?
+            .map(|current| current.version.id);
+        if transition.delete_marker {
+            objects = state_engine.delete(&objects, &transition.key).await?;
+        } else {
+            objects = state_engine
+                .put(
+                    &objects,
+                    transition.key.clone(),
+                    encode_canonical(&CurrentObject {
+                        version: mapped_version.clone(),
+                    })?,
+                )
+                .await?;
+        }
+        versions = state_engine
+            .put(
+                &versions,
+                version_tree_key(
+                    &transition.key,
+                    mapped_version.body.order,
+                    mapped_version.id,
+                ),
+                encode_canonical(&mapped_version)?,
+            )
+            .await?;
+        let mapped_transition = ObjectTransition {
+            key: transition.key.clone(),
+            previous,
+            next: mapped_version.id,
+            delete_marker: transition.delete_marker,
+        };
+        let delta_engine = self.history_transfer_delta_engine(cursor.job)?;
+        let delta = delta_engine
+            .put(
+                &self.tree_from_root(&pending.delta)?,
+                transition.key,
+                encode_canonical(&mapped_transition)?,
+            )
+            .await?;
+        pending.objects = RootManifest::from_tree(&objects)?;
+        pending.versions = RootManifest::from_tree(&versions)?;
+        pending.delta = RootManifest::from_tree(&delta)?;
+        pending.transitions_applied =
+            pending.transitions_applied.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::EntityTooLarge,
+                    "history-transfer transition counter overflow",
+                )
+            })?;
+        cursor.pending = Some(pending);
+        Ok(())
+    }
+
+    async fn finalize_history_transfer_commit<Q: ObjectPlane>(
+        &self,
+        source: &Repository<Q>,
+        cursor: &mut HistoryTransferCursor,
+    ) -> Result<()> {
+        let pending = cursor.pending.take().ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "transfer pending commit is absent",
+            )
+        })?;
+        let source_commit = source.load_commit_object(pending.source).await?.commit;
+        let now = self.options.clock.now_millis()?;
+        let permit = self.active_permit(&cursor.destination_branch, now).await?;
+        self.authority.validate_active(&permit, now).await?;
+        let expected_generation = if pending.mapped_parents.is_empty() {
+            0
+        } else {
+            let mut newest = 0_u64;
+            for parent in &pending.mapped_parents {
+                newest = newest.max(self.load_commit_object(*parent).await?.commit.generation.0);
+            }
+            newest.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "transfer generation overflow")
+            })?
+        };
+        if source_commit.generation.0 != expected_generation {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "source commit generation does not match its mapped parents",
+            ));
+        }
+        let mut metadata = source_commit.metadata.clone();
+        metadata.insert(
+            "prolly.transfer.source_repository".to_string(),
+            source.format.repository_id.as_bytes().to_vec(),
+        );
+        metadata.insert(
+            "prolly.transfer.source_commit".to_string(),
+            pending.source.as_bytes().to_vec(),
+        );
+        let commit = BucketCommit {
+            state: BucketState {
+                objects: pending.objects,
+                versions: pending.versions,
+            },
+            parents: pending.mapped_parents,
+            generation: source_commit.generation,
+            delta: BucketDelta {
+                input_digest: crate::model::derive_input_digest(&[
+                    b"history-transfer",
+                    source.format.repository_id.as_bytes(),
+                    pending.source.as_bytes(),
+                    self.format.repository_id.as_bytes(),
+                ]),
+                changes: Vec::new(),
+                changes_root: (pending.transitions_applied != 0).then_some(pending.delta),
+                change_count: pending.transitions_applied,
+            },
+            node_pack: None,
+            authority: permit.stamp(),
+            author: self.options.writer.clone(),
+            message: source_commit.message,
+            created_at_millis: source_commit.created_at_millis,
+            metadata,
+        };
+        let destination = self.publisher.store_commit(&commit, None).await?;
+        let mapping_engine = self.history_transfer_mapping_engine(cursor.job)?;
+        let mapping_tree = mapping_engine
+            .put(
+                &self.tree_from_root(&cursor.mappings)?,
+                commit_mapping_key(pending.source),
+                destination.as_bytes().to_vec(),
+            )
+            .await?;
+        cursor.mappings = RootManifest::from_tree(&mapping_tree)?;
+        cursor.closure = pending.next_closure;
+        cursor.report.imported_commits =
+            checked_fsck_add(cursor.report.imported_commits, 1, "history-transfer-commit")?;
+        if pending.source == cursor.source_head {
+            cursor.mapped_head = Some(destination);
+        }
+        Ok(())
+    }
+
+    fn validate_commit_closure_cursor(&self, cursor: &CommitClosureCursor) -> Result<()> {
+        if cursor.repository != self.format.repository_id
+            || cursor.traversal.is_nil()
+            || cursor.state.format_digest != tree_format_digest(&self.format.state_tree_format)?
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "commit-closure cursor is malformed or belongs to another repository",
+            ));
+        }
+        Ok(())
+    }
+
     fn merge_plan_engine(&self, job: OperationId) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
         if job.is_nil() {
             return Err(Error::new(
@@ -3950,6 +7555,8 @@ impl<P: ObjectPlane> Repository<P> {
     }
 }
 
+const COMMIT_CLOSURE_QUEUE_PREFIX: &[u8] = b"q/";
+const COMMIT_CLOSURE_SEEN_PREFIX: &[u8] = b"s/";
 const MERGE_LEFT: u8 = 1;
 const MERGE_RIGHT: u8 = 2;
 const MERGE_BOTH: u8 = MERGE_LEFT | MERGE_RIGHT;
@@ -3966,6 +7573,68 @@ fn normalized_merge_cursor(cursor: &MergeCursor) -> Result<Vec<u8>> {
     let mut normalized = cursor.clone();
     normalized.plan_root.root = None;
     encode_canonical(&normalized)
+}
+
+fn commit_closure_stack_key(sequence: u64) -> Vec<u8> {
+    let mut key = Vec::with_capacity(COMMIT_CLOSURE_QUEUE_PREFIX.len() + 8);
+    key.extend_from_slice(COMMIT_CLOSURE_QUEUE_PREFIX);
+    key.extend_from_slice(&sequence.to_be_bytes());
+    key
+}
+
+fn commit_closure_seen_key(commit: CommitId) -> Vec<u8> {
+    let mut key = Vec::with_capacity(COMMIT_CLOSURE_SEEN_PREFIX.len() + 32);
+    key.extend_from_slice(COMMIT_CLOSURE_SEEN_PREFIX);
+    key.extend_from_slice(commit.as_bytes());
+    key
+}
+
+fn push_commit_closure_work(
+    cursor: &mut CommitClosureCursor,
+    mutations: &mut Vec<Mutation>,
+    commit: CommitId,
+    finish: bool,
+) -> Result<()> {
+    mutations.push(Mutation::Upsert {
+        key: commit_closure_stack_key(cursor.next_stack_sequence),
+        val: encode_canonical(&CommitClosureWork { commit, finish })?,
+    });
+    cursor.next_stack_sequence = cursor.next_stack_sequence.checked_sub(1).ok_or_else(|| {
+        Error::new(
+            ErrorCode::HistoryLimitExceeded,
+            "commit-closure stack sequence is exhausted",
+        )
+    })?;
+    Ok(())
+}
+
+fn checked_fsck_add(current: u64, add: u64, counter: &str) -> Result<u64> {
+    current.checked_add(add).ok_or_else(|| {
+        Error::new(
+            ErrorCode::EntityTooLarge,
+            format!("fsck {counter} counter overflow"),
+        )
+    })
+}
+
+fn history_transfer_version_operation(
+    repository: crate::RepositoryId,
+    source: ObjectVersionId,
+) -> OperationId {
+    let digest = crate::model::derive_input_digest(&[
+        b"history-transfer-version",
+        repository.as_bytes(),
+        source.as_bytes(),
+    ]);
+    let mut bytes = [0_u8; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    OperationId(uuid::Uuid::from_bytes(bytes))
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 fn merge_queue_key(generation: u64, commit: CommitId) -> Vec<u8> {
@@ -4033,6 +7702,15 @@ fn merge_diff_values(diff: Diff) -> (Vec<u8>, Option<Vec<u8>>, Option<Vec<u8>>) 
     }
 }
 
+fn object_diff_from_prolly(diff: Diff) -> Result<ObjectDiff> {
+    let (key, from, to) = merge_diff_values(diff);
+    Ok(ObjectDiff {
+        key,
+        from: current_id(from.as_deref())?,
+        to: current_id(to.as_deref())?,
+    })
+}
+
 fn current_id(value: Option<&[u8]>) -> Result<Option<ObjectVersionId>> {
     value
         .map(|value| {
@@ -4094,6 +7772,36 @@ pub fn validate_branch(branch: &str) -> Result<()> {
     Ok(())
 }
 
+const RETENTION_PIN_TAG_PREFIX: &str = "retention-pins/";
+
+fn retention_pin_tag(name: &str) -> Result<String> {
+    if name.trim().is_empty() || name.len() > 100 {
+        return Err(Error::new(
+            ErrorCode::InvalidBranch,
+            "retention pin name must contain 1 to 100 bytes",
+        ));
+    }
+    Ok(format!("{RETENTION_PIN_TAG_PREFIX}{}", hex::encode(name)))
+}
+
+fn decode_retention_pin_tag(tag: &str) -> Result<Option<String>> {
+    let Some(encoded) = tag.strip_prefix(RETENTION_PIN_TAG_PREFIX) else {
+        return Ok(None);
+    };
+    let bytes = hex::decode(encoded).map_err(|_| {
+        Error::new(
+            ErrorCode::CorruptCommit,
+            "retention pin tag has invalid hex encoding",
+        )
+    })?;
+    String::from_utf8(bytes).map(Some).map_err(|_| {
+        Error::new(
+            ErrorCode::CorruptCommit,
+            "retention pin tag name is not UTF-8",
+        )
+    })
+}
+
 fn validate_options(options: &RepositoryOptions) -> Result<()> {
     crate::repository::validate_branch(&options.default_branch)?;
     options.idempotency_retention.validate()?;
@@ -4142,6 +7850,95 @@ fn validate_format_compatibility(
 
 fn format_path(prefix: &str) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/format/repository.cbor"))
+}
+
+fn gc_coordinator_path(prefix: &str) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/gc/coordinator.cbor"))
+}
+
+fn gc_dirty_root_prefix(prefix: &str, epoch: OperationId) -> String {
+    format!("{prefix}/gc/dirty/{epoch}/")
+}
+
+fn gc_dirty_root_sequence_prefix(prefix: &str, epoch: OperationId, sequence: u64) -> String {
+    format!("{}{sequence:020}/", gc_dirty_root_prefix(prefix, epoch))
+}
+
+fn gc_dirty_root_path(prefix: &str, event: &GcDirtyRoot, digest: [u8; 32]) -> Result<ObjectPath> {
+    ObjectPath::new(format!(
+        "{}{}/{:}",
+        gc_dirty_root_sequence_prefix(prefix, event.epoch, event.sequence),
+        event.namespace,
+        hex::encode(digest)
+    ))
+}
+
+fn commit_path(prefix: &str, id: CommitId) -> Result<ObjectPath> {
+    let encoded = hex::encode(id.as_bytes());
+    ObjectPath::new(format!(
+        "{prefix}/commits/sha256/{}/{}/{}",
+        &encoded[..2],
+        &encoded[2..4],
+        encoded
+    ))
+}
+
+fn gc_commit_queue_key(id: CommitId) -> Vec<u8> {
+    let mut key = b"cq/".to_vec();
+    key.extend_from_slice(id.as_bytes());
+    key
+}
+
+fn gc_commit_mark_key(id: CommitId) -> Vec<u8> {
+    let mut key = b"cm/".to_vec();
+    key.extend_from_slice(id.as_bytes());
+    key
+}
+
+fn gc_node_queue_key(cid: &prolly::Cid, scan_versions: bool) -> Vec<u8> {
+    let mut key = vec![b'n', b'q', b'/', u8::from(scan_versions), b'/'];
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn gc_node_mark_key(cid: &prolly::Cid, scan_versions: bool) -> Vec<u8> {
+    let mut key = vec![b'n', b'm', b'/', u8::from(scan_versions), b'/'];
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn gc_path_mark_key(path: &ObjectPath) -> Vec<u8> {
+    let mut key = b"pm/".to_vec();
+    key.extend_from_slice(&crate::codec::sha256(path.as_str().as_bytes()));
+    key
+}
+
+fn gc_physical_mark_key(path: &ObjectPath, version: &str) -> Vec<u8> {
+    let mut identity = path.as_str().as_bytes().to_vec();
+    identity.push(0);
+    identity.extend_from_slice(version.as_bytes());
+    let mut key = b"vm/".to_vec();
+    key.extend_from_slice(&crate::codec::sha256(&identity));
+    key
+}
+
+fn gc_candidate_key(candidate: &GcCandidate) -> Result<Vec<u8>> {
+    let mut key = b"d/".to_vec();
+    key.extend_from_slice(&crate::codec::sha256(&encode_canonical(candidate)?));
+    Ok(key)
+}
+
+fn gc_managed_kind(prefix: &str, path: &ObjectPath) -> Option<&'static str> {
+    let relative = path.as_str().strip_prefix(prefix)?.strip_prefix('/')?;
+    if relative.starts_with("commits/sha256/") {
+        Some("commits")
+    } else if relative.starts_with("nodes/sha256/") {
+        Some("nodes")
+    } else if relative.starts_with("payloads/") {
+        Some("payloads")
+    } else {
+        None
+    }
 }
 
 fn intent_path(prefix: &str) -> Result<ObjectPath> {
