@@ -289,6 +289,90 @@ async fn repository_history_listing_delete_markers_and_payload_dedup_are_stable(
 }
 
 #[tokio::test]
+async fn object_list_cursor_is_snapshot_bound_and_resumes_without_replay() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: ".tests/list-cursor".to_string(),
+            writer: "list-writer".to_string(),
+            ids: Arc::new(SequenceIdSource::new(0x89, 1)),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let session = repository
+        .begin_commit_session("main", "seed cursor listing", 60_000)
+        .await
+        .unwrap();
+    let mut mutations = Vec::new();
+    for index in 0..250 {
+        mutations.push(
+            repository
+                .stage_commit_session_put(
+                    &session,
+                    format!("cursor/{index:04}.txt").into_bytes(),
+                    vec![index as u8],
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                )
+                .await
+                .unwrap(),
+        );
+    }
+    repository
+        .publish_commit_session(session, mutations)
+        .await
+        .unwrap();
+
+    let first = repository
+        .list_objects_page("main", b"cursor/", None, 100)
+        .await
+        .unwrap();
+    assert_eq!(first.objects.len(), 100);
+    let snapshot = first.snapshot;
+    repository
+        .put_object(
+            "main",
+            b"cursor/9999.txt".to_vec(),
+            b"later".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+
+    plane.reset_request_counts();
+    let second = repository
+        .list_objects_page("main", b"cursor/", first.continuation.as_deref(), 100)
+        .await
+        .unwrap();
+    let third = repository
+        .list_objects_page("main", b"cursor/", second.continuation.as_deref(), 100)
+        .await
+        .unwrap();
+    assert_eq!(second.snapshot, snapshot);
+    assert_eq!(third.snapshot, snapshot);
+    assert_eq!(second.objects.len(), 100);
+    assert_eq!(third.objects.len(), 50);
+    assert!(third.continuation.is_none());
+    assert!(second.objects[0].key > first.objects[99].key);
+    assert!(third.objects[0].key > second.objects[99].key);
+    assert_eq!(plane.request_snapshot().immutable_put, 0);
+
+    let error = repository
+        .list_objects_page("main", b"other/", first.continuation.as_deref(), 100)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.code,
+        prolly_s3_core::ErrorCode::InvalidContinuationToken
+    );
+}
+
+#[tokio::test]
 async fn repository_takeover_fences_old_writer_before_payload_put() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let clock = Arc::new(FixedClock::new(20_000));
@@ -450,6 +534,197 @@ async fn repository_manual_authority_renewal_extends_the_write_window() {
 }
 
 #[tokio::test]
+async fn durable_commit_session_survives_repeated_authority_renewal_and_restart() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(55_000));
+    let options = RepositoryOptions {
+        repository_prefix: ".tests/session-multiple-renewals".to_string(),
+        writer: "stable-writer".to_string(),
+        clock: clock.clone(),
+        ids: Arc::new(SequenceIdSource::new(0xab, 1)),
+        authority_lease_millis: 10_000,
+        provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    let checkpoint = repository
+        .begin_durable_commit_session("main", "long import", 4 * 60 * 60 * 1_000)
+        .await
+        .unwrap();
+    let original_stamp = checkpoint.session.identity.authority.clone();
+    let mut staged = Vec::new();
+
+    for renewal in 0..2_700 {
+        clock.advance(4_000).unwrap();
+        repository.renew_shard_authorities().await.unwrap();
+        if renewal % 900 != 899 {
+            continue;
+        }
+        let index = renewal / 900;
+        let mutation = repository
+            .stage_commit_session_put(
+                &checkpoint.session,
+                format!("renewed/{index}.txt").into_bytes(),
+                format!("value-{index}").into_bytes(),
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+            )
+            .await
+            .unwrap();
+        staged.push(mutation);
+        repository
+            .checkpoint_commit_session(
+                &checkpoint.session,
+                staged.clone(),
+                u64::try_from(index + 1).unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+    assert_eq!(checkpoint.session.identity.authority, original_stamp);
+    drop(repository);
+
+    clock.advance(1).unwrap();
+    let reopened = Repository::open(plane, options).await.unwrap();
+    let resumed = reopened
+        .resume_commit_session(checkpoint.session.id)
+        .await
+        .unwrap();
+    assert_eq!(resumed.mutations.len(), 3);
+    assert_eq!(resumed.session.identity.authority, original_stamp);
+    let receipt = reopened
+        .publish_commit_session(resumed.session, resumed.mutations)
+        .await
+        .unwrap();
+    assert_eq!(receipt.changed_keys, 3);
+}
+
+#[tokio::test]
+async fn concurrent_session_staging_and_authority_renewal_do_not_self_fence() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(58_000));
+    let repository = Arc::new(
+        Repository::initialize(
+            plane,
+            RepositoryOptions {
+                repository_prefix: ".tests/session-concurrent-renewal".to_string(),
+                writer: "concurrent-writer".to_string(),
+                clock: clock.clone(),
+                ids: Arc::new(SequenceIdSource::new(0xac, 1)),
+                authority_lease_millis: 10_000,
+                provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+                ..RepositoryOptions::default()
+            },
+        )
+        .await
+        .unwrap(),
+    );
+    let session = repository
+        .begin_commit_session("main", "concurrent renewal import", 120_000)
+        .await
+        .unwrap();
+    let mut mutations = Vec::new();
+
+    for index in 0..64 {
+        clock.advance(100).unwrap();
+        let renewing = repository.clone();
+        let staging = repository.clone();
+        let session = session.clone();
+        let ((), mutation) = tokio::join!(
+            async move { renewing.renew_shard_authorities().await.unwrap() },
+            async move {
+                staging
+                    .stage_commit_session_put(
+                        &session,
+                        format!("concurrent/{index:03}.txt").into_bytes(),
+                        vec![index as u8],
+                        ObjectHeaders::default(),
+                        BTreeMap::new(),
+                    )
+                    .await
+                    .unwrap()
+            }
+        );
+        mutations.push(mutation);
+    }
+    assert!(repository.fenced_branches().unwrap().is_empty());
+    let receipt = repository
+        .publish_commit_session(session, mutations)
+        .await
+        .unwrap();
+    assert_eq!(receipt.changed_keys, 64);
+}
+
+#[tokio::test]
+async fn real_takeover_fences_an_open_commit_session() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(59_000));
+    let prefix = ".tests/session-takeover";
+    let old_options = RepositoryOptions {
+        repository_prefix: prefix.to_string(),
+        writer: "writer-a".to_string(),
+        clock: clock.clone(),
+        ids: Arc::new(SequenceIdSource::new(0xad, 1)),
+        authority_lease_millis: 10_000,
+        provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+        ..RepositoryOptions::default()
+    };
+    let old = Repository::initialize(plane.clone(), old_options.clone())
+        .await
+        .unwrap();
+    let checkpoint = old
+        .begin_durable_commit_session("main", "must be fenced", 120_000)
+        .await
+        .unwrap();
+    let staged = old
+        .stage_commit_session_put(
+            &checkpoint.session,
+            b"stale.txt".to_vec(),
+            b"stale".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    old.checkpoint_commit_session(&checkpoint.session, vec![staged.clone()], 1)
+        .await
+        .unwrap();
+
+    let replacement = Repository::open(
+        plane,
+        RepositoryOptions {
+            writer: "writer-b".to_string(),
+            read_only: true,
+            ids: Arc::new(SequenceIdSource::new(0xae, 1)),
+            ..old_options
+        },
+    )
+    .await
+    .unwrap();
+    clock.advance(1).unwrap();
+    replacement
+        .takeover_branch_writer("main", "writer-a", 1, "writer-a credentials revoked")
+        .await
+        .unwrap();
+
+    let error = old
+        .publish_commit_session(checkpoint.session.clone(), vec![staged])
+        .await
+        .unwrap_err();
+    assert_eq!(error.code, prolly_s3_core::ErrorCode::PreconditionFailed);
+    let resume_error = replacement
+        .resume_commit_session(checkpoint.session.id)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        resume_error.code,
+        prolly_s3_core::ErrorCode::PreconditionFailed
+    );
+}
+
+#[tokio::test]
 async fn repository_commit_session_batches_payloads_into_one_replayable_publication() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let clock = Arc::new(FixedClock::new(60_000));
@@ -541,6 +816,82 @@ async fn repository_commit_session_batches_payloads_into_one_replayable_publicat
         .unwrap();
     assert_eq!(replay.id, receipt.id);
     assert!(replay.idempotent_replay);
+}
+
+#[tokio::test]
+async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane,
+        RepositoryOptions {
+            repository_prefix: ".tests/repository-payload-pack".to_string(),
+            writer: "pack-writer".to_string(),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let session = repository
+        .begin_commit_session("main", "packed import", 60_000)
+        .await
+        .unwrap();
+    let staged = repository
+        .stage_commit_session_put_batch(
+            &session,
+            vec![
+                (
+                    b"pack/a".to_vec(),
+                    b"same".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+                (
+                    b"pack/b".to_vec(),
+                    b"same".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+                (
+                    b"pack/c".to_vec(),
+                    b"next".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+            ],
+            4,
+        )
+        .await
+        .unwrap();
+    let receipt = repository
+        .publish_commit_session(session, staged)
+        .await
+        .unwrap();
+    let mut bindings = Vec::new();
+    for key in [b"pack/a".as_slice(), b"pack/b", b"pack/c"] {
+        bindings.push(
+            repository
+                .head_object_at("main", receipt.id, key)
+                .await
+                .unwrap()
+                .unwrap()
+                .version
+                .binding
+                .unwrap(),
+        );
+    }
+    assert!(bindings.iter().all(|binding| binding.is_packed()));
+    assert_eq!(bindings[0].path, bindings[1].path);
+    assert_eq!(bindings[0].pack_range, bindings[1].pack_range);
+    assert_ne!(bindings[1].pack_range, bindings[2].pack_range);
+
+    let range = repository
+        .get_object_range("main", receipt.id, b"pack/a", 0..=u64::MAX)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(range.bytes, b"same");
+    assert_eq!(range.range, 0..=3);
 }
 
 #[tokio::test]

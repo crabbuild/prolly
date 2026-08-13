@@ -1407,6 +1407,37 @@ pub struct CommitObject {
 }
 
 impl CommitObject {
+    pub(crate) fn commit_object_header_len() -> usize {
+        COMMIT_OBJECT_HEADER_LEN
+    }
+
+    pub(crate) fn commit_len_from_header(header: &[u8]) -> Result<usize> {
+        if header.len() != COMMIT_OBJECT_HEADER_LEN || &header[..8] != COMMIT_OBJECT_MAGIC {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit object has an invalid wire header",
+            ));
+        }
+        Ok(u32::from_be_bytes(header[8..12].try_into().expect("fixed range")) as usize)
+    }
+
+    pub(crate) fn decode_commit_metadata(encoded: &[u8]) -> Result<BucketCommit> {
+        if encoded.len() < COMMIT_OBJECT_HEADER_LEN {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "commit metadata is shorter than its header",
+            ));
+        }
+        let commit_len = Self::commit_len_from_header(&encoded[..COMMIT_OBJECT_HEADER_LEN])?;
+        let end = COMMIT_OBJECT_HEADER_LEN
+            .checked_add(commit_len)
+            .filter(|end| *end == encoded.len())
+            .ok_or_else(|| {
+                Error::new(ErrorCode::CorruptCommit, "commit metadata length mismatch")
+            })?;
+        decode_canonical(&encoded[COMMIT_OBJECT_HEADER_LEN..end])
+    }
+
     pub fn new(commit: BucketCommit, node_pack: Option<NodePack>) -> Result<Self> {
         let object = Self { commit, node_pack };
         object.validate()?;
@@ -1527,18 +1558,38 @@ pub struct PayloadBinding {
     pub path: ObjectPath,
     pub provider_version_id: Option<String>,
     pub provider_etag: String,
+    /// SHA-256 of this logical object's bytes.
     pub checksum_sha256: [u8; 32],
+    /// SHA-256 of the physical pack. Absent for legacy/direct payloads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_checksum_sha256: Option<[u8; 32]>,
+    /// Inclusive logical extent inside the physical pack.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_range: Option<(u64, u64)>,
 }
 
 impl PayloadBinding {
     pub fn validate(&self) -> Result<()> {
-        if self.provider_etag.is_empty() {
+        let pack_shape_valid = match (self.pack_checksum_sha256, self.pack_range) {
+            (None, None) => true,
+            (Some(physical), Some((start, end))) => physical != [0; 32] && start <= end,
+            _ => false,
+        };
+        if self.provider_etag.is_empty() || self.checksum_sha256 == [0; 32] || !pack_shape_valid {
             return Err(Error::new(
                 ErrorCode::CorruptCommit,
                 "physical payload binding is malformed",
             ));
         }
         Ok(())
+    }
+
+    pub fn physical_checksum_sha256(&self) -> [u8; 32] {
+        self.pack_checksum_sha256.unwrap_or(self.checksum_sha256)
+    }
+
+    pub fn is_packed(&self) -> bool {
+        self.pack_range.is_some()
     }
 }
 

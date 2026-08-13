@@ -41,6 +41,8 @@ impl<P: ObjectPlane> ImmutablePayloadStore<P> {
             provider_version_id: metadata.token.version_id,
             provider_etag: metadata.token.etag,
             checksum_sha256,
+            pack_checksum_sha256: None,
+            pack_range: None,
         };
         binding.validate()?;
         Ok(binding)
@@ -77,6 +79,8 @@ impl<P: ObjectPlane> ImmutablePayloadStore<P> {
             provider_version_id: metadata.token.version_id,
             provider_etag: metadata.token.etag,
             checksum_sha256,
+            pack_checksum_sha256: None,
+            pack_range: None,
         };
         binding.validate()?;
         Ok(binding)
@@ -84,7 +88,11 @@ impl<P: ObjectPlane> ImmutablePayloadStore<P> {
 
     pub async fn get(&self, binding: &PayloadBinding) -> Result<Vec<u8>> {
         binding.validate()?;
-        let expected_path = self.path(binding.checksum_sha256)?;
+        let expected_path = if binding.is_packed() {
+            self.pack_path(binding.physical_checksum_sha256())?
+        } else {
+            self.path(binding.checksum_sha256)?
+        };
         if binding.path != expected_path {
             return Err(crate::Error::new(
                 crate::ErrorCode::CorruptContent,
@@ -102,7 +110,7 @@ impl<P: ObjectPlane> ImmutablePayloadStore<P> {
             .plane
             .get(GetRequest {
                 path: binding.path.clone(),
-                range: None,
+                range: binding.pack_range.map(|(start, end)| start..=end),
                 physical_version,
             })
             .await?
@@ -118,6 +126,79 @@ impl<P: ObjectPlane> ImmutablePayloadStore<P> {
         Ok(stored.bytes)
     }
 
+    pub async fn put_pack(&self, objects: Vec<([u8; 32], Vec<u8>)>) -> Result<Vec<PayloadBinding>> {
+        if objects.is_empty() {
+            return Ok(Vec::new());
+        }
+        let total = objects.iter().try_fold(0_usize, |total, (_, bytes)| {
+            total.checked_add(bytes.len()).ok_or_else(|| {
+                crate::Error::new(
+                    crate::ErrorCode::EntityTooLarge,
+                    "payload pack size overflow",
+                )
+            })
+        })?;
+        let mut packed = Vec::with_capacity(total);
+        let mut ranges = Vec::with_capacity(objects.len());
+        let mut extents = std::collections::BTreeMap::new();
+        for (logical_checksum, bytes) in objects {
+            if sha256(&bytes) != logical_checksum {
+                return Err(crate::Error::new(
+                    crate::ErrorCode::ChecksumMismatch,
+                    "payload pack input does not match its logical checksum",
+                ));
+            }
+            if let Some((start, end)) = extents.get(&logical_checksum).copied() {
+                ranges.push((logical_checksum, start, end));
+                continue;
+            }
+            let start = u64::try_from(packed.len()).map_err(|_| {
+                crate::Error::new(
+                    crate::ErrorCode::EntityTooLarge,
+                    "payload pack offset overflow",
+                )
+            })?;
+            packed.extend_from_slice(&bytes);
+            let end = u64::try_from(packed.len() - 1).map_err(|_| {
+                crate::Error::new(
+                    crate::ErrorCode::EntityTooLarge,
+                    "payload pack extent overflow",
+                )
+            })?;
+            extents.insert(logical_checksum, (start, end));
+            ranges.push((logical_checksum, start, end));
+        }
+        let pack_checksum = sha256(&packed);
+        let path = self.pack_path(pack_checksum)?;
+        let outcome = self
+            .plane
+            .put_immutable(ImmutablePut {
+                path: path.clone(),
+                expected_sha256: pack_checksum,
+                bytes: packed,
+            })
+            .await?;
+        let metadata = match outcome {
+            crate::ImmutablePutOutcome::Created(metadata)
+            | crate::ImmutablePutOutcome::AlreadyPresent(metadata) => metadata,
+        };
+        ranges
+            .into_iter()
+            .map(|(logical_checksum, start, end)| {
+                let binding = PayloadBinding {
+                    path: path.clone(),
+                    provider_version_id: metadata.token.version_id.clone(),
+                    provider_etag: metadata.token.etag.clone(),
+                    checksum_sha256: logical_checksum,
+                    pack_checksum_sha256: Some(pack_checksum),
+                    pack_range: Some((start, end)),
+                };
+                binding.validate()?;
+                Ok(binding)
+            })
+            .collect()
+    }
+
     pub fn path(&self, checksum_sha256: [u8; 32]) -> Result<ObjectPath> {
         let encoded = hex::encode(checksum_sha256);
         ObjectPath::new(format!(
@@ -128,5 +209,25 @@ impl<P: ObjectPlane> ImmutablePayloadStore<P> {
             &encoded[2..4],
             encoded
         ))
+    }
+
+    pub fn pack_path(&self, checksum_sha256: [u8; 32]) -> Result<ObjectPath> {
+        let encoded = hex::encode(checksum_sha256);
+        ObjectPath::new(format!(
+            "{}/payload-packs/{}/sha256/{}/{}/{}",
+            self.prefix,
+            hex::encode(self.repository.as_bytes()),
+            &encoded[..2],
+            &encoded[2..4],
+            encoded
+        ))
+    }
+
+    pub fn expected_path(&self, binding: &PayloadBinding) -> Result<ObjectPath> {
+        if binding.is_packed() {
+            self.pack_path(binding.physical_checksum_sha256())
+        } else {
+            self.path(binding.checksum_sha256)
+        }
     }
 }

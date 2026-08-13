@@ -796,7 +796,42 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
     }
 
     pub async fn load_commit(&self, id: CommitId) -> Result<BucketCommit> {
-        Ok(self.load_commit_object(id).await?.commit)
+        let path = self.commit_path(id)?;
+        let header_len = CommitObject::commit_object_header_len();
+        let header = self
+            .plane
+            .get(GetRequest {
+                path: path.clone(),
+                range: Some(0..=header_len as u64 - 1),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "parent commit is missing"))?
+            .bytes;
+        let commit_len = CommitObject::commit_len_from_header(&header)?;
+        let end = header_len
+            .checked_add(commit_len)
+            .ok_or_else(|| Error::new(ErrorCode::CorruptCommit, "commit length overflow"))?;
+        let body = self
+            .plane
+            .get(GetRequest {
+                path,
+                range: Some(header_len as u64..=end as u64 - 1),
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "parent commit is missing"))?
+            .bytes;
+        let mut encoded = header;
+        encoded.extend_from_slice(&body);
+        let commit = CommitObject::decode_commit_metadata(&encoded)?;
+        if commit.id()? != id {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "parent commit ID does not match its path",
+            ));
+        }
+        Ok(commit)
     }
 
     async fn cas_ref(
