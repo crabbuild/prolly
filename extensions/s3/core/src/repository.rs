@@ -2431,14 +2431,30 @@ impl<P: ObjectPlane> Repository<P> {
         after: Option<&[u8]>,
         limit: usize,
     ) -> Result<DelimitedObjectPage> {
+        let snapshot = self.head(branch).await?;
+        self.list_objects_delimited_at(branch, snapshot, prefix, delimiter, after, limit)
+            .await
+    }
+
+    /// S3-style delimiter projection over an explicit immutable snapshot.
+    pub async fn list_objects_delimited_at(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+        prefix: &[u8],
+        delimiter: &[u8],
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<DelimitedObjectPage> {
         if delimiter.is_empty() {
             return Err(Error::new(
                 ErrorCode::InvalidRequest,
                 "list delimiter must not be empty",
             ));
         }
-        let (snapshot, candidates, truncated) =
-            self.list_objects(branch, prefix, after, limit).await?;
+        let (candidates, truncated) = self
+            .list_objects_at(branch, snapshot, prefix, after, limit)
+            .await?;
         let mut objects = Vec::new();
         let mut common_prefixes = BTreeSet::new();
         for object in candidates {
@@ -2516,9 +2532,22 @@ impl<P: ObjectPlane> Repository<P> {
         key: &[u8],
         limit: usize,
     ) -> Result<(CommitId, Vec<ObjectVersion>)> {
+        let snapshot = self.head(branch).await?;
+        let versions = self
+            .list_object_versions_at(branch, snapshot, key, limit)
+            .await?;
+        Ok((snapshot, versions))
+    }
+
+    pub async fn list_object_versions_at(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+        key: &[u8],
+        limit: usize,
+    ) -> Result<Vec<ObjectVersion>> {
         self.validate_key(key)?;
         let limit = limit.min(self.format.canonical_limits.max_list_page as usize);
-        let snapshot = self.head(branch).await?;
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
         let commit = self.load_commit_object(snapshot).await?.commit;
@@ -2536,7 +2565,7 @@ impl<P: ObjectPlane> Repository<P> {
             version.validate()?;
             result.push(version);
         }
-        Ok((snapshot, result))
+        Ok(result)
     }
 
     pub async fn list_versions_prefix(

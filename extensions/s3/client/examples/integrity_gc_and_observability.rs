@@ -24,7 +24,8 @@ async fn main() -> ExampleResult {
     // valid GC candidate after its branch is deleted and the grace period ends.
     client.create_branch("pinned-work", Some(main_head)).await?;
     let pinned = client
-        .for_branch("pinned-work")?
+        .checkout("pinned-work")
+        .await?
         .put_object("archive/pinned.txt", b"legal hold\n".to_vec())
         .await?
         .id;
@@ -35,7 +36,8 @@ async fn main() -> ExampleResult {
         .create_branch("abandoned-work", Some(main_head))
         .await?;
     let abandoned = client
-        .for_branch("abandoned-work")?
+        .checkout("abandoned-work")
+        .await?
         .put_object("scratch/abandoned.txt", b"collect me\n".to_vec())
         .await?
         .id;

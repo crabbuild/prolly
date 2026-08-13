@@ -121,9 +121,9 @@ let receipt = client
 After an ambiguous response, repeat the exact call with the same operation ID.
 The client reconciles an already-applied commit before fencing the writer.
 
-## Batch ingestion
+## Batch writes
 
-Batching is the recommended ingestion path. It uploads payloads while staging
+Batching is the recommended bulk-write path. It uploads payloads while staging
 and publishes all tree changes with one branch compare-and-swap.
 
 ```rust
@@ -155,15 +155,15 @@ let receipt = commit.publish().await?;
 For a disposable job, add `.ephemeral()`. That removes checkpoint requests
 but cannot recover process-local staged metadata after a crash.
 
-For a collection already in memory, `ingest_objects` creates durable batches
+For a collection already in memory, `put_objects` creates durable batches
 for you:
 
 ```rust
-use prolly_s3_client::IngestObject;
+use prolly_s3_client::PutObjectInput;
 
 let receipts = client
-    .ingest_objects(
-        vec![IngestObject {
+    .put_objects(
+        vec![PutObjectInput {
             key: "incoming/0004.json".into(),
             bytes: fourth_body,
             headers: Default::default(),
@@ -204,7 +204,7 @@ use prolly_s3_client::core::{MergePhase, MergePolicy};
 let base = client.head().await?;
 client.create_branch("feature", Some(base)).await?;
 
-let feature = client.for_branch("feature")?;
+let feature = client.checkout("feature").await?;
 feature
     .put_object("documents/feature.txt", b"feature\n".to_vec())
     .await?;
@@ -225,6 +225,38 @@ let receipt = client.publish_merge(&merge).await?;
 Merge work is immutable and restartable. Persist the canonical `MergeCursor`
 returned by each bounded advance. Use `merge_conflicts_page` before publishing
 when the policy can produce conflicts.
+
+## Checkout branches, tags, and commits
+
+`checkout` follows Git-like revision rules. An unqualified name resolves a
+branch before a tag. Fully qualified names remove ambiguity, and a `CommitId`
+creates a detached checkout:
+
+```rust
+use prolly_s3_client::{CheckedOutRef, CheckoutRef};
+
+let commit_id = client.head().await?;
+client.create_tag("v1.0", commit_id).await?;
+
+let feature = client.checkout("feature").await?;
+assert_eq!(feature.branch(), Some("feature"));
+
+let release = client.checkout("refs/tags/v1.0").await?;
+assert_eq!(release.branch(), None);
+
+let historical = client.checkout(commit_id).await?;
+let object = historical.get_object("documents/readme.txt").await?;
+
+// The typed form is useful when a branch and tag have the same name.
+let release = client
+    .checkout(CheckoutRef::Tag("v1.0".to_string()))
+    .await?;
+assert!(matches!(release.checked_out_ref(), CheckedOutRef::Tag { .. }));
+```
+
+Branch checkouts remain writable. Tag and commit checkouts are detached:
+`head`, `get_object`, `head_object`, listings, and `log` use their immutable
+snapshot, while mutation and branch-ref APIs return `InvalidRevision`.
 
 ## History, diff, and recovery
 

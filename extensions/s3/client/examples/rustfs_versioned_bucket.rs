@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     client.create_branch("feature", Some(first.id)).await?;
 
-    let feature = client.for_branch("feature")?;
+    let feature = client.checkout("feature").await?;
     feature
         .put_object("demo/feature.txt", b"created on feature\n".to_vec())
         .await?;

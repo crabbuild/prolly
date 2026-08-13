@@ -1,4 +1,4 @@
-//! Atomic multi-file ingestion with durable checkpoints and streaming input.
+//! Atomic multi-file writes with durable checkpoints and streaming input.
 
 mod common;
 
@@ -11,7 +11,7 @@ async fn main() -> ExampleResult {
     let client = repository.client;
 
     // A durable session uploads payloads as they are staged and checkpoints
-    // canonical metadata remotely. Persist `batch_id` in a real ingest job so
+    // canonical metadata remotely. Persist `batch_id` in a real bulk job so
     // another process can call `client.resume_commit(batch_id)` after failure.
     let mut session = client
         .begin_commit()
