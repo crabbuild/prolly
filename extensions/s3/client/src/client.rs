@@ -10,8 +10,8 @@ use md5::Md5;
 use prolly_s3_core::{
     BackupVerificationCursor, BackupVerificationPage, BatchId, BranchCatalogPage, BranchHead,
     BranchIndexAdvanceReport, BranchIndexHealth, CommitId, CommitPage, CommitReceipt,
-    CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCursor, FsckPage,
-    HistoryCursor, HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage,
+    CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCursor, FsckPage, GcCursor,
+    GcPage, HistoryCursor, HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage,
     JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
     MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage,
     MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor,
@@ -279,6 +279,21 @@ impl Client {
     pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
         self.ensure_provider_qualified()?;
         self.repository.advance_fsck(cursor, max_steps).await
+    }
+
+    pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {
+        self.ensure_provider_qualified()?;
+        self.repository.start_gc(grace_millis).await
+    }
+
+    pub async fn advance_gc(&self, cursor: &GcCursor, max_steps: usize) -> Result<GcPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.advance_gc(cursor, max_steps).await
+    }
+
+    pub async fn sweep_gc(&self, cursor: &GcCursor, max_candidates: usize) -> Result<GcPage> {
+        self.ensure_provider_qualified()?;
+        self.repository.sweep_gc(cursor, max_candidates).await
     }
 
     pub async fn start_repair_from(

@@ -6,6 +6,7 @@ mod codec;
 mod commit_session;
 mod control_versions;
 mod error;
+mod gc;
 mod journal_indexes;
 mod merge;
 mod model;
@@ -32,6 +33,7 @@ pub use control_versions::{
     MutableControlObserver, MutableControlStore, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
+pub use gc::{GcCursor, GcPage, GcPhase, GcReport};
 pub use journal_indexes::{
     JournalDerivedIndexes, JournalIndexAdvanceReport, JournalIndexRebuildCleanup,
     JournalIndexRebuildCursor, JournalIndexRebuildPhase, JournalIndexRebuildStep,

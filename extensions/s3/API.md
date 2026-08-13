@@ -17,6 +17,7 @@ The application-facing type is `prolly_s3_client::Client`.
 | Work on another branch | `create_branch`, `for_branch`, `delete_branch` |
 | Pin a commit | `create_tag`, `tag`, `delete_tag` |
 | Add a GC retention root | `create_retention_pin`, `delete_retention_pin` |
+| Reclaim unreachable immutable data | `start_gc`, `advance_gc`, `sweep_gc` |
 | Read history or compare snapshots | `log_bounded`, `diff_bounded` |
 | Inspect or recover ref movement | `open_reflog`, `read_reflog_page`, `recover_branch` |
 | Reset or restore | `reset_branch`, `start_restore`, `advance_restore` |
@@ -24,6 +25,7 @@ The application-facing type is `prolly_s3_client::Client`.
 | Inspect a merge | `merge_bases_page`, `merge_changes_page`, `merge_conflicts_page` |
 | Check repository integrity | `start_fsck`, `advance_fsck` |
 | Repair or transfer a snapshot | `start_repair_from`, `start_fetch_from`, `start_push_to` |
+| Preserve a source commit DAG | `start_history_clone_from`, `start_history_fetch_from`, `start_history_push_to` |
 | Verify a logical backup | `start_backup_verification`, `advance_backup_verification` |
 | Prewarm/inspect node caching | `prewarm_node_cache`, `node_cache_snapshot` |
 | Check index health | `branch_index_health`, `wait_for_branch_indexes` |

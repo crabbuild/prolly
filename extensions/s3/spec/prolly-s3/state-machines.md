@@ -83,3 +83,33 @@ A moving target is a ref conflict, never an implicit rebase.
 - Historical read: explicit commit → root → tree path → payload.
 - Verify all immutable content IDs.
 - Treat cache or advisory-index failure as miss/rebuild, never new truth.
+
+## History transfer
+
+1. Traverse the source commit closure parent-before-child in bounded pages.
+2. Rebind each live payload into the destination repository.
+3. Recreate object versions and commits with destination-local identities.
+4. Persist source-to-destination version and commit mappings in immutable
+   job-scoped Prolly trees.
+5. Preserve every mapped parent edge, including merge parents.
+6. Publish the mapped source head only after the complete DAG is durable.
+
+Snapshot repair remains a separate compatibility path and does not claim to
+preserve commit topology.
+
+## Immutable garbage collection
+
+1. Publish one active epoch and begin journaling both sides of branch/tag CAS.
+2. Discover live branches, tags, and retention-pin tags in bounded LIST pages.
+3. Mark the complete commit closure, direct nodes, packed commit containers,
+   and exact payload versions in a job-scoped Prolly tree.
+4. Scan only immutable commit, direct-node, and payload namespaces older than
+   the configured grace cutoff.
+5. Fence publication, capture the dirty-root watermark, and catch up any new
+   roots before deletion.
+6. Recheck reachability and exact-delete a bounded physical-version batch.
+7. Clear the coordinator and delete dirty-root records in bounded pages.
+
+The grace period must exceed the longest unpublished operation. Separate
+writer processes must be quiesced; concurrent handles in the authoritative
+process share the publication fence and dirty-root observer.

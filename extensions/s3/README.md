@@ -15,7 +15,7 @@ must not mutate repository data behind it.
 - atomic multi-file commits;
 - branches, tags, bounded logs/diffs/reflogs, restore, and resumable merges;
 - resumable fsck, cross-provider repair, and logical backup verification;
-- durable retention pins and restartable logical snapshot transfer;
+- durable retention pins, concurrent immutable GC, and restartable transfers;
 - branch-local writer fencing and concurrent publication across branches;
 - immutable payload and node caching, including optional Foyer caching;
 - operation-ID reconciliation for ambiguous publication responses;
@@ -50,7 +50,7 @@ many files, not to split one file.
 The repository can scale its immutable trees and history without a fixed
 cardinality ceiling, but “unlimited” is not literal: provider quotas, request
 cost, latency, cache size, branch contention, and retained unreachable objects
-remain operational limits. Garbage collection and cross-repository
-backup repair and verification are available for logical snapshots. A safe
-online GC sweep and commit-DAG-preserving cross-repository transfer still need
-publication-epoch protocol support.
+remain operational limits. Bounded GC reclaims unreachable immutable data,
+and history-transfer APIs preserve a source commit DAG with destination-local
+IDs and payload bindings. GC currently coordinates concurrent writer handles
+inside one authoritative process; quiesce separately running writer processes.

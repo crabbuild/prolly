@@ -2,17 +2,20 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     path::PathBuf,
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, RwLock, Weak,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc, OnceLock, RwLock, Weak,
     },
     time::Duration,
 };
 
 use futures_util::{stream, StreamExt};
 use md5::{Digest as _, Md5};
-use prolly::{AsyncProlly, Config, Diff, Mutation, RuntimeConfig, Tree, TreeFormat};
+use prolly::{
+    AsyncProlly, AsyncStore, Config, Diff, Mutation, Node, RuntimeConfig, Tree, TreeFormat,
+};
 use sha2::Sha256;
 
+use crate::gc::{GcCandidate, GcCoordinator, GcDirtyRoot, GcNodeWork};
 use crate::merge::{MergeBaseCandidate, MergePlanEntry, MergeQueueEntry, MergeSeenEntry};
 use crate::publication::BranchMovement;
 use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
@@ -22,16 +25,17 @@ use crate::{
     BucketCommit, BucketDelta, BucketState, CanonicalLimits, Checksums, Clock, CommitGeneration,
     CommitId, CommitObject, CommitPublication, CommitSessionCheckpoint, CommitSessionCleanupReport,
     CommitSessionManifest, CommitSessionState, CommitSessionStore, CompareExchange,
-    CompareExchangeOutcome, CurrentObject, DeleteOutcome, Error, ErrorCode, GetRequest,
-    HistoryTransferCursor, HistoryTransferPage, HistoryTransferPhase, HistoryTransferReport,
-    IdSource, IdempotencyRetention, ImmutablePayloadStore, InitializationIntent,
-    JournalCommitGraphEntry, JournalDerivedIndexes, JournalIndexAdvanceReport,
-    JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildPhase,
-    JournalIndexRebuildStep, ListRequest, LoadedRef, LogicalObjectVersionBody,
-    LogicalObjectVersionKind, MemoryNodeCache, MergeAdvancePage, MergeBaseCursor, MergeBasePage,
-    MergeChange, MergeChangeCursor, MergeChangePage, MergeCleanupCursor, MergeCleanupPage,
-    MergeConflict, MergeConflictCursor, MergeConflictPage, MergeCursor, MergePhase, MergePolicy,
-    MergeReceipt, MutationIdentity, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
+    CompareExchangeOutcome, CurrentObject, DeleteOutcome, Error, ErrorCode, GcCursor, GcPage,
+    GcPhase, GetRequest, HistoryTransferCursor, HistoryTransferPage, HistoryTransferPhase,
+    HistoryTransferReport, IdSource, IdempotencyRetention, ImmutablePayloadStore,
+    InitializationIntent, JournalCommitGraphEntry, JournalDerivedIndexes,
+    JournalIndexAdvanceReport, JournalIndexRebuildCleanup, JournalIndexRebuildCursor,
+    JournalIndexRebuildPhase, JournalIndexRebuildStep, ListRequest, LoadedRef,
+    LogicalObjectVersionBody, LogicalObjectVersionKind, MemoryNodeCache, MergeAdvancePage,
+    MergeBaseCursor, MergeBasePage, MergeChange, MergeChangeCursor, MergeChangePage,
+    MergeCleanupCursor, MergeCleanupPage, MergeConflict, MergeConflictCursor, MergeConflictPage,
+    MergeCursor, MergePhase, MergePolicy, MergeReceipt, MutableControlKind, MutableControlObserver,
+    MutableControlStore, MutationIdentity, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
     ObjectTransition, ObjectVersion, ObjectVersionId, ObjectVersionOrder, OperationId,
     OperationIndexAdvanceReport, OperationIndexRebuildCursor, OperationIndexRebuildStep,
     PendingHistoryTransferCommit, PhysicalVersion, ProllyObjectStore, ProviderPerKeyVersionLimit,
@@ -506,6 +510,113 @@ impl<P: ObjectPlane> NodeLocator for JournalNodeLocator<P> {
     }
 }
 
+struct GcDirtyRootObserver<P: ObjectPlane> {
+    plane: Arc<P>,
+    prefix: String,
+    repository: crate::RepositoryId,
+    active_epoch: Arc<RwLock<Option<OperationId>>>,
+    sequence: Arc<AtomicU64>,
+}
+
+struct GcProcessState {
+    active_epoch: Arc<RwLock<Option<OperationId>>>,
+    sequence: Arc<AtomicU64>,
+    publication_barrier: Arc<tokio::sync::RwLock<()>>,
+}
+
+fn gc_process_state(repository: crate::RepositoryId) -> Arc<GcProcessState> {
+    static STATES: OnceLock<std::sync::Mutex<BTreeMap<crate::RepositoryId, Weak<GcProcessState>>>> =
+        OnceLock::new();
+    let states = STATES.get_or_init(|| std::sync::Mutex::new(BTreeMap::new()));
+    let mut states = states
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    states.retain(|_, state| state.strong_count() > 0);
+    if let Some(state) = states.get(&repository).and_then(Weak::upgrade) {
+        return state;
+    }
+    let state = Arc::new(GcProcessState {
+        active_epoch: Arc::new(RwLock::new(None)),
+        sequence: Arc::new(AtomicU64::new(0)),
+        publication_barrier: Arc::new(tokio::sync::RwLock::new(())),
+    });
+    states.insert(repository, Arc::downgrade(&state));
+    state
+}
+
+#[async_trait::async_trait]
+impl<P: ObjectPlane> MutableControlObserver for GcDirtyRootObserver<P> {
+    async fn before_compare_exchange(
+        &self,
+        kind: MutableControlKind,
+        request: &CompareExchange,
+    ) -> Result<()> {
+        let epoch = *self
+            .active_epoch
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?;
+        let Some(epoch) = epoch else {
+            return Ok(());
+        };
+        let (namespace, name, target, previous_target, generation, operation, created_at_millis) =
+            match kind {
+                MutableControlKind::BranchRef => {
+                    let value: crate::RefValue = decode_canonical(&request.bytes)?;
+                    (
+                        "branch",
+                        value.inline_reflog.branch,
+                        value.target,
+                        value.previous_target,
+                        value.generation,
+                        value.operation,
+                        value.updated_at_millis,
+                    )
+                }
+                MutableControlKind::TagRef => {
+                    let value: crate::TagValue = decode_canonical(&request.bytes)?;
+                    (
+                        "tag",
+                        value.inline_reflog.branch,
+                        value.target,
+                        value.previous_target,
+                        value.generation,
+                        value.operation,
+                        value.updated_at_millis,
+                    )
+                }
+                _ => return Ok(()),
+            };
+        let sequence = self
+            .sequence
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                current.checked_add(1)
+            })
+            .map(|previous| previous + 1)
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "GC sequence overflow"))?;
+        let event = GcDirtyRoot {
+            repository: self.repository,
+            epoch,
+            sequence,
+            namespace: namespace.to_string(),
+            name,
+            target,
+            previous_target,
+            generation,
+            operation,
+            created_at_millis,
+        };
+        let bytes = encode_canonical(&event)?;
+        self.plane
+            .put_immutable(crate::ImmutablePut {
+                path: gc_dirty_root_path(&self.prefix, &event, crate::codec::sha256(&bytes))?,
+                expected_sha256: crate::codec::sha256(&bytes),
+                bytes,
+            })
+            .await?;
+        Ok(())
+    }
+}
+
 /// Authoritative repository over one reserved object-store prefix.
 ///
 /// This type reads and writes the sole repository format. It does not
@@ -531,6 +642,9 @@ pub struct Repository<P: ObjectPlane> {
     index_lanes: std::sync::Mutex<BTreeMap<String, Weak<tokio::sync::Mutex<()>>>>,
     local_index_heads: RwLock<BTreeMap<String, CommitId>>,
     index_errors: RwLock<BTreeMap<String, String>>,
+    active_gc_epoch: Arc<RwLock<Option<OperationId>>>,
+    gc_dirty_sequence: Arc<AtomicU64>,
+    gc_publication_barrier: Arc<tokio::sync::RwLock<()>>,
     writable: AtomicBool,
 }
 
@@ -601,6 +715,7 @@ impl<P: ObjectPlane> Repository<P> {
         }
 
         let repository = Self::from_format(plane, options, intent.format)?;
+        repository.restore_gc_state().await?;
         let default_branch = repository.options.default_branch.clone();
         match repository.publisher.load(&default_branch).await {
             Ok(_) => {
@@ -682,6 +797,7 @@ impl<P: ObjectPlane> Repository<P> {
         let format: RepositoryFormat = decode_canonical(&stored.bytes)?;
         validate_format_compatibility(&format, &options)?;
         let repository = Self::from_format(plane, options, format)?;
+        repository.restore_gc_state().await?;
         let branch = repository.options.default_branch.clone();
         repository.locator.register(&branch)?;
         if !repository.options.read_only {
@@ -727,24 +843,39 @@ impl<P: ObjectPlane> Repository<P> {
             Duration::from_millis(options.authority_lease_millis),
             options.mutable_control_versions_to_retain,
         )?);
-        let publisher = ShardedBranchPublisher::new_with_control_retention(
+        let gc_state = gc_process_state(format.repository_id);
+        let active_gc_epoch = gc_state.active_epoch.clone();
+        let gc_dirty_sequence = gc_state.sequence.clone();
+        let gc_publication_barrier = gc_state.publication_barrier.clone();
+        let gc_observer = Arc::new(GcDirtyRootObserver {
+            plane: plane.clone(),
+            prefix: options.repository_prefix.clone(),
+            repository: format.repository_id,
+            active_epoch: active_gc_epoch.clone(),
+            sequence: gc_dirty_sequence.clone(),
+        });
+        let publisher = ShardedBranchPublisher::new_with_gc_controls(
             plane.clone(),
             options.repository_prefix.clone(),
             format.repository_id,
             authority.clone(),
             options.mutable_control_versions_to_retain,
+            Some(gc_observer.clone()),
+            Some(gc_publication_barrier.clone()),
         )?;
         let payloads = ImmutablePayloadStore::new(
             plane.clone(),
             options.repository_prefix.clone(),
             format.repository_id,
         );
-        let tags = TagStore::new_with_control_retention(
+        let tags = TagStore::new_with_gc_controls(
             plane.clone(),
             options.repository_prefix.clone(),
             format.repository_id,
             authority.clone(),
             options.mutable_control_versions_to_retain,
+            Some(gc_observer),
+            Some(gc_publication_barrier.clone()),
         )?;
         let ref_catalog = Arc::new(ShardedRefCatalog::new_with_limits(
             plane.clone(),
@@ -806,6 +937,9 @@ impl<P: ObjectPlane> Repository<P> {
             index_lanes: std::sync::Mutex::new(BTreeMap::new()),
             local_index_heads: RwLock::new(BTreeMap::new()),
             index_errors: RwLock::new(BTreeMap::new()),
+            active_gc_epoch,
+            gc_dirty_sequence,
+            gc_publication_barrier,
             writable: AtomicBool::new(writable),
         })
     }
@@ -2746,6 +2880,240 @@ impl<P: ObjectPlane> Repository<P> {
             steps,
             complete,
             budget_exhausted: !complete && steps == max_steps,
+        })
+    }
+
+    /// Start a bounded concurrent collector for immutable repository data.
+    /// `grace_millis` must exceed the longest allowed unpublished operation.
+    pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {
+        if grace_millis == 0 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "GC grace period must be greater than zero",
+            ));
+        }
+        if !self.writable.load(Ordering::Acquire) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC requires a writable repository handle",
+            ));
+        }
+        let epoch = self.options.ids.operation();
+        let now = self.options.clock.now_millis()?;
+        let cutoff_millis = now.checked_sub(grace_millis).ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidLimit,
+                "GC grace period exceeds the current repository clock",
+            )
+        })?;
+        {
+            let mut active = self
+                .active_gc_epoch
+                .write()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?;
+            if active.is_some() {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "another GC epoch is active",
+                ));
+            }
+            *active = Some(epoch);
+        }
+        let result = self.publish_gc_coordinator(Some(epoch), now).await;
+        if let Err(error) = result {
+            *self.active_gc_epoch.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+            })? = None;
+            return Err(error);
+        }
+        let work = self.gc_work_engine(epoch)?.create();
+        Ok(GcCursor {
+            repository: self.format.repository_id,
+            epoch,
+            cutoff_millis,
+            phase: GcPhase::DiscoverBranches,
+            continuation: None,
+            work: RootManifest::from_tree(&work)?,
+            dirty_sequence: self.gc_dirty_sequence.load(Ordering::Acquire),
+            dirty_target_sequence: 0,
+            initial_scan_complete: false,
+            sweep_after: None,
+            report: crate::GcReport::default(),
+        })
+    }
+
+    /// Advance root discovery, reachability marking, candidate discovery, or
+    /// dirty-root catch-up by a bounded number of physical/tree records.
+    pub async fn advance_gc(&self, cursor: &GcCursor, max_steps: usize) -> Result<GcPage> {
+        self.validate_gc_cursor(cursor)?;
+        if !(1..=1_000).contains(&max_steps) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "GC page size must be between 1 and 1,000",
+            ));
+        }
+        if matches!(cursor.phase, GcPhase::Ready | GcPhase::Sweeping) {
+            return Ok(GcPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                complete: false,
+                restarted_for_new_roots: false,
+            });
+        }
+        if cursor.phase == GcPhase::Complete {
+            return Ok(GcPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                complete: true,
+                restarted_for_new_roots: false,
+            });
+        }
+        let mut next = cursor.clone();
+        let processed = match next.phase {
+            GcPhase::DiscoverBranches => self.gc_discover_refs(&mut next, false, max_steps).await?,
+            GcPhase::DiscoverTags => self.gc_discover_refs(&mut next, true, max_steps).await?,
+            GcPhase::MarkCommits => self.gc_mark_commits(&mut next, max_steps).await?,
+            GcPhase::MarkNodes => self.gc_mark_nodes(&mut next, max_steps).await?,
+            GcPhase::ScanCandidates => self.gc_scan_candidates(&mut next, max_steps).await?,
+            GcPhase::CatchUpDirtyRoots => {
+                self.gc_catch_up_dirty_roots(&mut next, max_steps).await?
+            }
+            GcPhase::Cleanup => self.gc_cleanup(&mut next, max_steps).await?,
+            GcPhase::Ready | GcPhase::Sweeping | GcPhase::Complete => 0,
+        };
+        Ok(GcPage {
+            complete: next.phase == GcPhase::Complete,
+            cursor: next,
+            processed,
+            restarted_for_new_roots: false,
+        })
+    }
+
+    /// Delete at most `max_candidates` exact immutable physical versions.
+    /// A publication that appeared after marking schedules catch-up first.
+    pub async fn sweep_gc(&self, cursor: &GcCursor, max_candidates: usize) -> Result<GcPage> {
+        self.validate_gc_cursor(cursor)?;
+        if !(1..=1_000).contains(&max_candidates) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "GC sweep batch must contain between 1 and 1,000 candidates",
+            ));
+        }
+        if !matches!(cursor.phase, GcPhase::Ready | GcPhase::Sweeping) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC must finish marking before sweeping",
+            ));
+        }
+        let _barrier = self.gc_publication_barrier.write().await;
+        let dirty_target = self.gc_dirty_sequence.load(Ordering::Acquire);
+        if dirty_target > cursor.dirty_sequence {
+            let mut next = cursor.clone();
+            next.phase = GcPhase::CatchUpDirtyRoots;
+            next.dirty_target_sequence = dirty_target;
+            next.continuation = None;
+            return Ok(GcPage {
+                cursor: next,
+                processed: 0,
+                complete: false,
+                restarted_for_new_roots: true,
+            });
+        }
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let tree = self.tree_from_root(&cursor.work)?;
+        let start = cursor.sweep_after.as_deref().unwrap_or(b"d/");
+        let mut entries = engine.range(&tree, start, None).await?;
+        let mut next = cursor.clone();
+        next.phase = GcPhase::Sweeping;
+        let mut processed = 0usize;
+        let mut exhausted = true;
+        while processed < max_candidates {
+            let Some(entry) = entries.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if !key.starts_with(b"d/") {
+                break;
+            }
+            if next
+                .sweep_after
+                .as_ref()
+                .is_some_and(|after| key.as_slice() <= after.as_slice())
+            {
+                continue;
+            }
+            exhausted = false;
+            let candidate: GcCandidate = decode_canonical(&encoded)?;
+            let retained = engine
+                .get(&tree, &gc_path_mark_key(&candidate.path))
+                .await?
+                .is_some()
+                || match &candidate.physical_version {
+                    PhysicalVersion::Versioned { version_id } => engine
+                        .get(&tree, &gc_physical_mark_key(&candidate.path, version_id))
+                        .await?
+                        .is_some(),
+                    PhysicalVersion::Unversioned { .. } => false,
+                };
+            if retained {
+                next.report.skipped_reachable = next.report.skipped_reachable.saturating_add(1);
+            } else {
+                match self
+                    .plane
+                    .delete_exact(&candidate.path, candidate.physical_version)
+                    .await?
+                {
+                    DeleteOutcome::Deleted => {
+                        next.report.deleted_versions =
+                            next.report.deleted_versions.saturating_add(1);
+                        next.report.deleted_bytes =
+                            next.report.deleted_bytes.saturating_add(candidate.len);
+                        *next
+                            .report
+                            .deleted_by_kind
+                            .entry(candidate.kind)
+                            .or_default() += 1;
+                    }
+                    DeleteOutcome::NotFound => {
+                        next.report.already_missing = next.report.already_missing.saturating_add(1);
+                    }
+                    DeleteOutcome::TokenMismatch => {
+                        return Err(Error::new(
+                            ErrorCode::PreconditionFailed,
+                            "GC candidate changed before exact deletion",
+                        ));
+                    }
+                }
+            }
+            next.sweep_after = Some(key);
+            processed += 1;
+        }
+        if processed < max_candidates && !exhausted {
+            let mut probe = engine
+                .range(&tree, next.sweep_after.as_deref().unwrap(), None)
+                .await?;
+            exhausted = loop {
+                let Some(entry) = probe.next().await else {
+                    break true;
+                };
+                let (key, _) = entry?;
+                if key.starts_with(b"d/") && Some(&key) != next.sweep_after.as_ref() {
+                    break false;
+                }
+                if !key.starts_with(b"d/") {
+                    break true;
+                }
+            };
+        }
+        if exhausted {
+            next.phase = GcPhase::Cleanup;
+            next.continuation = None;
+        }
+        Ok(GcPage {
+            complete: false,
+            cursor: next,
+            processed,
+            restarted_for_new_roots: false,
         })
     }
 
@@ -5102,6 +5470,567 @@ impl<P: ObjectPlane> Repository<P> {
         Ok((1, *size, deep_bytes))
     }
 
+    fn gc_work_engine(&self, epoch: OperationId) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if epoch.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "GC epoch ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new(
+            self.plane.clone(),
+            format!(
+                "{}/administration/gc/{epoch}/tree",
+                self.options.repository_prefix
+            ),
+        )))
+    }
+
+    fn validate_gc_cursor(&self, cursor: &GcCursor) -> Result<()> {
+        if cursor.repository != self.format.repository_id
+            || cursor.epoch.is_nil()
+            || cursor.work.format_digest != tree_format_digest(&self.format.state_tree_format)?
+            || *self
+                .active_gc_epoch
+                .read()
+                .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?
+                != Some(cursor.epoch)
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "GC cursor is malformed or is not the active epoch",
+            ));
+        }
+        self.tree_from_root(&cursor.work)?;
+        Ok(())
+    }
+
+    async fn gc_discover_refs(
+        &self,
+        cursor: &mut GcCursor,
+        tags: bool,
+        max_steps: usize,
+    ) -> Result<usize> {
+        let prefix = format!(
+            "{}/refs/{}/",
+            self.options.repository_prefix,
+            if tags { "tags" } else { "heads" }
+        );
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix,
+                continuation: cursor.continuation.clone(),
+                limit: max_steps,
+                include_versions: false,
+            })
+            .await?;
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        let mut mutations = Vec::new();
+        for entry in &page.entries {
+            let Some(stored) = self.plane.load_mutable(&entry.path).await? else {
+                continue;
+            };
+            let (target, previous, tombstone) = if tags {
+                let value: crate::TagValue = decode_canonical(&stored.bytes)?;
+                value.validate(self.format.repository_id, &value.inline_reflog.branch)?;
+                (value.target, value.previous_target, value.tombstone)
+            } else {
+                let value: crate::RefValue = decode_canonical(&stored.bytes)?;
+                value.validate(self.format.repository_id, &value.inline_reflog.branch)?;
+                self.locator.register(&value.inline_reflog.branch)?;
+                (value.target, value.previous_target, value.tombstone)
+            };
+            if !tombstone {
+                for root in std::iter::once(target).chain(previous) {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_commit_queue_key(root),
+                        val: root.as_bytes().to_vec(),
+                    });
+                    cursor.report.roots = cursor.report.roots.saturating_add(1);
+                }
+            }
+        }
+        if !mutations.is_empty() {
+            tree = engine.batch(&tree, mutations).await?;
+            cursor.work = RootManifest::from_tree(&tree)?;
+        }
+        cursor.continuation = page.continuation;
+        if cursor.continuation.is_none() {
+            cursor.phase = if tags {
+                GcPhase::MarkCommits
+            } else {
+                GcPhase::DiscoverTags
+            };
+        }
+        Ok(page.entries.len())
+    }
+
+    async fn gc_mark_commits(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        let mut processed = 0usize;
+        while processed < max_steps {
+            let mut queue = engine.prefix(&tree, b"cq/").await?;
+            let Some(entry) = queue.next().await else {
+                cursor.phase = GcPhase::MarkNodes;
+                break;
+            };
+            let (queue_key, encoded) = entry?;
+            drop(queue);
+            let hash: [u8; 32] = encoded.try_into().map_err(|_| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "GC commit work ID has wrong length",
+                )
+            })?;
+            let id = CommitId::from_hash(hash);
+            let mark_key = gc_commit_mark_key(id);
+            let mut mutations = vec![Mutation::Delete { key: queue_key }];
+            if engine.get(&tree, &mark_key).await?.is_none() {
+                let commit = self.load_commit_object(id).await?.commit;
+                mutations.push(Mutation::Upsert {
+                    key: mark_key,
+                    val: Vec::new(),
+                });
+                mutations.push(Mutation::Upsert {
+                    key: gc_path_mark_key(&commit_path(&self.options.repository_prefix, id)?),
+                    val: Vec::new(),
+                });
+                for parent in commit.parents {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_commit_queue_key(parent),
+                        val: parent.as_bytes().to_vec(),
+                    });
+                }
+                if let Some(root) = commit.state.objects.root {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_node_queue_key(&root, false),
+                        val: encode_canonical(&GcNodeWork {
+                            cid: root,
+                            scan_versions: false,
+                        })?,
+                    });
+                }
+                if let Some(root) = commit.state.versions.root {
+                    mutations.push(Mutation::Upsert {
+                        key: gc_node_queue_key(&root, true),
+                        val: encode_canonical(&GcNodeWork {
+                            cid: root,
+                            scan_versions: true,
+                        })?,
+                    });
+                }
+                cursor.report.commits = cursor.report.commits.saturating_add(1);
+            }
+            tree = engine.batch(&tree, mutations).await?;
+            processed += 1;
+        }
+        cursor.work = RootManifest::from_tree(&tree)?;
+        Ok(processed)
+    }
+
+    async fn gc_mark_nodes(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        let mut processed = 0usize;
+        while processed < max_steps {
+            let mut queue = engine.prefix(&tree, b"nq/").await?;
+            let Some(entry) = queue.next().await else {
+                cursor.phase = if cursor.initial_scan_complete {
+                    GcPhase::CatchUpDirtyRoots
+                } else {
+                    GcPhase::ScanCandidates
+                };
+                break;
+            };
+            let (queue_key, encoded) = entry?;
+            drop(queue);
+            let work: GcNodeWork = decode_canonical(&encoded)?;
+            let mark_key = gc_node_mark_key(&work.cid, work.scan_versions);
+            let mut mutations = vec![Mutation::Delete { key: queue_key }];
+            if engine.get(&tree, &mark_key).await?.is_none() {
+                mutations.push(Mutation::Upsert {
+                    key: mark_key,
+                    val: Vec::new(),
+                });
+                mutations.push(Mutation::Upsert {
+                    key: gc_path_mark_key(&self.node_store.direct_node_path(&work.cid)?),
+                    val: Vec::new(),
+                });
+                let bytes = self
+                    .node_store
+                    .get(work.cid.as_bytes())
+                    .await?
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::MissingClosure, "reachable node is missing")
+                    })?;
+                let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                    .map_err(|error| {
+                        Error::new(
+                            ErrorCode::CorruptNode,
+                            format!("reachable node could not be decoded: {error}"),
+                        )
+                    })?;
+                if node.leaf {
+                    if work.scan_versions {
+                        for encoded in node.vals {
+                            let version: ObjectVersion = decode_canonical(&encoded)?;
+                            version.validate()?;
+                            if let Some(binding) = version.binding {
+                                mutations.push(Mutation::Upsert {
+                                    key: binding.provider_version_id.as_ref().map_or_else(
+                                        || gc_path_mark_key(&binding.path),
+                                        |version| gc_physical_mark_key(&binding.path, version),
+                                    ),
+                                    val: Vec::new(),
+                                });
+                            }
+                            cursor.report.logical_versions =
+                                cursor.report.logical_versions.saturating_add(1);
+                        }
+                    }
+                } else {
+                    for child in node.vals {
+                        let cid = prolly::Cid(child.try_into().map_err(|_| {
+                            Error::new(ErrorCode::CorruptNode, "internal node child CID is invalid")
+                        })?);
+                        mutations.push(Mutation::Upsert {
+                            key: gc_node_queue_key(&cid, work.scan_versions),
+                            val: encode_canonical(&GcNodeWork {
+                                cid,
+                                scan_versions: work.scan_versions,
+                            })?,
+                        });
+                    }
+                }
+                cursor.report.nodes = cursor.report.nodes.saturating_add(1);
+            }
+            tree = engine.batch(&tree, mutations).await?;
+            processed += 1;
+        }
+        cursor.work = RootManifest::from_tree(&tree)?;
+        Ok(processed)
+    }
+
+    async fn gc_scan_candidates(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: format!("{}/", self.options.repository_prefix),
+                continuation: cursor.continuation.clone(),
+                limit: max_steps,
+                include_versions: true,
+            })
+            .await?;
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        for entry in &page.entries {
+            let Some(kind) = gc_managed_kind(&self.options.repository_prefix, &entry.path) else {
+                continue;
+            };
+            if entry.metadata.last_modified_millis > cursor.cutoff_millis {
+                continue;
+            }
+            let path_retained = engine
+                .get(&tree, &gc_path_mark_key(&entry.path))
+                .await?
+                .is_some();
+            let physical_retained = match entry.metadata.token.version_id.as_deref() {
+                Some(version) => engine
+                    .get(&tree, &gc_physical_mark_key(&entry.path, version))
+                    .await?
+                    .is_some(),
+                None => false,
+            };
+            let retained = path_retained || physical_retained;
+            if retained {
+                continue;
+            }
+            let physical_version = entry
+                .metadata
+                .token
+                .version_id
+                .clone()
+                .map(|version_id| PhysicalVersion::Versioned { version_id })
+                .unwrap_or_else(|| PhysicalVersion::Unversioned {
+                    token: Some(entry.metadata.token.clone()),
+                });
+            let candidate = GcCandidate {
+                path: entry.path.clone(),
+                physical_version,
+                len: entry.metadata.len,
+                last_modified_millis: entry.metadata.last_modified_millis,
+                kind: kind.to_string(),
+            };
+            let key = gc_candidate_key(&candidate)?;
+            if engine.get(&tree, &key).await?.is_none() {
+                tree = engine
+                    .put(&tree, key, encode_canonical(&candidate)?)
+                    .await?;
+                cursor.report.candidates = cursor.report.candidates.saturating_add(1);
+                cursor.report.candidate_bytes =
+                    cursor.report.candidate_bytes.saturating_add(candidate.len);
+                *cursor
+                    .report
+                    .candidates_by_kind
+                    .entry(kind.to_string())
+                    .or_default() += 1;
+            }
+        }
+        cursor.work = RootManifest::from_tree(&tree)?;
+        cursor.continuation = page.continuation;
+        if cursor.continuation.is_none() {
+            cursor.initial_scan_complete = true;
+            cursor.phase = GcPhase::CatchUpDirtyRoots;
+        }
+        Ok(page.entries.len())
+    }
+
+    async fn gc_catch_up_dirty_roots(
+        &self,
+        cursor: &mut GcCursor,
+        max_steps: usize,
+    ) -> Result<usize> {
+        if cursor.dirty_target_sequence == 0 {
+            let _barrier = self.gc_publication_barrier.write().await;
+            cursor.dirty_target_sequence = self.gc_dirty_sequence.load(Ordering::Acquire);
+        }
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        let mut processed = 0usize;
+        while processed < max_steps && cursor.dirty_sequence < cursor.dirty_target_sequence {
+            let sequence = cursor.dirty_sequence.checked_add(1).ok_or_else(|| {
+                Error::new(ErrorCode::InternalInvariant, "GC dirty sequence overflow")
+            })?;
+            let page = self
+                .plane
+                .list(ListRequest {
+                    prefix: gc_dirty_root_sequence_prefix(
+                        &self.options.repository_prefix,
+                        cursor.epoch,
+                        sequence,
+                    ),
+                    continuation: None,
+                    limit: 2,
+                    include_versions: false,
+                })
+                .await?;
+            for listed in page.entries {
+                let stored = self
+                    .plane
+                    .get(GetRequest {
+                        path: listed.path,
+                        range: None,
+                        physical_version: None,
+                    })
+                    .await?
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::MissingClosure, "GC dirty-root event disappeared")
+                    })?;
+                let event: GcDirtyRoot = decode_canonical(&stored.bytes)?;
+                if event.repository != self.format.repository_id
+                    || event.epoch != cursor.epoch
+                    || event.sequence != sequence
+                {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "GC dirty-root event does not match its path",
+                    ));
+                }
+                for root in std::iter::once(event.target).chain(event.previous_target) {
+                    tree = engine
+                        .put(&tree, gc_commit_queue_key(root), root.as_bytes().to_vec())
+                        .await?;
+                    cursor.report.dirty_roots = cursor.report.dirty_roots.saturating_add(1);
+                }
+            }
+            cursor.dirty_sequence = sequence;
+            processed += 1;
+        }
+        cursor.work = RootManifest::from_tree(&tree)?;
+        if engine.prefix(&tree, b"cq/").await?.next().await.is_some() {
+            cursor.phase = GcPhase::MarkCommits;
+        } else if cursor.dirty_sequence >= cursor.dirty_target_sequence {
+            cursor.phase = GcPhase::Ready;
+            cursor.dirty_target_sequence = 0;
+        }
+        Ok(processed)
+    }
+
+    async fn gc_cleanup(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        self.publish_gc_coordinator(None, self.options.clock.now_millis()?)
+            .await?;
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: gc_dirty_root_prefix(&self.options.repository_prefix, cursor.epoch),
+                continuation: None,
+                limit: max_steps,
+                include_versions: false,
+            })
+            .await?;
+        let targets = page
+            .entries
+            .into_iter()
+            .map(|entry| {
+                let token = entry.metadata.token;
+                let physical = token
+                    .version_id
+                    .clone()
+                    .map(|version_id| PhysicalVersion::Versioned { version_id })
+                    .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+                (entry.path, physical)
+            })
+            .collect::<Vec<_>>();
+        let processed = targets.len();
+        for outcome in self.plane.delete_exact_batch(targets).await? {
+            if outcome == DeleteOutcome::TokenMismatch {
+                return Err(Error::new(
+                    ErrorCode::PreconditionFailed,
+                    "GC dirty-root event changed during cleanup",
+                ));
+            }
+        }
+        if processed == 0 {
+            cursor.phase = GcPhase::Complete;
+            *self.active_gc_epoch.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+            })? = None;
+        }
+        Ok(processed)
+    }
+
+    async fn publish_gc_coordinator(
+        &self,
+        active_epoch: Option<OperationId>,
+        now_millis: u64,
+    ) -> Result<()> {
+        let path = gc_coordinator_path(&self.options.repository_prefix)?;
+        let current = self.plane.load_mutable(&path).await?;
+        let (expected, generation, current_epoch) = match current {
+            Some(stored) => {
+                let value: GcCoordinator = decode_canonical(&stored.bytes)?;
+                if value.repository != self.format.repository_id || value.generation == 0 {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "GC coordinator is malformed",
+                    ));
+                }
+                (
+                    Some(stored.metadata.token),
+                    value.generation.checked_add(1).ok_or_else(|| {
+                        Error::new(ErrorCode::InternalInvariant, "GC coordinator overflow")
+                    })?,
+                    value.active_epoch,
+                )
+            }
+            None => (None, 1, None),
+        };
+        if active_epoch.is_some() && current_epoch.is_some() {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "another GC epoch is active",
+            ));
+        }
+        if active_epoch.is_none()
+            && current_epoch.is_some()
+            && current_epoch
+                != *self.active_gc_epoch.read().map_err(|_| {
+                    Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+                })?
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "GC coordinator belongs to another epoch",
+            ));
+        }
+        let value = GcCoordinator {
+            repository: self.format.repository_id,
+            generation,
+            active_epoch,
+            updated_at_millis: now_millis,
+        };
+        let controls = MutableControlStore::new(
+            self.plane.clone(),
+            self.options.repository_prefix.clone(),
+            self.options.mutable_control_versions_to_retain,
+        )?;
+        match controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected,
+                bytes: encode_canonical(&value)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(()),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "GC coordinator changed concurrently",
+            )),
+        }
+    }
+
+    async fn restore_gc_state(&self) -> Result<()> {
+        let active = match self
+            .plane
+            .load_mutable(&gc_coordinator_path(&self.options.repository_prefix)?)
+            .await?
+        {
+            Some(stored) => {
+                let value: GcCoordinator = decode_canonical(&stored.bytes)?;
+                if value.repository != self.format.repository_id || value.generation == 0 {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "GC coordinator is malformed",
+                    ));
+                }
+                value.active_epoch
+            }
+            None => None,
+        };
+        if active.is_some() {
+            *self.active_gc_epoch.write().map_err(|_| {
+                Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned")
+            })? = active;
+        }
+        if let Some(epoch) = active {
+            let mut continuation = None;
+            let mut maximum = 0_u64;
+            loop {
+                let page = self
+                    .plane
+                    .list(ListRequest {
+                        prefix: gc_dirty_root_prefix(&self.options.repository_prefix, epoch),
+                        continuation,
+                        limit: 1_000,
+                        include_versions: false,
+                    })
+                    .await?;
+                for entry in &page.entries {
+                    let sequence = entry
+                        .path
+                        .as_str()
+                        .rsplit('/')
+                        .nth(2)
+                        .and_then(|value| value.parse::<u64>().ok())
+                        .ok_or_else(|| {
+                            Error::new(ErrorCode::CorruptCommit, "GC dirty-root path is malformed")
+                        })?;
+                    maximum = maximum.max(sequence);
+                }
+                continuation = page.continuation;
+                if continuation.is_none() {
+                    break;
+                }
+            }
+            self.gc_dirty_sequence.fetch_max(maximum, Ordering::AcqRel);
+        }
+        Ok(())
+    }
+
     fn commit_closure_engine(
         &self,
         traversal: OperationId,
@@ -6921,6 +7850,95 @@ fn validate_format_compatibility(
 
 fn format_path(prefix: &str) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/format/repository.cbor"))
+}
+
+fn gc_coordinator_path(prefix: &str) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/gc/coordinator.cbor"))
+}
+
+fn gc_dirty_root_prefix(prefix: &str, epoch: OperationId) -> String {
+    format!("{prefix}/gc/dirty/{epoch}/")
+}
+
+fn gc_dirty_root_sequence_prefix(prefix: &str, epoch: OperationId, sequence: u64) -> String {
+    format!("{}{sequence:020}/", gc_dirty_root_prefix(prefix, epoch))
+}
+
+fn gc_dirty_root_path(prefix: &str, event: &GcDirtyRoot, digest: [u8; 32]) -> Result<ObjectPath> {
+    ObjectPath::new(format!(
+        "{}{}/{:}",
+        gc_dirty_root_sequence_prefix(prefix, event.epoch, event.sequence),
+        event.namespace,
+        hex::encode(digest)
+    ))
+}
+
+fn commit_path(prefix: &str, id: CommitId) -> Result<ObjectPath> {
+    let encoded = hex::encode(id.as_bytes());
+    ObjectPath::new(format!(
+        "{prefix}/commits/sha256/{}/{}/{}",
+        &encoded[..2],
+        &encoded[2..4],
+        encoded
+    ))
+}
+
+fn gc_commit_queue_key(id: CommitId) -> Vec<u8> {
+    let mut key = b"cq/".to_vec();
+    key.extend_from_slice(id.as_bytes());
+    key
+}
+
+fn gc_commit_mark_key(id: CommitId) -> Vec<u8> {
+    let mut key = b"cm/".to_vec();
+    key.extend_from_slice(id.as_bytes());
+    key
+}
+
+fn gc_node_queue_key(cid: &prolly::Cid, scan_versions: bool) -> Vec<u8> {
+    let mut key = vec![b'n', b'q', b'/', u8::from(scan_versions), b'/'];
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn gc_node_mark_key(cid: &prolly::Cid, scan_versions: bool) -> Vec<u8> {
+    let mut key = vec![b'n', b'm', b'/', u8::from(scan_versions), b'/'];
+    key.extend_from_slice(cid.as_bytes());
+    key
+}
+
+fn gc_path_mark_key(path: &ObjectPath) -> Vec<u8> {
+    let mut key = b"pm/".to_vec();
+    key.extend_from_slice(&crate::codec::sha256(path.as_str().as_bytes()));
+    key
+}
+
+fn gc_physical_mark_key(path: &ObjectPath, version: &str) -> Vec<u8> {
+    let mut identity = path.as_str().as_bytes().to_vec();
+    identity.push(0);
+    identity.extend_from_slice(version.as_bytes());
+    let mut key = b"vm/".to_vec();
+    key.extend_from_slice(&crate::codec::sha256(&identity));
+    key
+}
+
+fn gc_candidate_key(candidate: &GcCandidate) -> Result<Vec<u8>> {
+    let mut key = b"d/".to_vec();
+    key.extend_from_slice(&crate::codec::sha256(&encode_canonical(candidate)?));
+    Ok(key)
+}
+
+fn gc_managed_kind(prefix: &str, path: &ObjectPath) -> Option<&'static str> {
+    let relative = path.as_str().strip_prefix(prefix)?.strip_prefix('/')?;
+    if relative.starts_with("commits/sha256/") {
+        Some("commits")
+    } else if relative.starts_with("nodes/sha256/") {
+        Some("nodes")
+    } else if relative.starts_with("payloads/") {
+        Some("payloads")
+    } else {
+        None
+    }
 }
 
 fn intent_path(prefix: &str) -> Result<ObjectPath> {

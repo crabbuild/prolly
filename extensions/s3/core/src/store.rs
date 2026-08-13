@@ -337,6 +337,10 @@ impl<P> ProllyObjectStore<P> {
         ))
     }
 
+    pub(crate) fn direct_node_path(&self, cid: &Cid) -> Result<ObjectPath> {
+        self.path_for_key(cid.as_bytes())
+    }
+
     fn commit_path(&self, id: PackedCommitId) -> Result<ObjectPath> {
         let PackedCommitId::Native(id) = id;
         let encoded = hex::encode(id.as_bytes());

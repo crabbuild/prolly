@@ -321,6 +321,41 @@ Retention pins are durable tag-backed roots:
 client.create_retention_pin("quarter-close", head).await?;
 ```
 
+## Garbage collection
+
+GC is restartable and bounded. Persist the returned cursor after every page.
+The grace period must be longer than the maximum time an upload, resumable
+commit, merge, repair, or history transfer may remain unpublished:
+
+```rust
+use prolly_s3_client::core::GcPhase;
+
+let two_hours_millis = 2 * 60 * 60 * 1_000;
+let mut gc = client.start_gc(two_hours_millis).await?;
+
+while gc.phase != GcPhase::Ready {
+    gc = client.advance_gc(&gc, 1_000).await?.cursor;
+    // Persist `gc` here.
+}
+
+while gc.phase != GcPhase::Complete {
+    gc = match gc.phase {
+        GcPhase::Ready | GcPhase::Sweeping => {
+            client.sweep_gc(&gc, 1_000).await?.cursor
+        }
+        _ => client.advance_gc(&gc, 1_000).await?.cursor,
+    };
+    // Persist `gc` here.
+}
+```
+
+The collector sweeps only immutable commit, direct-node, and payload objects.
+It never sweeps mutable refs, derived indexes, publication journals, format
+markers, or administration data. Branch and tag updates during an epoch write
+dirty-root records before their CAS; sweep batches fence publication and catch
+up those roots before exact-version deletion. Retention pins are tags, so they
+are discovered and journaled by the same protocol.
+
 ## Cache immutable nodes
 
 The in-memory cache is enabled through repository limits. For a persistent
@@ -374,8 +409,10 @@ latency or cost claim substitutes for AWS qualification.
 - One file must fit the repository and provider single-object PUT limits.
 - There is no chunked or multipart file representation.
 - Concurrent writes to one branch can conflict; batch related changes.
-- Retention pins exist, but an online immutable-object sweep still requires a
-  publication-epoch barrier; no unsafe concurrent GC sweep is exposed.
+- Concurrent GC coordinates all writer handles in the authoritative process.
+  Do not run GC while a separately running process can publish to the same
+  repository prefix; use one authoritative writer process or quiesce external
+  writers first.
 - Snapshot clone/fetch/push preserves only the selected logical state. The
   `history_` variants preserve the source commit DAG, but not source commit IDs
   or reflog identity.

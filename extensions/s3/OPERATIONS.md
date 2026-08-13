@@ -65,16 +65,22 @@ tail latency matters.
 ## Backups
 
 Provider bucket replication or object backup must preserve all repository
-objects and versions under the prefix. There is no production cross-repository
-export/import API. Test restore into an isolated bucket and open it read-only
-before declaring a backup usable.
+objects and versions under the prefix. History transfer can recreate a commit
+DAG in another repository, with new destination-local commit/version IDs and
+payload bindings. Test restore into an isolated bucket and run deep logical
+backup verification before declaring a backup usable.
 
 ## Storage retention
 
-Immutable candidates from failed CAS, abandoned sessions, and old history are
-not reclaimed by a production GC API. Track physical bytes and object count,
-not only live logical bytes. Never delete derived payload, commit, publication,
-node, or pack keys manually.
+Use bounded `start_gc`, `advance_gc`, and `sweep_gc` jobs to reclaim unreachable
+immutable commit, direct-node, and payload versions. Persist the cursor after
+every page. Set the grace period longer than the maximum duration of any
+unpublished commit, merge, repair, or transfer. Retention pins are GC roots.
+
+GC journals branch/tag changes and fences deletion batches against concurrent
+publication in the authoritative process. Quiesce separately running writer
+processes before GC. Never delete payload, commit, node, publication, index, or
+administration keys manually.
 
 Expired mutable commit-session checkpoints can be removed through
 `cleanup_expired_commit_sessions`.
