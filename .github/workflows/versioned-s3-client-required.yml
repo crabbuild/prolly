@@ -53,7 +53,9 @@ jobs:
         env:
           PROLLY_RUSTFS_DATA_DIR: ${{ runner.temp }}/prolly-rustfs-data
         run: |
-          mkdir -p "$PROLLY_RUSTFS_DATA_DIR"
+          # The pinned image runs as rustfs (UID/GID 10001), so prepare the
+          # bind mount for that unprivileged user before starting Compose.
+          sudo install -d -o 10001 -g 10001 -m 0750 "$PROLLY_RUSTFS_DATA_DIR"
           docker compose -f extensions/s3/docker-compose.rustfs.yml up -d
           for attempt in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:9000/health >/dev/null; then
