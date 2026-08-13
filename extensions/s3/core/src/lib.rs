@@ -65,8 +65,8 @@ pub use repository::{
     DelimitedObjectPage, FsckCursor, FsckPage, FsckPhase, FsckReport, HistoryCursor, ObjectData,
     ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectRangeData, ObjectSummary,
     RefCatalogRepairPage, RefMoveReceipt, RepairCursor, RepairPage, RepairPhase, RepairReport,
-    Repository, RepositoryOptions, RestoreCursor, RestorePage, ShardAuthorityMaintenance, Tag,
-    TagCatalogPage, TraversalBudget, VersionSummary,
+    Repository, RepositoryOptions, RestoreCursor, RestorePage, RetentionPin, RetentionPinPage,
+    ShardAuthorityMaintenance, Tag, TagCatalogPage, TraversalBudget, VersionSummary,
 };
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};

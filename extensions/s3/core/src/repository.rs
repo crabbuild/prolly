@@ -376,6 +376,19 @@ pub struct Tag {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RetentionPin {
+    pub name: String,
+    pub target: CommitId,
+    pub generation: RefGeneration,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RetentionPinPage {
+    pub pins: Vec<RetentionPin>,
+    pub continuation: Option<RefCatalogCursor>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BranchCatalogPage {
     pub branches: Vec<BranchHead>,
     pub continuation: Option<RefCatalogCursor>,
@@ -910,6 +923,51 @@ impl<P: ObjectPlane> Repository<P> {
             .await?;
         self.record_tag_catalog(name, &deleted.value).await?;
         Ok(())
+    }
+
+    pub async fn create_retention_pin(&self, name: &str, target: CommitId) -> Result<RetentionPin> {
+        let tag_name = retention_pin_tag(name)?;
+        let tag = self.create_tag(&tag_name, target).await?;
+        Ok(RetentionPin {
+            name: name.to_string(),
+            target: tag.target,
+            generation: tag.generation,
+        })
+    }
+
+    pub async fn retention_pin(&self, name: &str) -> Result<RetentionPin> {
+        let tag = self.tag(&retention_pin_tag(name)?).await?;
+        Ok(RetentionPin {
+            name: name.to_string(),
+            target: tag.target,
+            generation: tag.generation,
+        })
+    }
+
+    pub async fn delete_retention_pin(&self, name: &str, expected: CommitId) -> Result<()> {
+        self.delete_tag(&retention_pin_tag(name)?, expected).await
+    }
+
+    pub async fn list_retention_pins_page(
+        &self,
+        cursor: Option<RefCatalogCursor>,
+        limit: usize,
+    ) -> Result<RetentionPinPage> {
+        let page = self.list_tag_catalog_page(cursor, limit).await?;
+        let mut pins = Vec::new();
+        for tag in page.tags {
+            if let Some(name) = decode_retention_pin_tag(&tag.name)? {
+                pins.push(RetentionPin {
+                    name,
+                    target: tag.target,
+                    generation: tag.generation,
+                });
+            }
+        }
+        Ok(RetentionPinPage {
+            pins,
+            continuation: page.continuation,
+        })
     }
 
     pub async fn list_branch_catalog_page(
@@ -6001,6 +6059,36 @@ pub fn validate_branch(branch: &str) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+const RETENTION_PIN_TAG_PREFIX: &str = "retention-pins/";
+
+fn retention_pin_tag(name: &str) -> Result<String> {
+    if name.trim().is_empty() || name.len() > 100 {
+        return Err(Error::new(
+            ErrorCode::InvalidBranch,
+            "retention pin name must contain 1 to 100 bytes",
+        ));
+    }
+    Ok(format!("{RETENTION_PIN_TAG_PREFIX}{}", hex::encode(name)))
+}
+
+fn decode_retention_pin_tag(tag: &str) -> Result<Option<String>> {
+    let Some(encoded) = tag.strip_prefix(RETENTION_PIN_TAG_PREFIX) else {
+        return Ok(None);
+    };
+    let bytes = hex::decode(encoded).map_err(|_| {
+        Error::new(
+            ErrorCode::CorruptCommit,
+            "retention pin tag has invalid hex encoding",
+        )
+    })?;
+    String::from_utf8(bytes).map(Some).map_err(|_| {
+        Error::new(
+            ErrorCode::CorruptCommit,
+            "retention pin tag name is not UTF-8",
+        )
+    })
 }
 
 fn validate_options(options: &RepositoryOptions) -> Result<()> {

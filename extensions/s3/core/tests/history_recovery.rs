@@ -47,6 +47,20 @@ async fn history_diff_reflog_reset_and_recovery_are_bounded_and_audited() {
         .await
         .unwrap();
 
+    let pin = repository
+        .create_retention_pin("before-b", first.id)
+        .await
+        .unwrap();
+    assert_eq!(pin.target, first.id);
+    assert_eq!(
+        repository
+            .list_retention_pins_page(None, 100)
+            .await
+            .unwrap()
+            .pins,
+        vec![pin]
+    );
+
     let first_page = repository
         .log_page_bounded(
             "main",

@@ -20,7 +20,8 @@ use prolly_s3_core::{
     ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
     RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
-    StagedMutation, Tag, TagCatalogPage, TraversalBudget, VersionSummary,
+    RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
+    VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -131,6 +132,44 @@ impl Client {
     pub async fn delete_tag(&self, name: impl AsRef<str>, expected: CommitId) -> Result<()> {
         self.ensure_provider_qualified()?;
         self.repository.delete_tag(name.as_ref(), expected).await
+    }
+
+    pub async fn create_retention_pin(
+        &self,
+        name: impl AsRef<str>,
+        target: CommitId,
+    ) -> Result<RetentionPin> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .create_retention_pin(name.as_ref(), target)
+            .await
+    }
+
+    pub async fn retention_pin(&self, name: impl AsRef<str>) -> Result<RetentionPin> {
+        self.ensure_provider_qualified()?;
+        self.repository.retention_pin(name.as_ref()).await
+    }
+
+    pub async fn delete_retention_pin(
+        &self,
+        name: impl AsRef<str>,
+        expected: CommitId,
+    ) -> Result<()> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .delete_retention_pin(name.as_ref(), expected)
+            .await
+    }
+
+    pub async fn list_retention_pins_page(
+        &self,
+        cursor: Option<RefCatalogCursor>,
+        limit: usize,
+    ) -> Result<RetentionPinPage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .list_retention_pins_page(cursor, limit)
+            .await
     }
 
     pub async fn commit(&self, id: CommitId) -> Result<prolly_s3_core::BucketCommit> {
