@@ -111,8 +111,9 @@ full scan, not infinite provider resources.
 
 Prefer retaining upper tree levels, current branch roots, recent commit graph
 nodes, and hot payload bindings. Leaf pages and old branch histories may use
-frequency/recency eviction. Cache admission should reject objects larger than
-the configured cache entry bound.
+frequency/recency eviction. Foyer cache admission rejects objects larger than
+the usable entry space in its configured disk block, including Foyer's
+block-index and entry overhead.
 
 Prewarming is advisory and cancellable. A reader remains correct if prewarming
 never runs or the cache directory is deleted.

@@ -137,6 +137,20 @@ pub struct NodeCacheSnapshot {
     pub ranged_fetches: u64,
 }
 
+impl NodeCacheSnapshot {
+    pub(crate) fn saturating_add(self, other: Self) -> Self {
+        Self {
+            hits: self.hits.saturating_add(other.hits),
+            misses: self.misses.saturating_add(other.misses),
+            insertions: self.insertions.saturating_add(other.insertions),
+            errors: self.errors.saturating_add(other.errors),
+            corruptions: self.corruptions.saturating_add(other.corruptions),
+            coalesced_waits: self.coalesced_waits.saturating_add(other.coalesced_waits),
+            ranged_fetches: self.ranged_fetches.saturating_add(other.ranged_fetches),
+        }
+    }
+}
+
 struct PackedNodeCache {
     entries: BTreeMap<NodePackId, (Arc<NodePack>, usize)>,
     order: VecDeque<NodePackId>,
@@ -747,6 +761,9 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         let Some(key) = self.node_cache_key(cid) else {
             return;
         };
+        if !cache.admits(&key, bytes.len()) {
+            return;
+        }
         match cache.insert(key, bytes).await {
             Ok(()) => {
                 state.cache_insertions.fetch_add(1, Ordering::Relaxed);
@@ -905,6 +922,9 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         let Some(key) = self.direct_cache_key(cid) else {
             return;
         };
+        if !state.node_cache.admits(&key, bytes.len()) {
+            return;
+        }
         match state.node_cache.insert(key, bytes).await {
             Ok(()) => {
                 state.cache_insertions.fetch_add(1, Ordering::Relaxed);

@@ -50,6 +50,13 @@ impl NodeCacheError {
 /// this trait never becomes part of the repository's correctness authority.
 #[async_trait::async_trait]
 pub trait NodeCache: Send + Sync + 'static {
+    /// Return whether this cache's admission policy can accept a value of this
+    /// size. Implementations may override the default to make deliberate
+    /// rejections observable without treating them as cache failures.
+    fn admits(&self, _key: &NodeCacheKey, _value_len: usize) -> bool {
+        true
+    }
+
     async fn get(&self, key: &NodeCacheKey)
         -> std::result::Result<Option<Vec<u8>>, NodeCacheError>;
 
@@ -110,6 +117,10 @@ impl MemoryNodeCache {
 
 #[async_trait::async_trait]
 impl NodeCache for MemoryNodeCache {
+    fn admits(&self, _key: &NodeCacheKey, value_len: usize) -> bool {
+        self.max_bytes > 0 && value_len <= self.max_bytes
+    }
+
     async fn get(
         &self,
         key: &NodeCacheKey,
@@ -131,7 +142,7 @@ impl NodeCache for MemoryNodeCache {
         key: NodeCacheKey,
         value: Vec<u8>,
     ) -> std::result::Result<(), NodeCacheError> {
-        if self.max_bytes == 0 || value.len() > self.max_bytes {
+        if !self.admits(&key, value.len()) {
             return Ok(());
         }
         let mut state = self
