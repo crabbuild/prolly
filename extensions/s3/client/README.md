@@ -120,11 +120,10 @@ assert_eq!(current.bytes, b"second revision\n");
 assert_eq!(historical.bytes, b"first revision\n");
 ```
 
-A standalone write uploads one whole content-addressed payload. Bulk ingestion
-packs non-empty files up to 4 KiB into immutable segments capped at 4 MiB;
-logical bindings retain checksums and byte extents, while empty and larger
-files keep the direct representation. Identical bytes in a segment share one
-extent, and replaying the same segment reuses its content-addressed object.
+A standalone write and bulk ingestion both upload one whole content-addressed
+payload object for every distinct non-empty file body. Prolly does not combine
+small files, split large files, or persist byte extents or multipart state.
+Identical complete bodies reuse the same content-addressed object.
 
 For safe retries, generate and persist one operation ID:
 

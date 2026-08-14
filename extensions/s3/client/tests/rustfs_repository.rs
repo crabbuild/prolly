@@ -1222,8 +1222,8 @@ async fn rustfs_streaming_bulk_exceeds_500_files_per_second() {
         "throughput was {throughput:.2} files/s"
     );
     assert!(
-        metrics.put_object < 100,
-        "packing should require fewer than 100 physical PUTs: {metrics:?}"
+        metrics.put_object >= FILES as u64 && metrics.put_object <= FILES as u64 + 256,
+        "whole-object ingestion should use one payload PUT per file plus bounded metadata PUTs: {metrics:?}"
     );
 }
 
