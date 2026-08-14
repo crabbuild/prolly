@@ -25,7 +25,7 @@ operations from administrative maintenance.
 | Restore logical state as new history | `start_restore`, `advance_restore` |
 | Move a branch administratively | `reset_branch` |
 | Merge branches | `start_merge`, `advance_merge`, `publish_merge` |
-| Check repository integrity | `start_fsck`, `advance_fsck`, `resume_fsck`, `forget_fsck` |
+| Check repository integrity | `start_fsck`, `advance_fsck`, `resume_fsck`, `start_fsck_cleanup`, `advance_fsck_cleanup` |
 | Reclaim unreachable immutable data | `start_gc`, `advance_gc`, `sweep_gc` |
 | Synchronize only one logical snapshot | `start_repair_from`, `start_clone_from`, `start_fetch_from`, `start_push_to` |
 | Preserve a complete source commit DAG | `start_history_clone_from`, `start_history_fetch_from`, `start_history_push_to` |
@@ -209,8 +209,9 @@ pruned without loading full commit node packs.
 `start_fsck(true)` additionally downloads and hashes reachable payload bytes.
 Advance either mode with `advance_fsck`. The repository durably checkpoints
 every returned page. After process loss, call `resume_fsck(job)`; a stale worker
-is fenced by the checkpoint generation. Call `forget_fsck(job)` after a
-completed report is no longer needed.
+is fenced by the checkpoint generation. After retaining the completed report,
+use `start_fsck_cleanup(job)` and `advance_fsck_cleanup` to exact-delete the
+job's payload-dedup tree, closure tree, and checkpoint in bounded pages.
 
 `FsckReport` separately counts logical payload references, distinct complete
 physical objects, verified bytes, and deep content bytes. Payload bodies are

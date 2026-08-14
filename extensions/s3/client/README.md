@@ -382,12 +382,16 @@ while fsck.phase != prolly_s3_client::core::FsckPhase::Complete {
     fsck = client.advance_fsck(&fsck, 1_000).await?.cursor;
 }
 println!("verified {} commits", fsck.report.commits);
-client.forget_fsck(fsck_job).await?;
+let mut cleanup = client.start_fsck_cleanup(fsck_job).await?;
+while cleanup.phase != prolly_s3_client::core::FsckCleanupPhase::Complete {
+    cleanup = client.advance_fsck_cleanup(&cleanup, 1_000).await?.cursor;
+}
 ```
 
 Every page is checkpointed in the repository. A new process resumes with
 `client.resume_fsck(fsck_job)`; checkpoint generations reject stale workers.
-An in-progress checkpoint cannot be forgotten.
+Cleanup is permitted only after completion, is bounded, and can restart from
+`start_fsck_cleanup` after process loss.
 
 Cross-provider repair is logical. It does not copy provider version IDs. It
 downloads verified source payloads, rebinds them at the destination, preserves

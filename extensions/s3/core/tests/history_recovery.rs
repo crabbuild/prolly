@@ -41,7 +41,11 @@ async fn fsck_checkpoint_resumes_across_processes_and_fences_stale_workers() {
         Some(first.clone())
     );
     assert_eq!(
-        reopened.forget_fsck(initial.job).await.unwrap_err().code,
+        reopened
+            .start_fsck_cleanup(initial.job)
+            .await
+            .unwrap_err()
+            .code,
         ErrorCode::PreconditionFailed
     );
     assert_eq!(
@@ -89,7 +93,26 @@ async fn fsck_checkpoint_resumes_across_processes_and_fences_stale_workers() {
         .await
         .unwrap();
     assert!(retained.entries.len() <= 4, "{retained:?}");
-    resumed_process.forget_fsck(initial.job).await.unwrap();
+    let cleanup = resumed_process
+        .start_fsck_cleanup(initial.job)
+        .await
+        .unwrap();
+    let interrupted = resumed_process
+        .advance_fsck_cleanup(&cleanup, 1)
+        .await
+        .unwrap();
+    assert!(!interrupted.complete);
+    let mut cleanup = resumed_process
+        .start_fsck_cleanup(initial.job)
+        .await
+        .unwrap();
+    while cleanup.phase != prolly_s3_core::FsckCleanupPhase::Complete {
+        cleanup = resumed_process
+            .advance_fsck_cleanup(&cleanup, 1)
+            .await
+            .unwrap()
+            .cursor;
+    }
     assert!(resumed_process
         .resume_fsck(initial.job)
         .await
@@ -106,6 +129,28 @@ async fn fsck_checkpoint_resumes_across_processes_and_fences_stale_workers() {
         .unwrap()
         .entries
         .is_empty());
+    for prefix in [
+        format!(
+            ".tests/fsck-durable-resume/administration/fsck/{}/payloads/",
+            initial.job
+        ),
+        format!(
+            ".tests/fsck-durable-resume/administration/closure/{}/tree/",
+            initial.closure.traversal
+        ),
+    ] {
+        assert!(plane
+            .list(ListRequest {
+                prefix,
+                continuation: None,
+                limit: 1_000,
+                include_versions: true,
+            })
+            .await
+            .unwrap()
+            .entries
+            .is_empty());
+    }
 }
 
 #[tokio::test]

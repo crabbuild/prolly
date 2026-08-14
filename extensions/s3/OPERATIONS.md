@@ -70,10 +70,12 @@ loss, reopen the repository, catch up the source branch index if necessary,
 then call `resume_fsck(job)`. Never continue a locally saved cursor after
 another worker has advanced the job; stale generations fail with `RefConflict`.
 
-Keep the completed report for audit, then call `forget_fsck(job)` to remove all
-retained checkpoint versions. In-progress jobs cannot be forgotten. Metadata
-mode verifies bindings and provider metadata; deep mode downloads and hashes
-each distinct complete payload object.
+Keep the completed report for audit, then call `start_fsck_cleanup(job)` and
+advance its cursor in bounded pages. Cleanup removes the distinct-payload work
+tree, commit-closure work tree, older checkpoint versions, and finally the
+current checkpoint. It is permitted only after completion and can restart from
+the beginning after process loss. Metadata mode verifies bindings and provider
+metadata; deep mode downloads and hashes each distinct complete payload object.
 
 ## Backups
 

@@ -255,8 +255,9 @@ durable cursor, uses range-readable commit metadata during DAG discovery, and
 deduplicates checks by complete physical-object identity. Every returned page
 is CAS-checkpointed with a monotonic generation; a cross-process test resumes
 the work, fences a stale worker, bounds retained checkpoint versions, and
-removes all versions after completion. The former packed-payload numbers are
-not evidence for this revised whole-object fsck path; the 100K, 500K, and 1M
+restart-cleans the payload work tree, closure work tree, and checkpoint in
+one-object pages after completion. The former packed-payload numbers are not
+evidence for this revised whole-object fsck path; the 100K, 500K, and 1M
 performance gates must be rerun.
 
 GC now checkpoints its cursor under the repository-wide maintenance epoch at

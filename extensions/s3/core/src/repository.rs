@@ -365,6 +365,33 @@ pub struct FsckPage {
     pub complete: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum FsckCleanupPhase {
+    PayloadWork,
+    ClosureWork,
+    CheckpointHistory,
+    CheckpointCurrent,
+    Complete,
+}
+
+/// Restart-safe cleanup descriptor for one completed fsck job. Cleanup may be
+/// restarted from this initial descriptor because every page exact-deletes
+/// immutable physical versions and the durable checkpoint is removed last.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FsckCleanupCursor {
+    pub repository: crate::RepositoryId,
+    pub job: OperationId,
+    pub closure_traversal: OperationId,
+    pub phase: FsckCleanupPhase,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FsckCleanupPage {
+    pub cursor: FsckCleanupCursor,
+    pub deleted: usize,
+    pub complete: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RefMoveReceipt {
     pub branch: String,
@@ -4014,56 +4041,151 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(Some(cursor))
     }
 
-    /// Remove every retained provider version of a completed fsck checkpoint.
-    /// In-progress jobs must be resumed rather than discarded implicitly.
-    pub async fn forget_fsck(&self, job: OperationId) -> Result<()> {
-        let Some(cursor) = self.resume_fsck(job).await? else {
-            return Ok(());
-        };
+    /// Start bounded cleanup of a completed integrity-check job. The durable
+    /// completed checkpoint remains present until all immutable work objects
+    /// and its older checkpoint versions have been removed.
+    pub async fn start_fsck_cleanup(&self, job: OperationId) -> Result<FsckCleanupCursor> {
+        let cursor = self
+            .resume_fsck(job)
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::InvalidRevision, "fsck checkpoint is missing"))?;
         if cursor.phase != FsckPhase::Complete {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
-                "in-progress fsck checkpoint cannot be forgotten",
+                "in-progress fsck job cannot be cleaned up",
             ));
         }
-        let path = fsck_cursor_path(&self.options.repository_prefix, job)?;
-        loop {
-            let page = self
-                .plane
-                .list(ListRequest {
-                    prefix: path.as_str().to_string(),
-                    continuation: None,
-                    limit: 1_000,
-                    include_versions: true,
-                })
-                .await?;
-            let targets = page
-                .entries
-                .into_iter()
-                .filter(|entry| entry.path == path)
-                .map(|entry| {
-                    let token = entry.metadata.token;
-                    let physical = token
-                        .version_id
-                        .clone()
-                        .map(|version_id| PhysicalVersion::Versioned { version_id })
-                        .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
-                    (entry.path, physical)
-                })
-                .collect::<Vec<_>>();
-            if targets.is_empty() {
-                break;
-            }
-            for outcome in self.plane.delete_exact_batch(targets).await? {
-                if outcome == DeleteOutcome::TokenMismatch {
-                    return Err(Error::new(
-                        ErrorCode::RefConflict,
-                        "fsck checkpoint changed while it was being forgotten",
-                    ));
-                }
-            }
+        Ok(FsckCleanupCursor {
+            repository: self.format.repository_id,
+            job,
+            closure_traversal: cursor.closure.traversal,
+            phase: FsckCleanupPhase::PayloadWork,
+        })
+    }
+
+    /// Exact-delete at most `max_objects` physical versions from a completed
+    /// fsck workspace. Restarting cleanup from `start_fsck_cleanup` is safe.
+    pub async fn advance_fsck_cleanup(
+        &self,
+        cursor: &FsckCleanupCursor,
+        max_objects: usize,
+    ) -> Result<FsckCleanupPage> {
+        if !(1..=1_000).contains(&max_objects) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "fsck cleanup page size must be between 1 and 1,000",
+            ));
         }
-        Ok(())
+        if cursor.repository != self.format.repository_id
+            || cursor.job.is_nil()
+            || cursor.closure_traversal.is_nil()
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck cleanup cursor is malformed or belongs to another repository",
+            ));
+        }
+        if cursor.phase == FsckCleanupPhase::Complete {
+            return Ok(FsckCleanupPage {
+                cursor: cursor.clone(),
+                deleted: 0,
+                complete: true,
+            });
+        }
+        let durable = self.resume_fsck(cursor.job).await?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck checkpoint is missing",
+            )
+        })?;
+        if durable.phase != FsckPhase::Complete
+            || durable.closure.traversal != cursor.closure_traversal
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck cleanup cursor does not match its completed checkpoint",
+            ));
+        }
+        let mut next = cursor.clone();
+        let deleted = match next.phase {
+            FsckCleanupPhase::PayloadWork => {
+                let prefix = format!(
+                    "{}/administration/fsck/{}/payloads/",
+                    self.options.repository_prefix, next.job
+                );
+                let deleted = self
+                    .delete_fsck_cleanup_prefix(&prefix, max_objects)
+                    .await?;
+                if deleted == 0 {
+                    next.phase = FsckCleanupPhase::ClosureWork;
+                }
+                deleted
+            }
+            FsckCleanupPhase::ClosureWork => {
+                let prefix = format!(
+                    "{}/administration/closure/{}/tree/",
+                    self.options.repository_prefix, next.closure_traversal
+                );
+                let deleted = self
+                    .delete_fsck_cleanup_prefix(&prefix, max_objects)
+                    .await?;
+                if deleted == 0 {
+                    next.phase = FsckCleanupPhase::CheckpointHistory;
+                }
+                deleted
+            }
+            FsckCleanupPhase::CheckpointHistory => {
+                let path = fsck_cursor_path(&self.options.repository_prefix, next.job)?;
+                let page = self
+                    .plane
+                    .list(ListRequest {
+                        prefix: path.as_str().to_string(),
+                        continuation: None,
+                        limit: 1_000,
+                        include_versions: true,
+                    })
+                    .await?;
+                let current = self.plane.load_mutable(&path).await?.ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InvalidContinuationToken,
+                        "fsck checkpoint is missing",
+                    )
+                })?;
+                let targets = page
+                    .entries
+                    .into_iter()
+                    .filter(|entry| {
+                        entry.path == path && entry.metadata.token != current.metadata.token
+                    })
+                    .take(max_objects)
+                    .map(physical_list_entry_target)
+                    .collect::<Vec<_>>();
+                let deleted = self.delete_fsck_cleanup_targets(targets).await?;
+                if deleted == 0 {
+                    next.phase = FsckCleanupPhase::CheckpointCurrent;
+                }
+                deleted
+            }
+            FsckCleanupPhase::CheckpointCurrent => {
+                let path = fsck_cursor_path(&self.options.repository_prefix, next.job)?;
+                let current = self.plane.load_mutable(&path).await?.ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InvalidContinuationToken,
+                        "fsck checkpoint is missing",
+                    )
+                })?;
+                let target = physical_stored_object_target(path, current);
+                let deleted = self.delete_fsck_cleanup_targets(vec![target]).await?;
+                next.phase = FsckCleanupPhase::Complete;
+                deleted
+            }
+            FsckCleanupPhase::Complete => 0,
+        };
+        Ok(FsckCleanupPage {
+            complete: next.phase == FsckCleanupPhase::Complete,
+            cursor: next,
+            deleted,
+        })
     }
 
     /// Advance an integrity check by at most `max_steps` commit-work records,
@@ -6864,6 +6986,40 @@ impl<P: ObjectPlane> Repository<P> {
                 "durable fsck cursor changed concurrently",
             )),
         }
+    }
+
+    async fn delete_fsck_cleanup_prefix(&self, prefix: &str, max_objects: usize) -> Result<usize> {
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: prefix.to_string(),
+                continuation: None,
+                limit: max_objects,
+                include_versions: true,
+            })
+            .await?;
+        let targets = page
+            .entries
+            .into_iter()
+            .map(physical_list_entry_target)
+            .collect::<Vec<_>>();
+        self.delete_fsck_cleanup_targets(targets).await
+    }
+
+    async fn delete_fsck_cleanup_targets(
+        &self,
+        targets: Vec<(ObjectPath, PhysicalVersion)>,
+    ) -> Result<usize> {
+        let processed = targets.len();
+        for outcome in self.plane.delete_exact_batch(targets).await? {
+            if outcome == DeleteOutcome::TokenMismatch {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "fsck workspace changed during exact cleanup",
+                ));
+            }
+        }
+        Ok(processed)
     }
 
     fn validate_gc_cursor(&self, cursor: &GcCursor) -> Result<()> {
@@ -9865,6 +10021,29 @@ fn gc_cursor_path(prefix: &str, epoch: OperationId) -> Result<ObjectPath> {
 
 fn fsck_cursor_path(prefix: &str, job: OperationId) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/administration/fsck/{job}/cursor.cbor"))
+}
+
+fn physical_list_entry_target(entry: crate::PhysicalListEntry) -> (ObjectPath, PhysicalVersion) {
+    let token = entry.metadata.token;
+    let physical = token
+        .version_id
+        .clone()
+        .map(|version_id| PhysicalVersion::Versioned { version_id })
+        .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+    (entry.path, physical)
+}
+
+fn physical_stored_object_target(
+    path: ObjectPath,
+    stored: crate::StoredObject,
+) -> (ObjectPath, PhysicalVersion) {
+    let token = stored.metadata.token;
+    let physical = token
+        .version_id
+        .clone()
+        .map(|version_id| PhysicalVersion::Versioned { version_id })
+        .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+    (path, physical)
 }
 
 fn gc_publication_ticket_prefix(prefix: &str, repository: crate::RepositoryId) -> String {

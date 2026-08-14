@@ -12,15 +12,16 @@ use md5::Md5;
 use prolly_s3_core::{
     BackupVerificationCursor, BackupVerificationPage, BatchId, BranchCatalogPage, BranchHead,
     BranchIndexAdvanceReport, BranchIndexHealth, CommitId, CommitPage, CommitReceipt,
-    CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCursor, FsckPage, GcCursor,
-    GcPage, HistoryCursor, HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage,
-    JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
-    ListObjectsPage, MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor,
-    MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage,
-    MergeCursor, MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff,
-    ObjectDiffCursor, ObjectDiffPage, ObjectHeaders, ObjectPath, ObjectRangeData, ObjectSummary,
-    ObjectVersion, OperationId, OperationIndexRebuildCursor, OperationIndexRebuildStep,
-    ProviderAttestation, ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
+    CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCleanupCursor,
+    FsckCleanupPage, FsckCursor, FsckPage, GcCursor, GcPage, HistoryCursor, HistoryTransferCursor,
+    HistoryTransferMapping, HistoryTransferPage, JournalIndexRebuildCleanup,
+    JournalIndexRebuildCursor, JournalIndexRebuildStep, ListObjectsPage, MergeAdvancePage,
+    MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage, MergeCleanupCursor,
+    MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor, MergePolicy,
+    MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor, ObjectDiffPage,
+    ObjectHeaders, ObjectPath, ObjectRangeData, ObjectSummary, ObjectVersion, OperationId,
+    OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
+    ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
     RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
     RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
@@ -608,10 +609,22 @@ impl Client {
         self.repository.resume_fsck(job).await
     }
 
-    pub async fn forget_fsck(&self, job: OperationId) -> Result<()> {
+    pub async fn start_fsck_cleanup(&self, job: OperationId) -> Result<FsckCleanupCursor> {
         self.ensure_provider_qualified()?;
         self.attached_branch()?;
-        self.repository.forget_fsck(job).await
+        self.repository.start_fsck_cleanup(job).await
+    }
+
+    pub async fn advance_fsck_cleanup(
+        &self,
+        cursor: &FsckCleanupCursor,
+        max_objects: usize,
+    ) -> Result<FsckCleanupPage> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository
+            .advance_fsck_cleanup(cursor, max_objects)
+            .await
     }
 
     pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {

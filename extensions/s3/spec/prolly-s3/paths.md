@@ -51,8 +51,9 @@ byte pairs. `SS` is a two-digit ref-catalog shard.
   listing.
 - Mutable control records retain a bounded number of provider versions.
 - Every fsck page advances a CAS-protected checkpoint generation. Only the
-  durable generation may advance; completed checkpoints are explicitly
-  forgotten by exact physical-version deletion.
+  durable generation may advance. Completed jobs exact-delete payload and
+  closure work trees before deleting older and then current checkpoint
+  versions in bounded cleanup pages.
 - Branch/tag publication tickets are immutable, instance-scoped, and removed
   by exact version after the ref CAS resolves. GC may remove expired tickets.
 - There are no alternative versioned path families and no format migration
