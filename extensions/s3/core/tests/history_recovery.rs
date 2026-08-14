@@ -265,8 +265,9 @@ async fn history_diff_reflog_reset_and_recovery_are_bounded_and_audited() {
 
 #[tokio::test]
 async fn logical_repair_rebinds_across_repositories_and_removes_destination_only_keys() {
+    let source_plane = Arc::new(MemoryObjectPlane::new(true));
     let source = Repository::initialize(
-        Arc::new(MemoryObjectPlane::new(true)),
+        source_plane.clone(),
         RepositoryOptions {
             repository_prefix: ".tests/repair-source".to_string(),
             writer: "source".to_string(),
@@ -277,8 +278,9 @@ async fn logical_repair_rebinds_across_repositories_and_removes_destination_only
     )
     .await
     .unwrap();
+    let destination_plane = Arc::new(MemoryObjectPlane::new(false));
     let destination = Repository::initialize(
-        Arc::new(MemoryObjectPlane::new(false)),
+        destination_plane.clone(),
         RepositoryOptions {
             repository_prefix: ".tests/repair-destination".to_string(),
             writer: "destination".to_string(),
@@ -343,6 +345,8 @@ async fn logical_repair_rebinds_across_repositories_and_removes_destination_only
         )
         .await
         .unwrap();
+    source_plane.reset_request_counts();
+    destination_plane.reset_request_counts();
     loop {
         let page = destination
             .advance_repair_from(&source, &repair, 1)
@@ -355,6 +359,11 @@ async fn logical_repair_rebinds_across_repositories_and_removes_destination_only
     }
     assert_eq!(repair.report.copied_objects, 2);
     assert_eq!(repair.report.deleted_objects, 1);
+    assert_eq!(
+        destination_plane.request_snapshot().immutable_transfer,
+        repair.report.copied_objects,
+        "repair must delegate each complete object transfer to the provider boundary"
+    );
     assert_eq!(
         destination
             .get_object("main", b"same.txt")

@@ -1,8 +1,9 @@
 use std::{path::PathBuf, sync::Arc};
 
 use crate::{
-    codec::sha256, GetRequest, ImmutableFilePut, ImmutablePut, ObjectPath, ObjectPlane,
-    PayloadBinding, PhysicalVersion, RepositoryId, Result,
+    codec::sha256, GetRequest, ImmutableFilePut, ImmutablePut, ImmutablePutOutcome,
+    ImmutableTransfer, ObjectPath, ObjectPlane, PayloadBinding, PhysicalVersion, RepositoryId,
+    Result,
 };
 
 #[derive(Clone)]
@@ -116,6 +117,62 @@ impl<P: ObjectPlane> ImmutablePayloadStore<P> {
             ));
         }
         Ok(stored.bytes)
+    }
+
+    /// Transfer one complete immutable payload through the provider boundary.
+    /// The repository never observes transfer parts or reconstructs the body.
+    pub async fn transfer_from<Q: ObjectPlane>(
+        &self,
+        source: &ImmutablePayloadStore<Q>,
+        binding: &PayloadBinding,
+        size: u64,
+    ) -> Result<PayloadBinding> {
+        binding.validate()?;
+        if binding.path != source.expected_path(binding)? {
+            return Err(crate::Error::new(
+                crate::ErrorCode::CorruptContent,
+                "transfer source binding path does not match its content checksum",
+            ));
+        }
+        let path = self.path(binding.checksum_sha256)?;
+        let source_physical_version =
+            binding
+                .provider_version_id
+                .as_ref()
+                .map(|version_id| PhysicalVersion::Versioned {
+                    version_id: version_id.clone(),
+                });
+        let outcome = self
+            .plane
+            .transfer_immutable_from(
+                source.plane.as_ref(),
+                ImmutableTransfer {
+                    source_path: binding.path.clone(),
+                    source_physical_version,
+                    destination_path: path.clone(),
+                    size,
+                    expected_sha256: binding.checksum_sha256,
+                },
+            )
+            .await?;
+        let metadata = match outcome {
+            ImmutablePutOutcome::Created(metadata)
+            | ImmutablePutOutcome::AlreadyPresent(metadata) => metadata,
+        };
+        if metadata.len != size || metadata.sha256 != binding.checksum_sha256 {
+            return Err(crate::Error::new(
+                crate::ErrorCode::ChecksumMismatch,
+                "transferred object does not match its whole-object identity",
+            ));
+        }
+        let transferred = PayloadBinding {
+            path,
+            provider_version_id: metadata.token.version_id,
+            provider_etag: metadata.token.etag,
+            checksum_sha256: binding.checksum_sha256,
+        };
+        transferred.validate()?;
+        Ok(transferred)
     }
 
     pub fn path(&self, checksum_sha256: [u8; 32]) -> Result<ObjectPath> {

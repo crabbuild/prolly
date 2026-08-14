@@ -533,11 +533,14 @@ pub struct NodePackAttachment {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodePack {
+    /// Metadata-only Prolly node container. User object bytes are never stored
+    /// in a node pack.
     pub format_digest: TreeFormatDigest,
     /// Sorted strictly by CID.
     pub entries: Vec<NodePackEntry>,
     pub attachments: Vec<NodePackAttachment>,
-    /// Concatenated canonical node and attachment bytes.
+    /// Concatenated canonical metadata-node and attachment bytes. The field
+    /// name is retained as part of the version-1 wire format.
     pub payload: Vec<u8>,
 }
 
@@ -798,7 +801,7 @@ impl NodePack {
         Ok(pack)
     }
 
-    pub fn object_payload_offset(object_prefix: &[u8]) -> Result<u64> {
+    pub fn object_node_region_offset(object_prefix: &[u8]) -> Result<u64> {
         if object_prefix.len() < 12 || &object_prefix[..8] != NODE_PACK_MAGIC {
             return Err(Error::new(
                 ErrorCode::CorruptNode,
@@ -883,7 +886,7 @@ impl NodePack {
                 .map_err(|_| Error::new(ErrorCode::CorruptNode, "node-pack payload exceeds u64"))?,
         )?;
         for entry in &self.entries {
-            let bytes = self.payload_slice(entry.offset, entry.len)?;
+            let bytes = self.node_region_slice(entry.offset, entry.len)?;
             if sha256(bytes) != entry.sha256 || entry.cid.as_bytes() != entry.sha256 {
                 return Err(Error::new(
                     ErrorCode::CorruptNode,
@@ -892,7 +895,7 @@ impl NodePack {
             }
         }
         for attachment in &self.attachments {
-            let bytes = self.payload_slice(attachment.offset, attachment.len)?;
+            let bytes = self.node_region_slice(attachment.offset, attachment.len)?;
             if sha256(bytes) != attachment.digest {
                 return Err(Error::new(
                     ErrorCode::CorruptCommit,
@@ -908,10 +911,10 @@ impl NodePack {
             return Ok(None);
         };
         let entry = &self.entries[index];
-        Ok(Some(self.payload_slice(entry.offset, entry.len)?))
+        Ok(Some(self.node_region_slice(entry.offset, entry.len)?))
     }
 
-    fn payload_slice(&self, offset: u64, len: u32) -> Result<&[u8]> {
+    fn node_region_slice(&self, offset: u64, len: u32) -> Result<&[u8]> {
         let start = usize::try_from(offset)
             .map_err(|_| Error::new(ErrorCode::CorruptNode, "node pack offset overflow"))?;
         let end = start
@@ -1534,12 +1537,12 @@ impl CommitObject {
         Self::new(commit, node_pack)
     }
 
-    pub fn node_payload_offset(encoded: &[u8]) -> Result<Option<u64>> {
+    pub fn node_region_offset(encoded: &[u8]) -> Result<Option<u64>> {
         let (_, pack_range) = Self::ranges(encoded)?;
         if pack_range.is_empty() {
             return Ok(None);
         }
-        let relative = NodePack::object_payload_offset(&encoded[pack_range.start..])?;
+        let relative = NodePack::object_node_region_offset(&encoded[pack_range.start..])?;
         Ok(Some(pack_range.start as u64 + relative))
     }
 

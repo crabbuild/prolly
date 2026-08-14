@@ -41,6 +41,10 @@ dirty-root sequence were process-local.
    expires all tickets before scanning refs. This favors correctness over
    write availability during destructive maintenance and works across
    processes that do not share memory.
+7. Repair and history import delegate complete-object copying to the object
+   provider boundary. The repository supplies source identity, destination,
+   size, and whole-object checksum only; transfer-part state is never part of
+   repository state.
 
 ## Consequences
 

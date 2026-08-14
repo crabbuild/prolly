@@ -119,6 +119,10 @@ ingestion state. The built-in upload path requires one provider `PutObject`.
 Larger or resumable files are uploaded as one final object by an external
 provider transfer manager, then handed to Prolly for whole-object verification
 and publication. The transfer manager alone owns incomplete-upload cleanup.
+Repair and cross-repository history import also request complete-object
+transfers through the provider boundary. Repository code never reconstructs a
+body from parts; provider adapters may use native copy or an external transfer
+manager.
 
 The design has no fixed file, commit, or ref count in its logical structures,
 but real deployments are bounded by provider quotas, request cost, latency,

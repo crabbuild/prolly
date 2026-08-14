@@ -93,6 +93,20 @@ pub struct ImmutableFilePut {
     pub expected_sha256: [u8; 32],
 }
 
+/// Transfer one complete immutable object between object planes.
+///
+/// The provider adapter owns the transfer mechanism. Repository code supplies
+/// only whole-object identity and never observes multipart IDs, parts, ranges,
+/// or resumable-transfer state.
+#[derive(Clone, Debug)]
+pub struct ImmutableTransfer {
+    pub source_path: ObjectPath,
+    pub source_physical_version: Option<PhysicalVersion>,
+    pub destination_path: ObjectPath,
+    pub size: u64,
+    pub expected_sha256: [u8; 32],
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImmutablePutOutcome {
     Created(StoredMetadata),
@@ -170,6 +184,21 @@ pub trait ObjectPlane: Send + Sync + 'static {
         })
         .await
     }
+
+    /// Transfer a complete immutable object without exposing transfer parts to
+    /// repository code. Providers should override this with a native copy or
+    /// external transfer-manager handoff when available.
+    async fn transfer_immutable_from<Q: ObjectPlane>(
+        &self,
+        source: &Q,
+        request: ImmutableTransfer,
+    ) -> Result<ImmutablePutOutcome>
+    where
+        Self: Sized,
+    {
+        transfer_immutable_via_get(self, source, request).await
+    }
+
     async fn load_mutable(&self, path: &ObjectPath) -> Result<Option<StoredObject>>;
     async fn compare_exchange(&self, request: CompareExchange) -> Result<CompareExchangeOutcome>;
     async fn list(&self, request: ListRequest) -> Result<PhysicalListPage>;
@@ -200,6 +229,37 @@ pub trait ObjectPlane: Send + Sync + 'static {
     }
 }
 
+async fn transfer_immutable_via_get<P: ObjectPlane, Q: ObjectPlane>(
+    destination: &P,
+    source: &Q,
+    request: ImmutableTransfer,
+) -> Result<ImmutablePutOutcome> {
+    let stored = source
+        .get(GetRequest {
+            path: request.source_path,
+            range: None,
+            physical_version: request.source_physical_version,
+        })
+        .await?
+        .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "transfer source is missing"))?;
+    if stored.metadata.delete_marker
+        || stored.bytes.len() as u64 != request.size
+        || sha256(&stored.bytes) != request.expected_sha256
+    {
+        return Err(Error::new(
+            ErrorCode::ChecksumMismatch,
+            "transfer source does not match its whole-object identity",
+        ));
+    }
+    destination
+        .put_immutable(ImmutablePut {
+            path: request.destination_path,
+            bytes: stored.bytes,
+            expected_sha256: request.expected_sha256,
+        })
+        .await
+}
+
 #[derive(Clone)]
 pub struct MemoryObjectPlane {
     inner: Arc<RwLock<MemoryState>>,
@@ -228,6 +288,7 @@ struct MemoryRequestCounters {
     get: AtomicU64,
     head: AtomicU64,
     immutable_put: AtomicU64,
+    immutable_transfer: AtomicU64,
     compare_exchange: AtomicU64,
     list: AtomicU64,
     delete_exact: AtomicU64,
@@ -238,6 +299,7 @@ pub struct MemoryRequestSnapshot {
     pub get: u64,
     pub head: u64,
     pub immutable_put: u64,
+    pub immutable_transfer: u64,
     pub compare_exchange: u64,
     pub list: u64,
     pub delete_exact: u64,
@@ -248,6 +310,7 @@ impl MemoryRequestSnapshot {
         self.get
             + self.head
             + self.immutable_put
+            + self.immutable_transfer
             + self.compare_exchange
             + self.list
             + self.delete_exact
@@ -342,6 +405,7 @@ impl MemoryObjectPlane {
             get: load(&self.requests.get),
             head: load(&self.requests.head),
             immutable_put: load(&self.requests.immutable_put),
+            immutable_transfer: load(&self.requests.immutable_transfer),
             compare_exchange: load(&self.requests.compare_exchange),
             list: load(&self.requests.list),
             delete_exact: load(&self.requests.delete_exact),
@@ -353,6 +417,7 @@ impl MemoryObjectPlane {
             &self.requests.get,
             &self.requests.head,
             &self.requests.immutable_put,
+            &self.requests.immutable_transfer,
             &self.requests.compare_exchange,
             &self.requests.list,
             &self.requests.delete_exact,
@@ -497,6 +562,17 @@ impl ObjectPlane for MemoryObjectPlane {
                 metadata: metadata.clone(),
             });
         Ok(ImmutablePutOutcome::Created(metadata))
+    }
+
+    async fn transfer_immutable_from<Q: ObjectPlane>(
+        &self,
+        source: &Q,
+        request: ImmutableTransfer,
+    ) -> Result<ImmutablePutOutcome> {
+        self.requests
+            .immutable_transfer
+            .fetch_add(1, Ordering::Relaxed);
+        transfer_immutable_via_get(self, source, request).await
     }
 
     async fn load_mutable(&self, path: &ObjectPath) -> Result<Option<StoredObject>> {

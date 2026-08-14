@@ -4431,33 +4431,31 @@ impl<P: ObjectPlane> Repository<P> {
                     {
                         continue;
                     }
-                    let data = source
-                        .get_object_at(&cursor.source_branch, cursor.source_snapshot, &object.key)
-                        .await?
-                        .ok_or_else(|| {
-                            Error::new(
-                                ErrorCode::CorruptCommit,
-                                "repair listing points to a missing source object",
-                            )
-                        })?;
-                    let size = u64::try_from(data.bytes.len()).map_err(|_| {
-                        Error::new(ErrorCode::EntityTooLarge, "repair payload exceeds u64")
+                    object.version.validate()?;
+                    let source_binding = object.version.binding.clone().ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::CorruptCommit,
+                            "repair source live object has no payload binding",
+                        )
                     })?;
-                    let binding = self.payloads.put(data.bytes).await?;
                     let LogicalObjectVersionKind::Live {
+                        size,
                         logical_etag,
                         headers,
                         checksums,
                         user_metadata,
                         tags,
-                        ..
-                    } = data.version.body.kind
+                    } = object.version.body.kind
                     else {
                         return Err(Error::new(
                             ErrorCode::CorruptCommit,
                             "repair source current object is a delete marker",
                         ));
                     };
+                    let binding = self
+                        .payloads
+                        .transfer_from(&source.payloads, &source_binding, size)
+                        .await?;
                     mutations.push(StagedMutation {
                         body: StagedMutationBody::Put(Box::new(StagedPut {
                             key: object.key,
@@ -6271,10 +6269,10 @@ impl<P: ObjectPlane> Repository<P> {
         };
         let object = CommitObject::new(commit.clone(), Some(prepared.pack().clone()))?;
         let encoded = object.encode_object()?;
-        let offset = CommitObject::node_payload_offset(&encoded)?.ok_or_else(|| {
+        let offset = CommitObject::node_region_offset(&encoded)?.ok_or_else(|| {
             Error::new(
                 ErrorCode::InternalInvariant,
-                "prepared node pack has no payload offset",
+                "prepared node pack has no node-region offset",
             )
         })?;
         self.node_store.commit_node_pack(id, prepared, offset).await
@@ -7492,13 +7490,6 @@ impl<P: ObjectPlane> Repository<P> {
                             "source live version has no payload binding",
                         )
                     })?;
-                    let bytes = source.payloads.get(source_binding).await?;
-                    if bytes.len() as u64 != *size {
-                        return Err(Error::new(
-                            ErrorCode::ChecksumMismatch,
-                            "source payload length disagrees with its logical version",
-                        ));
-                    }
                     cursor.report.copied_payloads = checked_fsck_add(
                         cursor.report.copied_payloads,
                         1,
@@ -7509,7 +7500,11 @@ impl<P: ObjectPlane> Repository<P> {
                         *size,
                         "history-transfer-payload-byte",
                     )?;
-                    Some(self.payloads.put(bytes).await?)
+                    Some(
+                        self.payloads
+                            .transfer_from(&source.payloads, source_binding, *size)
+                            .await?,
+                    )
                 }
                 LogicalObjectVersionKind::DeleteMarker => None,
             };

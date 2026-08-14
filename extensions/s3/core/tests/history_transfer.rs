@@ -34,8 +34,9 @@ async fn put(repository: &Repository<MemoryObjectPlane>, branch: &str, key: &str
 async fn history_transfer_rebinds_payloads_and_preserves_merge_topology() {
     let source_clock = Arc::new(FixedClock::new(100_000));
     let destination_clock = Arc::new(FixedClock::new(200_000));
+    let source_plane = Arc::new(MemoryObjectPlane::new(true));
     let source = Repository::initialize(
-        Arc::new(MemoryObjectPlane::new(true)),
+        source_plane.clone(),
         options(
             ".tests/history-transfer-source",
             "source-writer",
@@ -45,8 +46,9 @@ async fn history_transfer_rebinds_payloads_and_preserves_merge_topology() {
     )
     .await
     .unwrap();
+    let destination_plane = Arc::new(MemoryObjectPlane::new(false));
     let destination = Repository::initialize(
-        Arc::new(MemoryObjectPlane::new(false)),
+        destination_plane.clone(),
         options(
             ".tests/history-transfer-destination",
             "destination-writer",
@@ -81,6 +83,8 @@ async fn history_transfer_rebinds_payloads_and_preserves_merge_topology() {
         .start_history_transfer_from(&source, "main", source_head, "main", destination_root)
         .await
         .unwrap();
+    source_plane.reset_request_counts();
+    destination_plane.reset_request_counts();
     while !transfer.complete {
         let persisted = encode_canonical(&transfer).unwrap();
         let restored: HistoryTransferCursor = decode_canonical(&persisted).unwrap();
@@ -94,6 +98,11 @@ async fn history_transfer_rebinds_payloads_and_preserves_merge_topology() {
     }
     assert!(transfer.report.imported_commits >= 5);
     assert!(transfer.report.copied_payloads >= 3);
+    assert_eq!(
+        destination_plane.request_snapshot().immutable_transfer,
+        transfer.report.copied_payloads,
+        "history import must delegate complete-object transfer to the provider boundary"
+    );
     let mapped_head = transfer.mapped_head.unwrap();
     assert_ne!(mapped_head, source_head);
     destination

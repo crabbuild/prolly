@@ -1010,7 +1010,7 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
         commit: CommitId,
         pack_id: Option<crate::NodePackId>,
         toc: Option<&NodePackToc>,
-        payload_offset: Option<u64>,
+        node_region_offset: Option<u64>,
     ) -> Result<Vec<Mutation>> {
         let Some(toc) = toc else {
             return Ok(Vec::new());
@@ -1021,17 +1021,20 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
                 "journal-indexed node pack has no logical reference",
             )
         })?;
-        let payload_offset = payload_offset.ok_or_else(|| {
+        let node_region_offset = node_region_offset.ok_or_else(|| {
             Error::new(
                 ErrorCode::CorruptCommit,
-                "journal-indexed node pack has no payload offset",
+                "journal-indexed node pack has no node-region offset",
             )
         })?;
         let mut mutations = Vec::with_capacity(toc.entries.len());
         for entry in &toc.entries {
-            let absolute_offset = payload_offset.checked_add(entry.offset).ok_or_else(|| {
-                Error::new(ErrorCode::CorruptNode, "journal node offset overflow")
-            })?;
+            let absolute_offset =
+                node_region_offset
+                    .checked_add(entry.offset)
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::CorruptNode, "journal node offset overflow")
+                    })?;
             mutations.push(Mutation::Upsert {
                 key: entry.cid.as_bytes().to_vec(),
                 val: encode_canonical(&JournalNodeIndexEntry {
@@ -1131,14 +1134,14 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
                 event.new_target,
                 object.commit.node_pack.as_ref().map(|pack| pack.id),
                 object.toc.as_ref(),
-                object.payload_offset,
+                object.node_region_offset,
             )?);
             for (parent, parent_index) in secondary_parents {
                 node_mutations.extend(self.node_pack_mutations(
                     parent,
                     parent_index.commit.node_pack.as_ref().map(|pack| pack.id),
                     parent_index.toc.as_ref(),
-                    parent_index.payload_offset,
+                    parent_index.node_region_offset,
                 )?);
             }
             let entry = self

@@ -261,12 +261,14 @@ These methods are operational controls, not normal foreground request paths:
 
 Metrics are process-local. Export them before process termination and correlate
 them with provider request IDs and service-side metrics.
-Multipart create, part, complete, abort, and transferred-byte counters are
-reported separately from single `PutObject` calls.
+Prolly reports only operations it owns. Multipart create, part, complete, abort,
+and resumable-transfer metrics belong to the external provider transfer manager
+and are intentionally absent from Prolly metrics.
 
 Journal-derived node indexes are built from compact commit descriptors and
-node-pack tables of contents. Payload sections are range-fetched only when a
-referenced node is actually read.
+metadata node-pack tables of contents. Encoded node regions are range-fetched
+only when a referenced node is actually read; node packs never contain user
+object bytes.
 
 ## Error and consistency model
 
