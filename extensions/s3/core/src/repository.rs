@@ -155,85 +155,6 @@ pub struct ListObjectsPage {
 
 /// One logical object accepted by a bounded commit-session staging window.
 pub type CommitSessionPutInput = (Vec<u8>, Vec<u8>, ObjectHeaders, BTreeMap<String, String>);
-pub type CommitSessionRepackInput = (
-    Vec<u8>,
-    Vec<u8>,
-    ObjectHeaders,
-    BTreeMap<String, String>,
-    BTreeMap<String, String>,
-);
-pub type CommitSessionAgedRepackInput = (CommitSessionRepackInput, u64);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum PayloadTemperature {
-    Hot,
-    Warm,
-    Cold,
-}
-
-/// Tiny-object pack sizing that combines durable object age with an observed
-/// access-temperature class supplied by the maintenance scheduler.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PayloadPackSizingPolicy {
-    pub hot_pack_bytes: usize,
-    pub warm_pack_bytes: usize,
-    pub cold_pack_bytes: usize,
-    pub warm_after_millis: u64,
-    pub cold_after_millis: u64,
-}
-
-impl Default for PayloadPackSizingPolicy {
-    fn default() -> Self {
-        Self {
-            hot_pack_bytes: 256 * 1_024,
-            warm_pack_bytes: 1_024 * 1_024,
-            cold_pack_bytes: 4 * 1_024 * 1_024,
-            warm_after_millis: 24 * 60 * 60 * 1_000,
-            cold_after_millis: 30 * 24 * 60 * 60 * 1_000,
-        }
-    }
-}
-
-impl PayloadPackSizingPolicy {
-    pub fn validate(self) -> Result<()> {
-        const MIN_PACK_BYTES: usize = 64 * 1_024;
-        const MAX_PACK_BYTES: usize = 4 * 1_024 * 1_024;
-        if !(MIN_PACK_BYTES..=MAX_PACK_BYTES).contains(&self.hot_pack_bytes)
-            || !(self.hot_pack_bytes..=MAX_PACK_BYTES).contains(&self.warm_pack_bytes)
-            || !(self.warm_pack_bytes..=MAX_PACK_BYTES).contains(&self.cold_pack_bytes)
-            || self.warm_after_millis < 60_000
-            || self.cold_after_millis <= self.warm_after_millis
-            || self.cold_after_millis > 365 * 24 * 60 * 60 * 1_000
-        {
-            return Err(Error::new(
-                ErrorCode::InvalidLimit,
-                "payload pack sizing policy is invalid",
-            ));
-        }
-        Ok(())
-    }
-
-    pub fn target_bytes(
-        self,
-        now_millis: u64,
-        created_at_millis: u64,
-        observed: PayloadTemperature,
-    ) -> usize {
-        let age = now_millis.saturating_sub(created_at_millis);
-        let age_class = if age >= self.cold_after_millis {
-            PayloadTemperature::Cold
-        } else if age >= self.warm_after_millis {
-            PayloadTemperature::Warm
-        } else {
-            PayloadTemperature::Hot
-        };
-        match age_class.min(observed) {
-            PayloadTemperature::Hot => self.hot_pack_bytes,
-            PayloadTemperature::Warm => self.warm_pack_bytes,
-            PayloadTemperature::Cold => self.cold_pack_bytes,
-        }
-    }
-}
 
 struct CommitMetadataCache {
     entries: BTreeMap<CommitId, (Arc<BucketCommit>, usize)>,
@@ -409,10 +330,6 @@ pub struct FsckReport {
     pub physical_payload_bytes_verified: u64,
     #[serde(default)]
     pub deep_physical_bytes_read: u64,
-    #[serde(default)]
-    pub packed_payloads_verified: u64,
-    #[serde(default)]
-    pub packed_logical_bytes_verified: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -431,24 +348,10 @@ pub struct FsckCursor {
     pub report: FsckReport,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
-struct FsckLogicalExtent {
-    range: Option<(u64, u64)>,
-    size: u64,
-    checksum_sha256: [u8; 32],
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct FsckPhysicalPayload {
     binding: crate::PayloadBinding,
-    expected_minimum_len: u64,
-    direct_size: Option<u64>,
-}
-
-#[derive(Clone, Debug)]
-struct FsckPagePayload {
-    binding: crate::PayloadBinding,
-    extents: Vec<FsckLogicalExtent>,
+    size: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -456,85 +359,6 @@ pub struct FsckPage {
     pub cursor: FsckCursor,
     pub processed: usize,
     pub complete: bool,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct PayloadPackStats {
-    pub current_objects: u64,
-    pub logical_bytes: u64,
-    pub direct_objects: u64,
-    pub packed_objects: u64,
-    pub packed_logical_bytes: u64,
-    pub unique_physical_objects: u64,
-    pub unique_physical_bytes: u64,
-    pub unique_pack_objects: u64,
-    pub unique_pack_bytes: u64,
-    pub unique_packed_extents: u64,
-    pub unique_packed_extent_bytes: u64,
-}
-
-impl PayloadPackStats {
-    pub fn pack_utilization_basis_points(&self) -> u64 {
-        if self.unique_pack_bytes == 0 {
-            return 10_000;
-        }
-        self.unique_packed_extent_bytes
-            .saturating_mul(10_000)
-            .checked_div(self.unique_pack_bytes)
-            .unwrap_or_default()
-            .min(10_000)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct PayloadPackStatsCursor {
-    pub repository: crate::RepositoryId,
-    pub branch: String,
-    pub snapshot: CommitId,
-    pub job: OperationId,
-    pub after: Option<Vec<u8>>,
-    pub seen: RootManifest,
-    pub report: PayloadPackStats,
-    pub complete: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PayloadPackStatsPage {
-    pub cursor: PayloadPackStatsCursor,
-    pub processed: usize,
-    pub complete: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PayloadPackCandidate {
-    pub path: ObjectPath,
-    pub provider_version_id: Option<String>,
-    pub physical_bytes: u64,
-    pub live_bytes: u64,
-    pub live_extents: u64,
-}
-
-impl PayloadPackCandidate {
-    pub fn utilization_basis_points(&self) -> u64 {
-        self.live_bytes
-            .saturating_mul(10_000)
-            .checked_div(self.physical_bytes)
-            .unwrap_or_default()
-            .min(10_000)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PayloadPackCandidatePage {
-    pub packs: Vec<PayloadPackCandidate>,
-    pub after: Option<Vec<u8>>,
-    pub complete: bool,
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-struct PayloadPhysicalInventory {
-    binding: crate::PayloadBinding,
-    physical_bytes: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1857,6 +1681,17 @@ impl<P: ObjectPlane> Repository<P> {
         user_metadata: BTreeMap<String, String>,
     ) -> Result<StagedMutation> {
         self.validate_commit_session(session).await?;
+        self.stage_commit_session_put_validated(key, bytes, headers, user_metadata)
+            .await
+    }
+
+    async fn stage_commit_session_put_validated(
+        &self,
+        key: Vec<u8>,
+        bytes: Vec<u8>,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    ) -> Result<StagedMutation> {
         self.validate_key(&key)?;
         if bytes.len() as u64 > self.format.canonical_limits.max_object_bytes {
             return Err(Error::new(
@@ -1886,36 +1721,20 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    /// Stage a bounded input window, packing non-empty payloads up to 4 KiB
-    /// into deterministic immutable segments no larger than 4 MiB. Larger and
-    /// empty payloads retain the direct content-addressed representation.
+    /// Stage a bounded input window as independent whole provider objects.
+    /// Uploads run concurrently, while the returned mutations are ordered by
+    /// logical key so publication remains deterministic.
     pub async fn stage_commit_session_put_batch(
-        &self,
-        session: &CommitSessionManifest,
-        objects: Vec<CommitSessionPutInput>,
-        concurrency: usize,
-    ) -> Result<Vec<StagedMutation>> {
-        self.stage_commit_session_put_batch_with_pack_max(
-            session,
-            objects,
-            concurrency,
-            4 * 1_024 * 1_024,
-        )
-        .await
-    }
-
-    async fn stage_commit_session_put_batch_with_pack_max(
         &self,
         session: &CommitSessionManifest,
         mut objects: Vec<CommitSessionPutInput>,
         concurrency: usize,
-        pack_max: usize,
     ) -> Result<Vec<StagedMutation>> {
         self.validate_commit_session(session).await?;
-        if concurrency == 0 || !(64 * 1_024..=4 * 1_024 * 1_024).contains(&pack_max) {
+        if concurrency == 0 || concurrency > 1_024 {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
-                "payload staging concurrency or pack target is invalid",
+                "payload staging concurrency is outside 1..=1024",
             ));
         }
         objects.sort_by(|left, right| left.0.cmp(&right.0));
@@ -1937,125 +1756,15 @@ impl<P: ObjectPlane> Repository<P> {
             }
         }
 
-        const SMALL_OBJECT_MAX: usize = 4 * 1024;
-        let mut packed_groups = Vec::new();
-        let mut current = Vec::new();
-        let mut current_bytes = 0_usize;
-        let mut direct = Vec::new();
-        for object in objects {
-            if object.1.is_empty() || object.1.len() > SMALL_OBJECT_MAX {
-                direct.push(object);
-                continue;
-            }
-            if !current.is_empty() && current_bytes.saturating_add(object.1.len()) > pack_max {
-                packed_groups.push(std::mem::take(&mut current));
-                current_bytes = 0;
-            }
-            current_bytes = current_bytes.saturating_add(object.1.len());
-            current.push(object);
-        }
-        if !current.is_empty() {
-            packed_groups.push(current);
-        }
-
-        let mut staged = Vec::new();
-        for group in packed_groups {
-            let pack_inputs = group
-                .iter()
-                .map(|(_, bytes, _, _)| (crate::codec::sha256(bytes), bytes.clone()))
-                .collect();
-            let bindings = self.payloads.put_pack(pack_inputs).await?;
-            for ((key, bytes, headers, user_metadata), binding) in group.into_iter().zip(bindings) {
-                staged.push(staged_put(key, bytes, headers, user_metadata, binding));
-            }
-        }
-        let direct = stream::iter(direct)
+        let staged = stream::iter(objects)
             .map(|(key, bytes, headers, user_metadata)| async move {
-                self.stage_commit_session_put(session, key, bytes, headers, user_metadata)
+                self.stage_commit_session_put_validated(key, bytes, headers, user_metadata)
                     .await
             })
             .buffer_unordered(concurrency)
             .collect::<Vec<_>>()
             .await;
-        staged.extend(direct.into_iter().collect::<Result<Vec<_>>>()?);
-        staged.sort_by(|left, right| left.key().cmp(right.key()));
-        Ok(staged)
-    }
-
-    /// Rebind existing logical content into fresh small-object packs while
-    /// preserving object headers, metadata, and tags.
-    pub async fn stage_commit_session_repack_batch(
-        &self,
-        session: &CommitSessionManifest,
-        objects: Vec<CommitSessionRepackInput>,
-        concurrency: usize,
-    ) -> Result<Vec<StagedMutation>> {
-        let mut tags = objects
-            .iter()
-            .map(|(key, _, _, _, tags)| (key.clone(), tags.clone()))
-            .collect::<BTreeMap<_, _>>();
-        let mut staged = self
-            .stage_commit_session_put_batch(
-                session,
-                objects
-                    .into_iter()
-                    .map(|(key, bytes, headers, metadata, _)| (key, bytes, headers, metadata))
-                    .collect(),
-                concurrency,
-            )
-            .await?;
-        for mutation in &mut staged {
-            let StagedMutationBody::Put(put) = &mut mutation.body else {
-                continue;
-            };
-            put.tags = tags.remove(&put.key).unwrap_or_default();
-        }
-        Ok(staged)
-    }
-
-    /// Repack tiny objects using a target derived from both object age and an
-    /// observed access-temperature class. A hot observation always keeps a
-    /// small target; cold targets are used only after the cold age threshold.
-    pub async fn stage_commit_session_repack_batch_with_policy(
-        &self,
-        session: &CommitSessionManifest,
-        objects: Vec<CommitSessionAgedRepackInput>,
-        concurrency: usize,
-        policy: PayloadPackSizingPolicy,
-        temperature: PayloadTemperature,
-    ) -> Result<Vec<StagedMutation>> {
-        policy.validate()?;
-        let now = self.options.clock.now_millis()?;
-        let mut tags = objects
-            .iter()
-            .map(|((key, _, _, _, tags), _)| (key.clone(), tags.clone()))
-            .collect::<BTreeMap<_, _>>();
-        let mut groups = BTreeMap::<usize, Vec<CommitSessionPutInput>>::new();
-        for ((key, bytes, headers, metadata, _), created_at_millis) in objects {
-            let target = policy.target_bytes(now, created_at_millis, temperature);
-            groups
-                .entry(target)
-                .or_default()
-                .push((key, bytes, headers, metadata));
-        }
-        let mut staged = Vec::new();
-        for (target, group) in groups {
-            staged.extend(
-                self.stage_commit_session_put_batch_with_pack_max(
-                    session,
-                    group,
-                    concurrency,
-                    target,
-                )
-                .await?,
-            );
-        }
-        for mutation in &mut staged {
-            let StagedMutationBody::Put(put) = &mut mutation.body else {
-                continue;
-            };
-            put.tags = tags.remove(&put.key).unwrap_or_default();
-        }
+        let mut staged = staged.into_iter().collect::<Result<Vec<_>>>()?;
         staged.sort_by(|left, right| left.key().cmp(right.key()));
         Ok(staged)
     }
@@ -2162,8 +1871,6 @@ impl<P: ObjectPlane> Repository<P> {
             provider_version_id: current.token.version_id,
             provider_etag: current.token.etag,
             checksum_sha256,
-            pack_checksum_sha256: None,
-            pack_range: None,
         };
         binding.validate()?;
         Ok(StagedMutation {
@@ -2870,33 +2577,16 @@ impl<P: ObjectPlane> Repository<P> {
                     version_id: version_id.clone(),
                 });
         let logical_range = *range.start()..=(*range.end()).min(size - 1);
-        let translated = if let Some((offset, pack_end)) = binding.pack_range {
-            let start = offset.checked_add(*logical_range.start()).ok_or_else(|| {
-                Error::new(ErrorCode::InvalidRange, "packed payload range overflow")
-            })?;
-            let end = offset
-                .checked_add(*logical_range.end())
-                .filter(|end| *end <= pack_end)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::CorruptContent,
-                        "packed payload range exceeds its logical extent",
-                    )
-                })?;
-            start..=end
-        } else {
-            logical_range.clone()
-        };
         let stored = self
             .plane
             .get(GetRequest {
                 path: binding.path.clone(),
-                range: Some(translated),
+                range: Some(logical_range.clone()),
                 physical_version,
             })
             .await?
             .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "payload is missing"))?;
-        if stored.metadata.sha256 != binding.physical_checksum_sha256()
+        if stored.metadata.sha256 != binding.checksum_sha256
             || stored.metadata.token.etag != binding.provider_etag
             || stored.metadata.token.version_id != binding.provider_version_id
         {
@@ -4053,12 +3743,24 @@ impl<P: ObjectPlane> Repository<P> {
             if retained {
                 next.report.skipped_reachable = next.report.skipped_reachable.saturating_add(1);
             } else {
-                match self
+                let deletion = self
                     .plane
                     .delete_exact(&candidate.path, candidate.physical_version)
-                    .await?
-                {
-                    DeleteOutcome::Deleted => {
+                    .await;
+                match deletion {
+                    Err(error) if error.code == ErrorCode::PermissionDenied => {
+                        next.report.protected_versions =
+                            next.report.protected_versions.saturating_add(1);
+                        next.report.protected_bytes =
+                            next.report.protected_bytes.saturating_add(candidate.len);
+                        *next
+                            .report
+                            .protected_by_kind
+                            .entry(candidate.kind)
+                            .or_default() += 1;
+                    }
+                    Err(error) => return Err(error),
+                    Ok(DeleteOutcome::Deleted) => {
                         next.report.deleted_versions =
                             next.report.deleted_versions.saturating_add(1);
                         next.report.deleted_bytes =
@@ -4069,10 +3771,10 @@ impl<P: ObjectPlane> Repository<P> {
                             .entry(candidate.kind)
                             .or_default() += 1;
                     }
-                    DeleteOutcome::NotFound => {
+                    Ok(DeleteOutcome::NotFound) => {
                         next.report.already_missing = next.report.already_missing.saturating_add(1);
                     }
-                    DeleteOutcome::TokenMismatch => {
+                    Ok(DeleteOutcome::TokenMismatch) => {
                         return Err(Error::new(
                             ErrorCode::PreconditionFailed,
                             "GC candidate changed before exact deletion",
@@ -4221,7 +3923,6 @@ impl<P: ObjectPlane> Repository<P> {
                     next.report.current_objects =
                         checked_fsck_add(next.report.current_objects, 1, "current-object")?;
                     record_fsck_logical_payload(&mut next.report, &current.version, next.deep)?;
-                    record_fsck_packed_payload(&mut next.report, &current.version)?;
                     next.after = Some(key);
                     processed += 1;
                 }
@@ -4246,7 +3947,6 @@ impl<P: ObjectPlane> Repository<P> {
                     next.report.logical_versions =
                         checked_fsck_add(next.report.logical_versions, 1, "logical-version")?;
                     record_fsck_logical_payload(&mut next.report, &version, next.deep)?;
-                    record_fsck_packed_payload(&mut next.report, &version)?;
                     versions.push(version);
                     next.after = Some(key);
                     processed += 1;
@@ -4285,7 +3985,7 @@ impl<P: ObjectPlane> Repository<P> {
                 let deep = next.deep;
                 let verified = stream::iter(records.into_iter().map(|record| async move {
                     if deep {
-                        Ok((record.expected_minimum_len, 0))
+                        Ok((record.size, 0))
                     } else {
                         self.verify_fsck_physical_payload(&record).await
                     }
@@ -4318,323 +4018,6 @@ impl<P: ObjectPlane> Repository<P> {
             complete: next.phase == FsckPhase::Complete,
             cursor: next,
             processed,
-        })
-    }
-
-    /// Start a restartable inventory of the current snapshot's direct payloads
-    /// and packed extents. The report deduplicates physical objects and logical
-    /// extents, making pack utilization meaningful even when many keys share
-    /// content.
-    pub async fn start_payload_pack_stats(&self, branch: &str) -> Result<PayloadPackStatsCursor> {
-        validate_branch(branch)?;
-        self.locator.register(branch)?;
-        self.require_branch_indexes_ready(branch).await?;
-        let snapshot = self.head(branch).await?;
-        let job = self.options.ids.operation();
-        let seen = self.payload_pack_stats_engine(job)?.create();
-        Ok(PayloadPackStatsCursor {
-            repository: self.format.repository_id,
-            branch: branch.to_string(),
-            snapshot,
-            job,
-            after: None,
-            seen: RootManifest::from_tree(&seen)?,
-            report: PayloadPackStats::default(),
-            complete: false,
-        })
-    }
-
-    /// Inspect at most `max_objects` current logical objects and persist the
-    /// unique-physical/extent set in the returned cursor.
-    pub async fn advance_payload_pack_stats(
-        &self,
-        cursor: &PayloadPackStatsCursor,
-        max_objects: usize,
-    ) -> Result<PayloadPackStatsPage> {
-        if !(1..=1_000).contains(&max_objects) {
-            return Err(Error::new(
-                ErrorCode::InvalidLimit,
-                "payload-pack stats page size must be between 1 and 1,000",
-            ));
-        }
-        if cursor.repository != self.format.repository_id
-            || cursor.job.is_nil()
-            || cursor.seen.format_digest != tree_format_digest(&self.format.state_tree_format)?
-        {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "payload-pack stats cursor is malformed",
-            ));
-        }
-        validate_branch(&cursor.branch)?;
-        if cursor.complete {
-            return Ok(PayloadPackStatsPage {
-                cursor: cursor.clone(),
-                processed: 0,
-                complete: true,
-            });
-        }
-
-        let commit = self.load_commit_object(cursor.snapshot).await?.commit;
-        let objects = self.tree_from_root(&commit.state.objects)?;
-        let object_engine = self.engine(self.node_store.clone());
-        let mut entries = match cursor.after.as_deref() {
-            Some(after) => object_engine.range_after(&objects, after, None).await?,
-            None => object_engine.prefix(&objects, b"").await?,
-        };
-        let stats_engine = self.payload_pack_stats_engine(cursor.job)?;
-        let mut seen = self.tree_from_root(&cursor.seen)?;
-        let mut mutations = Vec::new();
-        let mut pending_physical = BTreeMap::new();
-        let mut pending_extents: BTreeMap<Vec<u8>, BTreeSet<(u64, u64)>> = BTreeMap::new();
-        let mut next = cursor.clone();
-        let mut processed = 0usize;
-        while processed < max_objects {
-            let Some(entry) = entries.next().await else {
-                next.complete = true;
-                next.after = None;
-                break;
-            };
-            let (key, encoded) = entry?;
-            let current: CurrentObject = decode_canonical(&encoded)?;
-            current.version.validate()?;
-            let LogicalObjectVersionKind::Live { size, .. } = &current.version.body.kind else {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "current object tree contains a delete marker",
-                ));
-            };
-            let binding = current.version.binding.as_ref().ok_or_else(|| {
-                Error::new(
-                    ErrorCode::CorruptCommit,
-                    "current live object has no payload binding",
-                )
-            })?;
-            next.report.current_objects =
-                checked_pack_add(next.report.current_objects, 1, "current object")?;
-            next.report.logical_bytes =
-                checked_pack_add(next.report.logical_bytes, *size, "logical byte")?;
-            if binding.is_packed() {
-                next.report.packed_objects =
-                    checked_pack_add(next.report.packed_objects, 1, "packed object")?;
-                next.report.packed_logical_bytes = checked_pack_add(
-                    next.report.packed_logical_bytes,
-                    *size,
-                    "packed logical byte",
-                )?;
-            } else {
-                next.report.direct_objects =
-                    checked_pack_add(next.report.direct_objects, 1, "direct object")?;
-            }
-
-            let physical_key = payload_pack_physical_key(binding);
-            pending_physical
-                .entry(physical_key)
-                .or_insert_with(|| binding.clone());
-            if let Some((start, end)) = binding.pack_range {
-                if end < start {
-                    return Err(Error::new(
-                        ErrorCode::CorruptContent,
-                        "payload-pack extent is invalid",
-                    ));
-                }
-                pending_extents
-                    .entry(payload_pack_extent_summary_key(binding))
-                    .or_default()
-                    .insert((start, end));
-            }
-            next.after = Some(key);
-            processed += 1;
-        }
-        let physical_keys = pending_physical.keys().cloned().collect::<Vec<_>>();
-        let extent_keys = pending_extents.keys().cloned().collect::<Vec<_>>();
-        let (physical_seen, extent_seen) = futures_util::try_join!(
-            stats_engine.get_many(&seen, &physical_keys),
-            stats_engine.get_many(&seen, &extent_keys),
-        )?;
-        let missing_physical = pending_physical
-            .into_iter()
-            .zip(physical_seen)
-            .filter_map(|((key, binding), seen)| seen.is_none().then_some((key, binding)))
-            .collect::<Vec<_>>();
-        let loaded_physical = stream::iter(missing_physical.into_iter().map(
-            |(key, binding)| async move {
-                let metadata = self.plane.head(&binding.path).await?.ok_or_else(|| {
-                    Error::new(ErrorCode::MissingClosure, "payload-pack object is missing")
-                })?;
-                Ok::<_, Error>((key, binding, metadata))
-            },
-        ))
-        .buffered(32)
-        .collect::<Vec<_>>()
-        .await;
-        for loaded in loaded_physical {
-            let (key, binding, metadata) = loaded?;
-            if metadata.sha256 != binding.physical_checksum_sha256()
-                || metadata.token.etag != binding.provider_etag
-                || metadata.token.version_id != binding.provider_version_id
-            {
-                return Err(Error::new(
-                    ErrorCode::ChecksumMismatch,
-                    "payload-pack physical metadata does not match its binding",
-                ));
-            }
-            next.report.unique_physical_objects = checked_pack_add(
-                next.report.unique_physical_objects,
-                1,
-                "unique physical object",
-            )?;
-            next.report.unique_physical_bytes = checked_pack_add(
-                next.report.unique_physical_bytes,
-                metadata.len,
-                "unique physical byte",
-            )?;
-            if binding.is_packed() {
-                next.report.unique_pack_objects =
-                    checked_pack_add(next.report.unique_pack_objects, 1, "unique pack object")?;
-                next.report.unique_pack_bytes = checked_pack_add(
-                    next.report.unique_pack_bytes,
-                    metadata.len,
-                    "unique pack byte",
-                )?;
-            }
-            mutations.push(Mutation::Upsert {
-                key,
-                val: encode_canonical(&PayloadPhysicalInventory {
-                    binding,
-                    physical_bytes: metadata.len,
-                })?,
-            });
-        }
-        for ((key, extents), seen) in pending_extents.into_iter().zip(extent_seen) {
-            let mut accumulated = seen
-                .as_deref()
-                .map(decode_canonical::<Vec<(u64, u64)>>)
-                .transpose()?
-                .unwrap_or_default()
-                .into_iter()
-                .collect::<BTreeSet<_>>();
-            let mut changed = false;
-            for (start, end) in extents {
-                if !accumulated.insert((start, end)) {
-                    continue;
-                }
-                let extent_bytes = end
-                    .checked_sub(start)
-                    .and_then(|length| length.checked_add(1))
-                    .ok_or_else(|| {
-                        Error::new(ErrorCode::CorruptContent, "payload-pack extent is invalid")
-                    })?;
-                next.report.unique_packed_extents =
-                    checked_pack_add(next.report.unique_packed_extents, 1, "unique packed extent")?;
-                next.report.unique_packed_extent_bytes = checked_pack_add(
-                    next.report.unique_packed_extent_bytes,
-                    extent_bytes,
-                    "unique packed extent byte",
-                )?;
-                changed = true;
-            }
-            if !changed {
-                continue;
-            }
-            mutations.push(Mutation::Upsert {
-                key,
-                val: encode_canonical(&accumulated.into_iter().collect::<Vec<_>>())?,
-            });
-        }
-        if !mutations.is_empty() {
-            seen = stats_engine.batch(&seen, mutations).await?;
-        }
-        next.seen = RootManifest::from_tree(&seen)?;
-        Ok(PayloadPackStatsPage {
-            complete: next.complete,
-            cursor: next,
-            processed,
-        })
-    }
-
-    /// Page physical packs whose exact live extents are at or below the given
-    /// utilization threshold. The inventory cursor must be complete, binding
-    /// selection to one immutable snapshot before compaction begins.
-    pub async fn payload_pack_candidates_page(
-        &self,
-        cursor: &PayloadPackStatsCursor,
-        after: Option<&[u8]>,
-        limit: usize,
-        maximum_utilization_basis_points: u64,
-    ) -> Result<PayloadPackCandidatePage> {
-        if !cursor.complete
-            || cursor.repository != self.format.repository_id
-            || !(1..=1_000).contains(&limit)
-            || maximum_utilization_basis_points > 10_000
-        {
-            return Err(Error::new(
-                ErrorCode::InvalidLimit,
-                "pack candidates require a complete cursor, valid limit, and utilization threshold",
-            ));
-        }
-        let engine = self.payload_pack_stats_engine(cursor.job)?;
-        let tree = self.tree_from_root(&cursor.seen)?;
-        let mut entries = match after {
-            Some(after) => engine.range_after(&tree, after, None).await?,
-            None => engine.prefix(&tree, b"p/").await?,
-        };
-        let mut records = Vec::new();
-        let mut last = None;
-        let mut exhausted = true;
-        let mut scanned = 0usize;
-        while scanned < limit {
-            let Some(entry) = entries.next().await else {
-                break;
-            };
-            let (key, encoded) = entry?;
-            if !key.starts_with(b"p/") {
-                break;
-            }
-            exhausted = false;
-            last = Some(key);
-            scanned += 1;
-            let record: PayloadPhysicalInventory = decode_canonical(&encoded)?;
-            if record.binding.is_packed() {
-                records.push(record);
-            }
-        }
-        let extent_keys = records
-            .iter()
-            .map(|record| payload_pack_extent_summary_key(&record.binding))
-            .collect::<Vec<_>>();
-        let extents = engine.get_many(&tree, &extent_keys).await?;
-        let mut packs = Vec::new();
-        for (record, encoded_extents) in records.into_iter().zip(extents) {
-            let extents: Vec<(u64, u64)> = encoded_extents
-                .as_deref()
-                .map(decode_canonical)
-                .transpose()?
-                .unwrap_or_default();
-            let live_bytes = extents.iter().try_fold(0_u64, |total, (start, end)| {
-                end.checked_sub(*start)
-                    .and_then(|length| length.checked_add(1))
-                    .and_then(|length| total.checked_add(length))
-                    .ok_or_else(|| {
-                        Error::new(ErrorCode::CorruptContent, "pack live-byte extent overflow")
-                    })
-            })?;
-            let candidate = PayloadPackCandidate {
-                path: record.binding.path,
-                provider_version_id: record.binding.provider_version_id,
-                physical_bytes: record.physical_bytes,
-                live_bytes,
-                live_extents: extents.len() as u64,
-            };
-            if candidate.utilization_basis_points() <= maximum_utilization_basis_points {
-                packs.push(candidate);
-            }
-        }
-        let complete = exhausted || last.is_none();
-        Ok(PayloadPackCandidatePage {
-            packs,
-            after: (!complete).then_some(last).flatten(),
-            complete,
         })
     }
 
@@ -6907,44 +6290,34 @@ impl<P: ObjectPlane> Repository<P> {
                     "payload binding path does not match its content checksum",
                 ));
             }
-            let expected_minimum_len = binding
-                .pack_range
-                .map_or(*size, |(_, end)| end.saturating_add(1));
             let record = pending
-                .entry(payload_pack_physical_key(binding))
+                .entry(payload_physical_key(binding))
                 .or_insert_with(|| FsckPhysicalPayload {
                     binding: binding.clone(),
-                    expected_minimum_len,
-                    direct_size: (!binding.is_packed()).then_some(*size),
+                    size: *size,
                 });
             validate_same_fsck_physical_binding(&record.binding, binding)?;
-            record.expected_minimum_len = record.expected_minimum_len.max(expected_minimum_len);
-            if !binding.is_packed() && record.direct_size != Some(*size) {
+            if record.size != *size {
                 return Err(Error::new(
                     ErrorCode::ChecksumMismatch,
-                    "direct payload bindings disagree about object size",
+                    "whole-object payload bindings disagree about object size",
                 ));
             }
         }
         let keys = pending.keys().cloned().collect::<Vec<_>>();
         let existing = engine.get_many(&tree, &keys).await?;
         let mut mutations = Vec::with_capacity(pending.len());
-        for ((key, mut record), existing) in pending.into_iter().zip(existing) {
+        for ((key, record), existing) in pending.into_iter().zip(existing) {
             if let Some(encoded) = existing {
                 let accumulated: FsckPhysicalPayload = decode_canonical(&encoded)?;
                 validate_same_fsck_physical_binding(&accumulated.binding, &record.binding)?;
-                if accumulated.direct_size != record.direct_size {
+                if accumulated.size != record.size {
                     return Err(Error::new(
                         ErrorCode::ChecksumMismatch,
-                        "payload records disagree about direct object size",
+                        "payload records disagree about whole-object size",
                     ));
                 }
-                if accumulated.expected_minimum_len >= record.expected_minimum_len {
-                    continue;
-                }
-                record.expected_minimum_len = record
-                    .expected_minimum_len
-                    .max(accumulated.expected_minimum_len);
+                continue;
             }
             mutations.push(Mutation::Upsert {
                 key,
@@ -6966,11 +6339,8 @@ impl<P: ObjectPlane> Repository<P> {
             self.plane.head(&binding.path).await?.ok_or_else(|| {
                 Error::new(ErrorCode::MissingClosure, "immutable payload is missing")
             })?;
-        if metadata.len < record.expected_minimum_len
-            || record
-                .direct_size
-                .is_some_and(|direct_size| metadata.len != direct_size)
-            || metadata.sha256 != binding.physical_checksum_sha256()
+        if metadata.len != record.size
+            || metadata.sha256 != binding.checksum_sha256
             || metadata.token.etag != binding.provider_etag
             || metadata.token.version_id != binding.provider_version_id
         {
@@ -6983,7 +6353,7 @@ impl<P: ObjectPlane> Repository<P> {
     }
 
     async fn verify_fsck_logical_page(&self, versions: &[ObjectVersion]) -> Result<u64> {
-        let mut pending = BTreeMap::<Vec<u8>, FsckPagePayload>::new();
+        let mut pending = BTreeMap::<Vec<u8>, FsckPhysicalPayload>::new();
         for version in versions {
             let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
                 continue;
@@ -6995,17 +6365,18 @@ impl<P: ObjectPlane> Repository<P> {
                 )
             })?;
             let record = pending
-                .entry(payload_pack_physical_key(binding))
-                .or_insert_with(|| FsckPagePayload {
+                .entry(payload_physical_key(binding))
+                .or_insert_with(|| FsckPhysicalPayload {
                     binding: binding.clone(),
-                    extents: Vec::new(),
+                    size: *size,
                 });
             validate_same_fsck_physical_binding(&record.binding, binding)?;
-            record.extents.push(FsckLogicalExtent {
-                range: binding.pack_range,
-                size: *size,
-                checksum_sha256: binding.checksum_sha256,
-            });
+            if record.size != *size {
+                return Err(Error::new(
+                    ErrorCode::ChecksumMismatch,
+                    "whole-object payload bindings disagree about object size",
+                ));
+            }
         }
         let verified = stream::iter(
             pending
@@ -7022,7 +6393,7 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    async fn verify_fsck_page_payload(&self, record: FsckPagePayload) -> Result<u64> {
+    async fn verify_fsck_page_payload(&self, record: FsckPhysicalPayload) -> Result<u64> {
         let binding = &record.binding;
         let physical_version =
             binding
@@ -7040,35 +6411,13 @@ impl<P: ObjectPlane> Repository<P> {
             })
             .await?
             .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "immutable payload is missing"))?;
-        if crate::codec::sha256(&stored.bytes) != binding.physical_checksum_sha256() {
+        if u64::try_from(stored.bytes.len()).ok() != Some(record.size)
+            || crate::codec::sha256(&stored.bytes) != binding.checksum_sha256
+        {
             return Err(Error::new(
                 ErrorCode::CorruptContent,
-                "immutable physical payload checksum mismatch",
+                "immutable whole-object payload checksum mismatch",
             ));
-        }
-        for extent in &record.extents {
-            let bytes = match extent.range {
-                Some((start, end)) => {
-                    let start = usize::try_from(start).map_err(|_| {
-                        Error::new(ErrorCode::EntityTooLarge, "payload extent exceeds usize")
-                    })?;
-                    let end = usize::try_from(end).map_err(|_| {
-                        Error::new(ErrorCode::EntityTooLarge, "payload extent exceeds usize")
-                    })?;
-                    stored.bytes.get(start..=end).ok_or_else(|| {
-                        Error::new(ErrorCode::CorruptContent, "payload extent exceeds pack")
-                    })?
-                }
-                None => stored.bytes.as_slice(),
-            };
-            if u64::try_from(bytes.len()).ok() != Some(extent.size)
-                || crate::codec::sha256(bytes) != extent.checksum_sha256
-            {
-                return Err(Error::new(
-                    ErrorCode::CorruptContent,
-                    "immutable logical payload checksum mismatch",
-                ));
-            }
         }
         u64::try_from(stored.bytes.len())
             .map_err(|_| Error::new(ErrorCode::EntityTooLarge, "payload length exceeds u64"))
@@ -7154,25 +6503,6 @@ impl<P: ObjectPlane> Repository<P> {
             self.format.repository_id,
             tree_format_digest(&self.format.state_tree_format)?,
             self.node_cache.clone(),
-        )))
-    }
-
-    fn payload_pack_stats_engine(
-        &self,
-        job: OperationId,
-    ) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
-        if job.is_nil() {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "payload-pack stats job ID is nil",
-            ));
-        }
-        Ok(self.engine(ProllyObjectStore::new(
-            self.plane.clone(),
-            format!(
-                "{}/administration/payload-pack-stats/{job}/tree",
-                self.options.repository_prefix
-            ),
         )))
     }
 
@@ -9908,8 +9238,7 @@ fn validate_same_fsck_physical_binding(
     if existing.path != candidate.path
         || existing.provider_etag != candidate.provider_etag
         || existing.provider_version_id != candidate.provider_version_id
-        || existing.physical_checksum_sha256() != candidate.physical_checksum_sha256()
-        || existing.is_packed() != candidate.is_packed()
+        || existing.checksum_sha256 != candidate.checksum_sha256
     {
         return Err(Error::new(
             ErrorCode::ChecksumMismatch,
@@ -9919,35 +9248,7 @@ fn validate_same_fsck_physical_binding(
     Ok(())
 }
 
-fn record_fsck_packed_payload(report: &mut FsckReport, version: &ObjectVersion) -> Result<()> {
-    let (LogicalObjectVersionKind::Live { size, .. }, Some(binding)) =
-        (&version.body.kind, version.binding.as_ref())
-    else {
-        return Ok(());
-    };
-    if !binding.is_packed() {
-        return Ok(());
-    }
-    report.packed_payloads_verified =
-        checked_fsck_add(report.packed_payloads_verified, 1, "packed-payload")?;
-    report.packed_logical_bytes_verified = checked_fsck_add(
-        report.packed_logical_bytes_verified,
-        *size,
-        "packed-logical-byte",
-    )?;
-    Ok(())
-}
-
-fn checked_pack_add(current: u64, add: u64, counter: &str) -> Result<u64> {
-    current.checked_add(add).ok_or_else(|| {
-        Error::new(
-            ErrorCode::EntityTooLarge,
-            format!("payload-pack {counter} counter overflow"),
-        )
-    })
-}
-
-fn payload_pack_physical_key(binding: &crate::PayloadBinding) -> Vec<u8> {
+fn payload_physical_key(binding: &crate::PayloadBinding) -> Vec<u8> {
     let mut identity = binding.path.as_str().as_bytes().to_vec();
     identity.push(0);
     if let Some(version) = binding.provider_version_id.as_deref() {
@@ -9956,13 +9257,6 @@ fn payload_pack_physical_key(binding: &crate::PayloadBinding) -> Vec<u8> {
         identity.extend_from_slice(binding.provider_etag.as_bytes());
     }
     let mut key = b"p/".to_vec();
-    key.extend_from_slice(&crate::codec::sha256(&identity));
-    key
-}
-
-fn payload_pack_extent_summary_key(binding: &crate::PayloadBinding) -> Vec<u8> {
-    let identity = payload_pack_physical_key(binding);
-    let mut key = b"e/".to_vec();
     key.extend_from_slice(&crate::codec::sha256(&identity));
     key
 }
@@ -10181,34 +9475,6 @@ fn decode_retention_pin_tag(tag: &str) -> Result<Option<String>> {
     })
 }
 
-fn staged_put(
-    key: Vec<u8>,
-    bytes: Vec<u8>,
-    headers: ObjectHeaders,
-    user_metadata: BTreeMap<String, String>,
-    binding: crate::PayloadBinding,
-) -> StagedMutation {
-    let size = bytes.len() as u64;
-    let checksum_md5: [u8; 16] = Md5::digest(&bytes).into();
-    let checksum_sha256: [u8; 32] = Sha256::digest(&bytes).into();
-    StagedMutation {
-        body: StagedMutationBody::Put(Box::new(StagedPut {
-            key,
-            size,
-            logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
-            checksums: Checksums {
-                md5: Some(checksum_md5),
-                sha256: Some(checksum_sha256),
-                algorithm_values: BTreeMap::new(),
-            },
-            headers,
-            user_metadata,
-            tags: BTreeMap::new(),
-            binding,
-        })),
-    }
-}
-
 fn validate_options(options: &RepositoryOptions) -> Result<()> {
     crate::repository::validate_branch(&options.default_branch)?;
     options.idempotency_retention.validate()?;
@@ -10364,7 +9630,7 @@ fn gc_managed_kind(prefix: &str, path: &ObjectPath) -> Option<&'static str> {
         Some("commits")
     } else if relative.starts_with("nodes/sha256/") {
         Some("nodes")
-    } else if relative.starts_with("payloads/") || relative.starts_with("payload-packs/") {
+    } else if relative.starts_with("payloads/") {
         Some("payloads")
     } else {
         None

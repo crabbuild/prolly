@@ -137,10 +137,10 @@ read so the memory provider can no longer mask this behavior.
    durable publication admission and drains expiring per-publication tickets,
    but crash/timeout races still require live multi-process fault injection on
    every supported provider.
-4. **Large-file multipart needs provider evidence.** Streamed files at or above
-   64 MiB now use bounded multipart upload through the 5 TiB repository limit,
-   but abort cleanup, retry cost, and throughput must be qualified on RustFS
-   and AWS before promotion.
+4. **Large-file transfer needs provider-manager evidence.** Prolly deliberately
+   owns no multipart or chunk lifecycle. The embedding service must qualify its
+   provider transfer manager's resume, abort cleanup, retry cost, throughput,
+   encryption, and completed whole-object handoff on RustFS and AWS.
 5. **Disaster recovery needs provider-level drills.** History transfer and
    logical verification do not prove that bucket replication, lifecycle,
    encryption-key recovery, retention, or regional failover are configured

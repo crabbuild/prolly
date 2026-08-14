@@ -1,8 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    io::Write as _,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, io::Write as _, sync::Arc};
 
 use md5::{Digest as _, Md5};
 use prolly_s3_core::{
@@ -897,13 +893,13 @@ async fn repository_commit_session_batches_payloads_into_one_replayable_publicat
 }
 
 #[tokio::test]
-async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
+async fn repository_batch_stages_independent_whole_objects_with_whole_object_deduplication() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let repository = Repository::initialize(
-        plane,
+        plane.clone(),
         RepositoryOptions {
-            repository_prefix: ".tests/repository-payload-pack".to_string(),
-            writer: "pack-writer".to_string(),
+            repository_prefix: ".tests/repository-whole-payload".to_string(),
+            writer: "whole-object-writer".to_string(),
             provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
             ..RepositoryOptions::default()
         },
@@ -911,7 +907,7 @@ async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
     .await
     .unwrap();
     let session = repository
-        .begin_commit_session("main", "packed import", 60_000)
+        .begin_commit_session("main", "whole-object import", 60_000)
         .await
         .unwrap();
     let staged = repository
@@ -919,19 +915,19 @@ async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
             &session,
             vec![
                 (
-                    b"pack/a".to_vec(),
+                    b"objects/a".to_vec(),
                     b"same".to_vec(),
                     ObjectHeaders::default(),
                     BTreeMap::new(),
                 ),
                 (
-                    b"pack/b".to_vec(),
+                    b"objects/b".to_vec(),
                     b"same".to_vec(),
                     ObjectHeaders::default(),
                     BTreeMap::new(),
                 ),
                 (
-                    b"pack/c".to_vec(),
+                    b"objects/c".to_vec(),
                     b"next".to_vec(),
                     ObjectHeaders::default(),
                     BTreeMap::new(),
@@ -946,7 +942,7 @@ async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
         .await
         .unwrap();
     let mut bindings = Vec::new();
-    for key in [b"pack/a".as_slice(), b"pack/b", b"pack/c"] {
+    for key in [b"objects/a".as_slice(), b"objects/b", b"objects/c"] {
         bindings.push(
             repository
                 .head_object_at("main", receipt.id, key)
@@ -958,256 +954,49 @@ async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
                 .unwrap(),
         );
     }
-    assert!(bindings.iter().all(|binding| binding.is_packed()));
     assert_eq!(bindings[0].path, bindings[1].path);
-    assert_eq!(bindings[0].pack_range, bindings[1].pack_range);
-    assert_ne!(bindings[1].pack_range, bindings[2].pack_range);
+    assert_ne!(bindings[1].path, bindings[2].path);
+    assert_eq!(bindings[0].checksum_sha256, bindings[1].checksum_sha256);
+    assert_ne!(bindings[1].checksum_sha256, bindings[2].checksum_sha256);
+
+    let stored = plane
+        .list(ListRequest {
+            prefix: ".tests/repository-whole-payload/".to_string(),
+            continuation: None,
+            limit: 100,
+            include_versions: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        stored
+            .entries
+            .iter()
+            .filter(|entry| entry.path.as_str().contains("/payloads/"))
+            .count(),
+        2
+    );
+    assert!(stored
+        .entries
+        .iter()
+        .all(|entry| !entry.path.as_str().contains("payload-packs")));
 
     let range = repository
-        .get_object_range("main", receipt.id, b"pack/a", 0..=u64::MAX)
+        .get_object_range("main", receipt.id, b"objects/a", 1..=2)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(range.bytes, b"same");
-    assert_eq!(range.range, 0..=3);
-
-    let mut stats = repository.start_payload_pack_stats("main").await.unwrap();
-    while !stats.complete {
-        stats = repository
-            .advance_payload_pack_stats(&stats, 2)
-            .await
-            .unwrap()
-            .cursor;
-    }
-    assert_eq!(stats.report.current_objects, 3);
-    assert_eq!(stats.report.packed_objects, 3);
-    assert_eq!(stats.report.direct_objects, 0);
-    assert_eq!(stats.report.unique_physical_objects, 1);
-    assert_eq!(stats.report.unique_pack_objects, 1);
-    assert_eq!(stats.report.unique_pack_bytes, 8);
-    assert_eq!(stats.report.unique_packed_extents, 2);
-    assert_eq!(stats.report.unique_packed_extent_bytes, 8);
-    assert_eq!(stats.report.pack_utilization_basis_points(), 10_000);
+    assert_eq!(range.bytes, b"am");
+    assert_eq!(range.range, 1..=2);
 
     let mut fsck = repository.start_fsck("main", true).await.unwrap();
     while fsck.phase != prolly_s3_core::FsckPhase::Complete {
         let page = repository.advance_fsck(&fsck, 100).await.unwrap();
         fsck = decode_canonical(&encode_canonical(&page.cursor).unwrap()).unwrap();
     }
-    assert_eq!(fsck.report.packed_payloads_verified, 6);
-    assert_eq!(fsck.report.packed_logical_bytes_verified, 24);
-    assert_eq!(fsck.report.physical_payloads_verified, 1);
+    assert_eq!(fsck.report.physical_payloads_verified, 2);
     assert_eq!(fsck.report.physical_payload_bytes_verified, 8);
     assert_eq!(fsck.report.deep_physical_bytes_read, 8);
-
-    repository
-        .put_object(
-            "main",
-            b"pack/direct".to_vec(),
-            b"tiny".to_vec(),
-            ObjectHeaders::default(),
-            BTreeMap::new(),
-        )
-        .await
-        .unwrap();
-    let repack = repository
-        .begin_commit_session("main", "repack direct payload", 60_000)
-        .await
-        .unwrap();
-    let staged = repository
-        .stage_commit_session_repack_batch(
-            &repack,
-            vec![(
-                b"pack/direct".to_vec(),
-                b"tiny".to_vec(),
-                ObjectHeaders::default(),
-                BTreeMap::new(),
-                BTreeMap::from([("retention".to_string(), "hot".to_string())]),
-            )],
-            2,
-        )
-        .await
-        .unwrap();
-    let repacked = repository
-        .publish_commit_session(repack, staged)
-        .await
-        .unwrap();
-    let summary = repository
-        .head_object_at("main", repacked.id, b"pack/direct")
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(summary.version.binding.unwrap().is_packed());
-    let prolly_s3_core::LogicalObjectVersionKind::Live { tags, .. } = summary.version.body.kind
-    else {
-        panic!("repacked object must remain live");
-    };
-    assert_eq!(tags.get("retention").map(String::as_str), Some("hot"));
-}
-
-#[tokio::test]
-async fn repository_pack_inventory_pages_exact_sparse_candidates() {
-    let plane = Arc::new(MemoryObjectPlane::new(true));
-    let repository = Repository::initialize(
-        plane,
-        RepositoryOptions {
-            repository_prefix: ".tests/sparse-pack-candidates".to_string(),
-            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
-            ..RepositoryOptions::default()
-        },
-    )
-    .await
-    .unwrap();
-    let session = repository
-        .begin_commit_session("main", "three packed objects", 60_000)
-        .await
-        .unwrap();
-    let staged = repository
-        .stage_commit_session_put_batch(
-            &session,
-            vec![
-                (
-                    b"a".to_vec(),
-                    b"aaaa".to_vec(),
-                    Default::default(),
-                    BTreeMap::new(),
-                ),
-                (
-                    b"b".to_vec(),
-                    b"bbbb".to_vec(),
-                    Default::default(),
-                    BTreeMap::new(),
-                ),
-                (
-                    b"c".to_vec(),
-                    b"cccc".to_vec(),
-                    Default::default(),
-                    BTreeMap::new(),
-                ),
-            ],
-            3,
-        )
-        .await
-        .unwrap();
-    repository
-        .publish_commit_session(session, staged)
-        .await
-        .unwrap();
-    repository
-        .delete_objects("main", vec![b"a".to_vec(), b"b".to_vec()])
-        .await
-        .unwrap();
-    repository.advance_branch_indexes("main").await.unwrap();
-
-    let mut inventory = repository.start_payload_pack_stats("main").await.unwrap();
-    while !inventory.complete {
-        inventory = repository
-            .advance_payload_pack_stats(&inventory, 1)
-            .await
-            .unwrap()
-            .cursor;
-    }
-    assert_eq!(inventory.report.unique_pack_bytes, 12);
-    assert_eq!(inventory.report.unique_packed_extent_bytes, 4);
-    let candidates = repository
-        .payload_pack_candidates_page(&inventory, None, 10, 5_000)
-        .await
-        .unwrap();
-    assert_eq!(candidates.packs.len(), 1);
-    assert_eq!(candidates.packs[0].physical_bytes, 12);
-    assert_eq!(candidates.packs[0].live_bytes, 4);
-    assert_eq!(candidates.packs[0].live_extents, 1);
-    assert_eq!(candidates.packs[0].utilization_basis_points(), 3_333);
-}
-
-#[tokio::test]
-async fn repository_pack_sizing_requires_both_age_and_cold_temperature() {
-    use prolly_s3_core::{PayloadPackSizingPolicy, PayloadTemperature};
-
-    const DAY: u64 = 24 * 60 * 60 * 1_000;
-    let clock = Arc::new(FixedClock::new(100 * DAY));
-    let repository = Repository::initialize(
-        Arc::new(MemoryObjectPlane::new(true)),
-        RepositoryOptions {
-            repository_prefix: ".tests/pack-temperature".to_string(),
-            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
-            clock: clock.clone(),
-            ..RepositoryOptions::default()
-        },
-    )
-    .await
-    .unwrap();
-    let session = repository
-        .begin_commit_session("main", "age and temperature pack sizing", 60_000)
-        .await
-        .unwrap();
-    let policy = PayloadPackSizingPolicy {
-        hot_pack_bytes: 64 * 1_024,
-        warm_pack_bytes: 128 * 1_024,
-        cold_pack_bytes: 256 * 1_024,
-        warm_after_millis: DAY,
-        cold_after_millis: 30 * DAY,
-    };
-    let inputs = |prefix: &str, byte_offset: u8, created_at_millis: u64| {
-        (0_u8..48)
-            .map(|index| {
-                (
-                    (
-                        format!("{prefix}/{index:02}").into_bytes(),
-                        vec![byte_offset.wrapping_add(index); 4 * 1_024],
-                        ObjectHeaders::default(),
-                        BTreeMap::new(),
-                        BTreeMap::new(),
-                    ),
-                    created_at_millis,
-                )
-            })
-            .collect::<Vec<_>>()
-    };
-    let mut staged = repository
-        .stage_commit_session_repack_batch_with_policy(
-            &session,
-            inputs("recent", 0, 100 * DAY),
-            8,
-            policy,
-            PayloadTemperature::Cold,
-        )
-        .await
-        .unwrap();
-    staged.extend(
-        repository
-            .stage_commit_session_repack_batch_with_policy(
-                &session,
-                inputs("old", 64, 0),
-                8,
-                policy,
-                PayloadTemperature::Cold,
-            )
-            .await
-            .unwrap(),
-    );
-    let receipt = repository
-        .publish_commit_session(session, staged)
-        .await
-        .unwrap();
-    let mut recent_packs = BTreeSet::new();
-    let mut old_packs = BTreeSet::new();
-    for index in 0_u8..48 {
-        for (prefix, packs) in [("recent", &mut recent_packs), ("old", &mut old_packs)] {
-            let summary = repository
-                .head_object_at(
-                    "main",
-                    receipt.id,
-                    format!("{prefix}/{index:02}").as_bytes(),
-                )
-                .await
-                .unwrap()
-                .unwrap();
-            packs.insert(summary.version.binding.unwrap().path);
-        }
-    }
-    assert_eq!(recent_packs.len(), 3);
-    assert_eq!(old_packs.len(), 1);
 }
 
 #[tokio::test]

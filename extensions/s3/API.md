@@ -26,7 +26,6 @@ operations from administrative maintenance.
 | Move a branch administratively | `reset_branch` |
 | Merge branches | `start_merge`, `advance_merge`, `publish_merge` |
 | Check repository integrity | `start_fsck`, `advance_fsck` |
-| Inspect/repack small-payload storage | `start_payload_pack_stats`, `advance_payload_pack_stats`, `repack_payloads_page` |
 | Reclaim unreachable immutable data | `start_gc`, `advance_gc`, `sweep_gc` |
 | Synchronize only one logical snapshot | `start_repair_from`, `start_clone_from`, `start_fetch_from`, `start_push_to` |
 | Preserve a complete source commit DAG | `start_history_clone_from`, `start_history_fetch_from`, `start_history_push_to` |
@@ -118,9 +117,13 @@ accepts a fallible `Stream` plus `BulkWriteOptions` for bounded-memory ingestion
 from an unbounded source. Completed checkpoint windows remain resumable after
 cancellation or a source/object failure.
 
-Streamed commit-session objects use multipart upload at 64 MiB and above. Part
-size is derived from the object length (up to the 5 TiB repository limit), with
-eight parts in flight and abort cleanup if staging fails or is cancelled.
+Every distinct payload is stored as one complete immutable provider object.
+Built-in streaming uses one bounded disk spool followed by one conditional
+`PutObject`, so it is limited by the provider single-PUT maximum. For larger or
+resumable transfers, call `prepare_external_object_upload`, complete the one
+final object with a provider transfer manager, and then call
+`stage_external_object_upload`. Prolly never persists upload IDs, parts, or
+payload extents.
 
 For explicit control, call `begin_commit`. `CommitSessionBuilder` supports:
 
@@ -194,11 +197,9 @@ pruned without loading full commit node packs.
 Advance either mode with `advance_fsck`, persisting the cursor after every
 page.
 
-`FsckReport` separates packed logical references and bytes. For unique physical
-pack counts, referenced extents, and utilization, page
-`start_payload_pack_stats` with `advance_payload_pack_stats`. Low-utilization
-serving layouts can be compacted with `repack_payloads_page`; repacking creates
-ordinary versioned commits and does not invalidate historical reads.
+`FsckReport` separately counts logical payload references, distinct complete
+physical objects, verified bytes, and deep content bytes. Payload bodies are
+never packed or split by Prolly.
 
 ### GC
 

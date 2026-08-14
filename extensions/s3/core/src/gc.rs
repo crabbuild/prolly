@@ -50,8 +50,14 @@ pub struct GcReport {
     pub deleted_bytes: u64,
     pub already_missing: u64,
     pub skipped_reachable: u64,
+    #[serde(default)]
+    pub protected_versions: u64,
+    #[serde(default)]
+    pub protected_bytes: u64,
     pub candidates_by_kind: BTreeMap<String, u64>,
     pub deleted_by_kind: BTreeMap<String, u64>,
+    #[serde(default)]
+    pub protected_by_kind: BTreeMap<String, u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

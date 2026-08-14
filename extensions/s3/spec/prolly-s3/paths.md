@@ -11,7 +11,6 @@ repository format.
 | branch ref | `P/refs/heads/N` |
 | tag ref | `P/refs/tags/N` |
 | immutable payload | `P/payloads/R/sha256/H0/H1/H` |
-| immutable payload pack | `P/payload-packs/R/sha256/H0/H1/H` |
 | immutable commit | `P/commits/sha256/H0/H1/H` |
 | publication event | `P/publications/sha256/H0/H1/H` |
 | commit-session state | `P/staging/R/B/...` |
@@ -40,7 +39,8 @@ byte pairs. `SS` is a two-digit ref-catalog shard.
 - Branch refs point to immutable publication events; the event points to the
   commit and previous event.
 - Payload paths derive from repository identity and content hash. Identical
-  bytes in one repository may reuse a payload object.
+  bytes in one repository may reuse a complete payload object. A payload path
+  never stores multiple logical bodies or a chunk of one logical body.
 - Delete markers do not have payload paths.
 - Ordinary reads and index maintenance must not discover nodes by namespace
   listing.

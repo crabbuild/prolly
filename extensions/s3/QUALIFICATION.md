@@ -64,7 +64,8 @@ Run ignored scale tests explicitly and record:
 - crash/restart between external upload and Prolly publication, with no upload
   ID or part lifecycle persisted by Prolly;
 - cross-process publication fencing throughout a complete GC epoch;
-- payload-pack utilization before and after bounded repack pages.
+- one complete provider object per distinct logical payload, with no payload
+  packs, chunk manifests, or Prolly-owned multipart state.
 
 Results must include p50/p95/p99 latency, S3 calls by operation, bytes
 transferred, CAS retries, cache hit ratio, index lag, wall time, provider
@@ -132,11 +133,28 @@ Do not promote on RustFS results alone. AWS qualification must cover:
 - cache-loss cold start;
 - lifecycle and replication interactions.
 
+Optional dedicated policy buckets extend the AWS matrix without changing
+bucket configuration during the test:
+
+- `PROLLY_S3_AWS_BUCKET_LIFECYCLE` must contain a lifecycle rule and must be
+  rejected before any probe object is written.
+- `PROLLY_S3_AWS_BUCKET_OBJECT_LOCK_DEFAULT` must have default Object Lock
+  retention and must be rejected before probe writes.
+- `PROLLY_S3_AWS_BUCKET_REPLICATED` must have active replication and must be
+  accepted with `replication_enabled=true`; destination lifecycle, ownership,
+  KMS, and replication lag remain operator assertions.
+
 The signed provider capability profile records whether replication
 configuration was readable and whether replication was enabled. Replication is
 reported rather than rejected because it does not mutate source objects, but
 its destination lifecycle, replica ownership, KMS grants, latency, and request
 cost must be included in the deployment runbook.
+
+GC treats an exact-delete `PermissionDenied` as a provider-protected physical
+version, records its count, bytes, and object kind, and continues the bounded
+sweep. This lets Object Lock retention or legal hold preserve the version
+without leaving repository publication admission closed indefinitely. Any
+other deletion error remains terminal and the durable epoch stays resumable.
 
 ## Promotion criteria
 

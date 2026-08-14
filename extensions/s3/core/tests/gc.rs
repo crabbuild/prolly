@@ -18,7 +18,7 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
         .await
         .unwrap();
     let session = repository
-        .begin_commit_session("main", "shared live pack", 60_000)
+        .begin_commit_session("main", "independent live objects", 60_000)
         .await
         .unwrap();
     let staged = repository
@@ -42,12 +42,12 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
         )
         .await
         .unwrap();
-    let packed_commit = repository
+    let batch_commit = repository
         .publish_commit_session(session, staged)
         .await
         .unwrap();
-    let live_pack = repository
-        .head_object_at("main", packed_commit.id, b"packed/a")
+    let live_payload = repository
+        .head_object_at("main", batch_commit.id, b"packed/a")
         .await
         .unwrap()
         .unwrap()
@@ -88,20 +88,21 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
         })
         .await
         .unwrap();
-    let orphan_pack_path = ObjectPath::new(format!(
-        ".tests/gc/payload-packs/sha256/ee/ee/{}",
-        "ee".repeat(32)
+    let protected_path = ObjectPath::new(format!(
+        ".tests/gc/payloads/sha256/dd/dd/{}",
+        "dd".repeat(32)
     ))
     .unwrap();
-    let orphan_pack = b"unreachable immutable pack".to_vec();
+    let protected = b"provider-retained orphan".to_vec();
     plane
         .put_immutable(ImmutablePut {
-            path: orphan_pack_path.clone(),
-            expected_sha256: Sha256::digest(&orphan_pack).into(),
-            bytes: orphan_pack,
+            path: protected_path.clone(),
+            expected_sha256: Sha256::digest(&protected).into(),
+            bytes: protected.clone(),
         })
         .await
         .unwrap();
+    plane.protect_exact_deletes(protected_path.clone());
     tokio::time::sleep(Duration::from_millis(5)).await;
 
     let external_writer = Repository::open(plane.clone(), options.clone())
@@ -185,9 +186,11 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
     }
     assert_eq!(gc.phase, GcPhase::Complete);
     assert!(gc.report.deleted_versions >= 1);
+    assert_eq!(gc.report.protected_versions, 1);
+    assert_eq!(gc.report.protected_bytes, protected.len() as u64);
     assert!(plane.head(&orphan_path).await.unwrap().is_none());
-    assert!(plane.head(&orphan_pack_path).await.unwrap().is_none());
-    assert!(plane.head(&live_pack).await.unwrap().is_some());
+    assert!(plane.head(&protected_path).await.unwrap().is_some());
+    assert!(plane.head(&live_payload).await.unwrap().is_some());
     assert_eq!(
         repository
             .get_object("main", b"packed/b")

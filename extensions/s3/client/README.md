@@ -488,8 +488,8 @@ while gc.phase != GcPhase::Complete {
 }
 ```
 
-The collector sweeps only immutable commit, direct-node, direct-payload, and
-payload-pack objects.
+The collector sweeps only immutable commit, direct-node, and whole-payload
+objects.
 It never sweeps mutable refs, derived indexes, publication journals, format
 markers, or administration data. Branch and tag updates during an epoch write
 dirty-root records before their CAS; sweep batches fence publication and catch
@@ -540,19 +540,11 @@ bytes, and admission rejections.
 
 ## Performance model
 
-- A single-file write uploads one payload and publishes immutable metadata.
-- A tiny-file batch uploads one payload pack per segment; direct payloads use
-  bounded parallel uploads. Tree and publication requests are amortized across
-  the batch.
-- A completed `PayloadPackStatsCursor` can page exact per-pack live-byte
-  candidates by utilization. `repack_sparse_payloads_page` rewrites only keys
-  that still reference selected physical versions, uses a snapshot-bound list
-  frontier, and skips logically changed keys; immutable historical readers
-  keep using the old pack until retention-aware GC can remove it.
-- `PayloadPackSizingPolicy` combines each version's durable age with a
-  scheduler-supplied `PayloadTemperature`. Recent or hot objects remain in
-  small packs; warm and cold targets become eligible only after their age
-  thresholds. Defaults are 256 KiB hot, 1 MiB warm, and 4 MiB cold.
+- Every distinct logical payload is one complete immutable provider object.
+  Exact duplicate bodies may reuse that complete object by content hash.
+- Tiny-file batches upload those whole objects with bounded concurrency. Tree,
+  checkpoint, and publication requests are amortized across the batch; Prolly
+  never combines file bodies or records payload extents.
 - A current or historical read resolves a ref/commit/tree path and one payload.
 - Warm immutable-node caches remove most repeated metadata reads.
 - Branch creation inherits immutable derived-index roots from its source and is
@@ -564,6 +556,8 @@ bytes, and admission rejections.
   `prepare_external_object_upload`, upload the single final object with their
   provider transfer manager, then call `stage_external_object_upload`. Prolly
   persists no upload ID, part geometry, part ETags, chunks, or chunk manifest.
+- Metadata node packs contain only Prolly index nodes. They never contain user
+  object bodies and are not a payload storage or transfer format.
 - Same-branch writers contend on one ref CAS; different branches publish
   independently.
 
@@ -588,6 +582,9 @@ latency or cost claim substitutes for AWS qualification.
   coordinator, fences writer handles in other processes, checkpoints its epoch,
   and resumes after process restart. Writers bypassing the repository protocol
   remain unsupported.
+- Provider-retained or legal-held versions that reject exact deletion are
+  counted in `GcReport::protected_versions`/`protected_bytes`; they remain
+  physically present while GC completes and publication admission reopens.
 - Snapshot clone/fetch/push preserves only the selected logical state. The
   `history_` variants preserve the source commit DAG, but not source commit IDs
   or reflog identity.

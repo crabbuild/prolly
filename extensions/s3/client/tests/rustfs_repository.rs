@@ -924,10 +924,11 @@ async fn rustfs_streaming_bulk_write_is_bounded_batched_and_ordered() {
         return;
     }
     let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("streaming-bulk-write");
     let client = Client::builder()
-        .aws_client(aws)
+        .aws_client(aws.clone())
         .bucket(&bucket)
-        .repository_prefix(unique_name("streaming-bulk-write"))
+        .repository_prefix(&repository_prefix)
         .writer("rustfs-streaming-bulk-writer")
         .provider_identity(provider_identity())
         .attestation_signer(attestation_signer())
@@ -975,9 +976,19 @@ async fn rustfs_streaming_bulk_write_is_bounded_batched_and_ordered() {
         .unwrap();
     let first_binding = first.version.binding.unwrap();
     let second_binding = second.version.binding.unwrap();
-    assert!(first_binding.is_packed());
-    assert_eq!(first_binding.path, second_binding.path);
-    assert_ne!(first_binding.pack_range, second_binding.pack_range);
+    assert_ne!(first_binding.path, second_binding.path);
+    assert!(!first_binding.path.as_str().contains("payload-packs"));
+    assert!(!second_binding.path.as_str().contains("payload-packs"));
+    let physical_payloads = aws
+        .list_objects_v2()
+        .bucket(&bucket)
+        .prefix(format!("{repository_prefix}/payloads/"))
+        .max_keys(1_000)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(physical_payloads.key_count(), Some(257));
+    assert!(!physical_payloads.is_truncated().unwrap_or(false));
     assert_eq!(
         client
             .get_object_range(receipts[0].id, "stream/0000.txt", 0..=u64::MAX)
@@ -1087,9 +1098,12 @@ async fn rustfs_streaming_bulk_exceeds_500_files_per_second() {
     let throughput = FILES as f64 / elapsed.as_secs_f64();
     let metrics = client.reset_s3_operation_metrics();
     eprintln!(
-        "RUSTFS_STREAMING_BULK files={FILES} wall_ms={} files_per_second={throughput:.2} s3_calls={} uploaded_bytes={}",
+        "RUSTFS_STREAMING_BULK files={FILES} wall_ms={} files_per_second={throughput:.2} s3_calls={} put_object={} get_object={} head_object={} uploaded_bytes={}",
         elapsed.as_millis(),
         metrics.total_calls(),
+        metrics.put_object,
+        metrics.get_object,
+        metrics.head_object,
         metrics.uploaded_body_bytes,
     );
     assert_eq!(receipts.len(), 1);

@@ -349,6 +349,26 @@ async fn probe_provider(
     repository_prefix: &str,
     bucket_class: BucketClass,
 ) -> Result<ProviderCapabilities> {
+    // Inspect policies before creating probe objects. A default retention rule
+    // could otherwise lock qualification debris, and a lifecycle rule could
+    // mutate probes while their consistency semantics are being measured.
+    let conflicting_lifecycle_rule = lifecycle_conflicts(plane.client(), plane.bucket()).await?;
+    if conflicting_lifecycle_rule {
+        return Err(not_qualified(
+            "bucket lifecycle rules can mutate repository objects",
+        ));
+    }
+    let default_object_lock_retention =
+        object_lock_conflicts(plane.client(), plane.bucket()).await?;
+    if default_object_lock_retention {
+        return Err(not_qualified(
+            "bucket default Object Lock retention would retain qualification and repository objects",
+        ));
+    }
+    let (replication_configuration_readable, replication_enabled) =
+        replication_status(plane.client(), plane.bucket(), bucket_class).await?;
+    let physical_versioning = bucket_versioning(plane.client(), plane.bucket()).await?;
+
     let probe = format!(
         "{repository_prefix}/probes/{}/",
         prolly_s3_core::OperationId::new()
@@ -475,7 +495,6 @@ async fn probe_provider(
         ));
     }
 
-    let physical_versioning = bucket_versioning(plane.client(), plane.bucket()).await?;
     if matches!(
         physical_versioning,
         PhysicalVersioning::Enabled | PhysicalVersioning::Suspended
@@ -518,11 +537,6 @@ async fn probe_provider(
         ));
     }
 
-    let conflicting_lifecycle_rule = lifecycle_conflicts(plane.client(), plane.bucket()).await?;
-    let default_object_lock_retention =
-        object_lock_conflicts(plane.client(), plane.bucket()).await?;
-    let (replication_configuration_readable, replication_enabled) =
-        replication_status(plane.client(), plane.bucket(), bucket_class).await?;
     Ok(ProviderCapabilities {
         conditional_create: true,
         conditional_update: true,

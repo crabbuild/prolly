@@ -1578,9 +1578,10 @@ pub struct MutationIdentity {
     pub authority: AuthorityStamp,
 }
 
-/// Repository payload binding. The physical path is explicit because
-/// stores content under immutable derived keys instead of accumulating
-/// provider versions at the logical user key.
+/// Repository binding for one complete immutable payload object. The physical
+/// path is explicit because Prolly stores whole content under derived keys
+/// instead of accumulating provider versions at the logical user key. This
+/// format deliberately has no chunk, segment, or byte-extent fields.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayloadBinding {
     pub path: ObjectPath,
@@ -1588,36 +1589,17 @@ pub struct PayloadBinding {
     pub provider_etag: String,
     /// SHA-256 of this logical object's bytes.
     pub checksum_sha256: [u8; 32],
-    /// SHA-256 of the physical pack. Absent for legacy/direct payloads.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pack_checksum_sha256: Option<[u8; 32]>,
-    /// Inclusive logical extent inside the physical pack.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pack_range: Option<(u64, u64)>,
 }
 
 impl PayloadBinding {
     pub fn validate(&self) -> Result<()> {
-        let pack_shape_valid = match (self.pack_checksum_sha256, self.pack_range) {
-            (None, None) => true,
-            (Some(physical), Some((start, end))) => physical != [0; 32] && start <= end,
-            _ => false,
-        };
-        if self.provider_etag.is_empty() || self.checksum_sha256 == [0; 32] || !pack_shape_valid {
+        if self.provider_etag.is_empty() || self.checksum_sha256 == [0; 32] {
             return Err(Error::new(
                 ErrorCode::CorruptCommit,
                 "physical payload binding is malformed",
             ));
         }
         Ok(())
-    }
-
-    pub fn physical_checksum_sha256(&self) -> [u8; 32] {
-        self.pack_checksum_sha256.unwrap_or(self.checksum_sha256)
-    }
-
-    pub fn is_packed(&self) -> bool {
-        self.pack_range.is_some()
     }
 }
 

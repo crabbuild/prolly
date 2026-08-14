@@ -212,6 +212,7 @@ pub struct MemoryObjectPlane {
     compare_exchange_delay_millis: Arc<AtomicU64>,
     compare_exchange_in_flight: Arc<AtomicU64>,
     compare_exchange_max_in_flight: Arc<AtomicU64>,
+    delete_protected_paths: Arc<RwLock<std::collections::BTreeSet<ObjectPath>>>,
 }
 
 struct InFlightGuard(Arc<AtomicU64>);
@@ -278,6 +279,7 @@ impl MemoryObjectPlane {
             compare_exchange_delay_millis: Arc::new(AtomicU64::new(0)),
             compare_exchange_in_flight: Arc::new(AtomicU64::new(0)),
             compare_exchange_max_in_flight: Arc::new(AtomicU64::new(0)),
+            delete_protected_paths: Arc::new(RwLock::new(std::collections::BTreeSet::new())),
         }
     }
 
@@ -309,6 +311,21 @@ impl MemoryObjectPlane {
     pub fn reset_compare_exchange_concurrency(&self) {
         self.compare_exchange_max_in_flight
             .store(0, Ordering::Relaxed);
+    }
+
+    /// Test hook modeling provider retention or Object Lock legal hold.
+    pub fn protect_exact_deletes(&self, path: ObjectPath) {
+        self.delete_protected_paths
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(path);
+    }
+
+    pub fn allow_exact_deletes(&self, path: &ObjectPath) {
+        self.delete_protected_paths
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(path);
     }
 
     /// Test hook that applies the next successful CAS, then reports a
@@ -627,6 +644,17 @@ impl ObjectPlane for MemoryObjectPlane {
         version: PhysicalVersion,
     ) -> Result<DeleteOutcome> {
         self.requests.delete_exact.fetch_add(1, Ordering::Relaxed);
+        if self
+            .delete_protected_paths
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "memory lock poisoned"))?
+            .contains(path)
+        {
+            return Err(Error::new(
+                ErrorCode::PermissionDenied,
+                "exact delete is blocked by provider retention",
+            ));
+        }
         let mut state = self
             .inner
             .write()

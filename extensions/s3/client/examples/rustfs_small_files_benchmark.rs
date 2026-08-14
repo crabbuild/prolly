@@ -190,7 +190,6 @@ async fn main() -> BenchResult {
     let read_passes = env("PROLLY_RUSTFS_PERF_READ_PASSES", "1").parse::<usize>()?;
     let node_cache_mib = env("PROLLY_RUSTFS_PERF_NODE_CACHE_MIB", "64").parse::<usize>()?;
     let rebuild_index = env("PROLLY_RUSTFS_PERF_REBUILD_INDEX", "false").parse::<bool>()?;
-    let run_pack_stats = env("PROLLY_RUSTFS_PERF_PACK_STATS", "false").parse::<bool>()?;
     let run_gc = env("PROLLY_RUSTFS_PERF_GC", "false").parse::<bool>()?;
     let abandon_incomplete_gc =
         env("PROLLY_RUSTFS_PERF_GC_ABANDON_INCOMPLETE", "false").parse::<bool>()?;
@@ -287,7 +286,7 @@ async fn main() -> BenchResult {
     let client = builder.initialize().await?;
 
     println!(
-        "CONFIG endpoint={endpoint} bucket={bucket} prefix={prefix} writer={writer} stages={stages:?} existing_files={existing_files} branch_changes={branch_changes} list_passes={list_passes} read_passes={read_passes} node_cache_mib={node_cache_mib} foyer={} rebuild_index={rebuild_index} foreground={run_foreground} pack_stats={run_pack_stats} fsck={fsck_mode} gc={run_gc} gc_grace_millis={gc_grace_millis} object_bytes={} mutations_per_commit={MUTATIONS_PER_COMMIT} write_concurrency={write_concurrency} read_samples={read_sample_size} read_concurrency={read_concurrency}",
+        "CONFIG endpoint={endpoint} bucket={bucket} prefix={prefix} writer={writer} stages={stages:?} existing_files={existing_files} branch_changes={branch_changes} list_passes={list_passes} read_passes={read_passes} node_cache_mib={node_cache_mib} foyer={} rebuild_index={rebuild_index} foreground={run_foreground} fsck={fsck_mode} gc={run_gc} gc_grace_millis={gc_grace_millis} object_bytes={} mutations_per_commit={MUTATIONS_PER_COMMIT} write_concurrency={write_concurrency} read_samples={read_sample_size} read_concurrency={read_concurrency}",
         if cfg!(feature = "foyer-cache")
             && std::env::var_os("PROLLY_RUSTFS_PERF_FOYER_DIR").is_some()
         {
@@ -579,47 +578,6 @@ async fn main() -> BenchResult {
         println!("STAGE_COMPLETE target={target}");
         prior_target = target;
     }
-    if run_pack_stats {
-        let cache_before = client.node_cache_snapshot();
-        client.reset_s3_operation_metrics();
-        wire.reset();
-        let started = Instant::now();
-        let mut cursor = client.start_payload_pack_stats().await?;
-        let mut pages = 0usize;
-        loop {
-            let page = client.advance_payload_pack_stats(&cursor, 1_000).await?;
-            pages += 1;
-            cursor = page.cursor;
-            if pages % 100 == 0 {
-                println!(
-                    "PACK_STATS_PROGRESS pages={pages} current_objects={}",
-                    cursor.report.current_objects,
-                );
-            }
-            if page.complete {
-                break;
-            }
-        }
-        println!(
-            "PACK_STATS wall_ms={:.3} pages={pages} current_objects={} logical_bytes={} direct_objects={} packed_objects={} packed_logical_bytes={} unique_physical_objects={} unique_physical_bytes={} unique_pack_objects={} unique_pack_bytes={} unique_packed_extents={} unique_packed_extent_bytes={} utilization_basis_points={}",
-            millis(started.elapsed()),
-            cursor.report.current_objects,
-            cursor.report.logical_bytes,
-            cursor.report.direct_objects,
-            cursor.report.packed_objects,
-            cursor.report.packed_logical_bytes,
-            cursor.report.unique_physical_objects,
-            cursor.report.unique_physical_bytes,
-            cursor.report.unique_pack_objects,
-            cursor.report.unique_pack_bytes,
-            cursor.report.unique_packed_extents,
-            cursor.report.unique_packed_extent_bytes,
-            cursor.report.pack_utilization_basis_points(),
-        );
-        print_provider_metrics("pack_stats", client.reset_s3_operation_metrics());
-        print_wire_metrics("pack_stats", wire.reset());
-        print_cache_metrics("pack_stats", cache_before, client.node_cache_snapshot());
-    }
     if fsck_mode != "none" {
         let cache_before = client.node_cache_snapshot();
         client.reset_s3_operation_metrics();
@@ -645,7 +603,7 @@ async fn main() -> BenchResult {
             }
         }
         println!(
-            "FSCK mode={fsck_mode} wall_ms={:.3} pages={pages} commits={} reachable_nodes={} current_objects={} logical_versions={} payloads_verified={} payload_bytes_verified={} deep_content_bytes_verified={} physical_payloads_verified={} physical_payload_bytes_verified={} deep_physical_bytes_read={} packed_payloads_verified={} packed_logical_bytes_verified={}",
+            "FSCK mode={fsck_mode} wall_ms={:.3} pages={pages} commits={} reachable_nodes={} current_objects={} logical_versions={} payloads_verified={} payload_bytes_verified={} deep_content_bytes_verified={} physical_payloads_verified={} physical_payload_bytes_verified={} deep_physical_bytes_read={}",
             millis(started.elapsed()),
             cursor.report.commits,
             cursor.report.reachable_nodes,
@@ -657,8 +615,6 @@ async fn main() -> BenchResult {
             cursor.report.physical_payloads_verified,
             cursor.report.physical_payload_bytes_verified,
             cursor.report.deep_physical_bytes_read,
-            cursor.report.packed_payloads_verified,
-            cursor.report.packed_logical_bytes_verified,
         );
         print_provider_metrics("fsck", client.reset_s3_operation_metrics());
         print_wire_metrics("fsck", wire.reset());
@@ -705,7 +661,7 @@ async fn main() -> BenchResult {
             }
         }
         println!(
-            "GC wall_ms={:.3} pages={pages} roots={} commits={} nodes={} logical_versions={} candidates={} candidate_bytes={} dirty_roots={} deleted_versions={} deleted_bytes={} already_missing={} skipped_reachable={}",
+            "GC wall_ms={:.3} pages={pages} roots={} commits={} nodes={} logical_versions={} candidates={} candidate_bytes={} dirty_roots={} deleted_versions={} deleted_bytes={} protected_versions={} protected_bytes={} already_missing={} skipped_reachable={}",
             millis(started.elapsed()),
             cursor.report.roots,
             cursor.report.commits,
@@ -716,6 +672,8 @@ async fn main() -> BenchResult {
             cursor.report.dirty_roots,
             cursor.report.deleted_versions,
             cursor.report.deleted_bytes,
+            cursor.report.protected_versions,
+            cursor.report.protected_bytes,
             cursor.report.already_missing,
             cursor.report.skipped_reachable,
         );

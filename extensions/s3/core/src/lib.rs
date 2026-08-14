@@ -65,15 +65,12 @@ pub use repository::{
     validate_branch, BackupVerificationCursor, BackupVerificationPage, BackupVerificationReport,
     BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth,
     BranchIndexMaintenance, CommitClosureCursor, CommitClosurePage, CommitPage, CommitReceipt,
-    CommitSessionAgedRepackInput, CommitSessionPutInput, CommitSessionRepackInput,
-    DelimitedObjectPage, FsckCursor, FsckPage, FsckPhase, FsckReport, HistoryCursor,
-    ListObjectsPage, NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor,
-    ObjectDiffPage, ObjectRangeData, ObjectSummary, PayloadPackCandidate, PayloadPackCandidatePage,
-    PayloadPackSizingPolicy, PayloadPackStats, PayloadPackStatsCursor, PayloadPackStatsPage,
-    PayloadTemperature, RefCatalogRepairPage, RefMoveReceipt, RepairCursor, RepairPage,
-    RepairPhase, RepairReport, Repository, RepositoryOptions, RestoreCursor, RestorePage,
-    RetentionPin, RetentionPinPage, ShardAuthorityMaintenance, Tag, TagCatalogPage,
-    TraversalBudget, VersionSummary,
+    CommitSessionPutInput, DelimitedObjectPage, FsckCursor, FsckPage, FsckPhase, FsckReport,
+    HistoryCursor, ListObjectsPage, NodeCachePrewarmReport, ObjectData, ObjectDiff,
+    ObjectDiffCursor, ObjectDiffPage, ObjectRangeData, ObjectSummary, RefCatalogRepairPage,
+    RefMoveReceipt, RepairCursor, RepairPage, RepairPhase, RepairReport, Repository,
+    RepositoryOptions, RestoreCursor, RestorePage, RetentionPin, RetentionPinPage,
+    ShardAuthorityMaintenance, Tag, TagCatalogPage, TraversalBudget, VersionSummary,
 };
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};

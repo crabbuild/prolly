@@ -32,6 +32,29 @@ fn signer() -> Arc<HmacAttestationSigner> {
     Arc::new(HmacAttestationSigner::single("aws-qualification", vec![0x51; 32]).unwrap())
 }
 
+async fn assert_policy_bucket_rejected(
+    aws: &aws_sdk_s3::Client,
+    bucket: &str,
+    region: &str,
+    profile: &str,
+) {
+    let result = Client::builder()
+        .aws_client(aws.clone())
+        .bucket(bucket)
+        .repository_prefix(unique_prefix(profile))
+        .writer(format!("aws-{profile}-qualification"))
+        .provider_identity(ProviderIdentity::aws_region(region.to_string()))
+        .attestation_signer(signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .initialize()
+        .await;
+    let error = match result {
+        Ok(_) => panic!("policy-conflicting bucket {bucket} was accepted"),
+        Err(error) => error,
+    };
+    assert_eq!(error.code, ErrorCode::ProviderNotQualified);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn aws_general_purpose_bucket_qualification_matrix() {
     if !enabled() {
@@ -47,6 +70,27 @@ async fn aws_general_purpose_bucket_qualification_matrix() {
         .load()
         .await;
     let aws = aws_sdk_s3::Client::new(&shared);
+
+    if let Ok(bucket) = std::env::var("PROLLY_S3_AWS_BUCKET_LIFECYCLE") {
+        assert_policy_bucket_rejected(&aws, &bucket, &region_name, "lifecycle").await;
+    }
+    if let Ok(bucket) = std::env::var("PROLLY_S3_AWS_BUCKET_OBJECT_LOCK_DEFAULT") {
+        assert_policy_bucket_rejected(&aws, &bucket, &region_name, "object-lock-default").await;
+    }
+    if let Ok(bucket) = std::env::var("PROLLY_S3_AWS_BUCKET_REPLICATED") {
+        let replicated = Client::builder()
+            .aws_client(aws.clone())
+            .bucket(&bucket)
+            .repository_prefix(unique_prefix("replicated"))
+            .writer("aws-replicated-qualification")
+            .provider_identity(ProviderIdentity::aws_region(region_name.clone()))
+            .attestation_signer(signer())
+            .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+            .initialize()
+            .await
+            .unwrap();
+        assert!(replicated.provider_capabilities().replication_enabled);
+    }
 
     if let Ok(bucket) = std::env::var("PROLLY_AWS_BUCKET_UNVERSIONED") {
         let result = Client::builder()

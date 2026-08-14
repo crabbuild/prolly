@@ -114,10 +114,11 @@ See [the path specification](spec/prolly-s3/paths.md) for exact templates.
 
 ## Deliberate limits
 
-There is no chunked payload format and no multipart ingestion. One file must fit
-the repository and provider single-PUT limit. Garbage collection and
-cross-repository transfer are not production APIs. Immutable unreachable data
-therefore accumulates and must be included in storage planning.
+There is no chunked or packed payload format and Prolly owns no multipart
+ingestion state. The built-in upload path requires one provider `PutObject`.
+Larger or resumable files are uploaded as one final object by an external
+provider transfer manager, then handed to Prolly for whole-object verification
+and publication. The transfer manager alone owns incomplete-upload cleanup.
 
 The design has no fixed file, commit, or ref count in its logical structures,
 but real deployments are bounded by provider quotas, request cost, latency,

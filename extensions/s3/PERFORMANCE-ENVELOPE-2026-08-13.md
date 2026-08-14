@@ -6,6 +6,24 @@ Provider: local RustFS 1.0.0-beta.10, versioned bucket, Apple Silicon Docker
 Desktop, 32-way client concurrency. These numbers are regression evidence for
 this machine, not AWS SLO evidence.
 
+> Architecture notice: these measurements were collected with an experimental
+> payload-packing and Prolly-owned multipart implementation that has since been
+> removed. They remain useful metadata-tree baselines, but they do not qualify
+> the current whole-object payload architecture. Ingest, point-read, fsck, GC,
+> request-cost, and byte-amplification results must be rerun before release.
+
+## Corrected whole-object baseline
+
+After removing payload packs and Prolly-owned multipart state, the 10K
+tiny-file RustFS gate stored every distinct 16-byte body as one complete
+provider object. With 128 bounded uploads it completed in 35.19 seconds at
+284 files/s, issued 10,097 S3 operations, and uploaded 44.1 MB. Eliminating a
+redundant authority read per staged object reduced calls from 20,097 to 10,097
+but did not materially change throughput; raising concurrency from 32 to 128
+also did not clear the 500 files/s release target. The remaining uploaded-byte
+amplification is dominated by cumulative durable-checkpoint metadata and is an
+open optimization, not a reason to reintroduce payload packing.
+
 ## Results
 
 | Workload | Result |
@@ -39,10 +57,6 @@ this machine, not AWS SLO evidence.
 | 1M full list, indexed-head barrier + persistent-warm Foyer | 20.92 s, 47.8K entries/s, page p99 33.2 ms, 1.19 MB downloaded, 2,027 GETs, zero PUTs |
 | 1M random reads, persistent-warm Foyer (1K samples) | 936 reads/s, p99 76.7 ms, 1.21 MB downloaded |
 | 1M branch / 100-key direct diff / merge | 87.7 ms / 8.24 ms / 582 ms |
-| 1.01M-object exact payload-pack inventory | 298.4 s, 1,011 restartable pages, 1,004 physical packs, 99.99% utilization |
-| 1.01M current / 1.02M version deep fsck | 38.79 s, 2.03M logical references, 1,004 physical packs, 39.36 MB downloaded, 23.25 MB uploaded, 245 MiB RSS |
-| 1M resumed pack-aware GC, final scan/sweep segment | 126.1 s, 1.047M reachable logical versions, 16,542 nodes, 91.2K provider versions scanned, 186 exact versions / 4.05 MB deleted, 44 MiB RSS |
-| 65 MiB streamed multipart object | 3.78 s; multipart upload and historical range read passed |
 
 The original 500K list failure used the compatibility API that rebuilt a
 key-based traversal on every page. The benchmark now uses one immutable,
@@ -67,50 +81,23 @@ metrics. The clean rerun found zero lag in 15.3 ms, then listed 1M entries with
 2,027 GETs and zero PUTs. Peak observed RSS was 213 MiB during the read/branch
 phases of that reopened 128 MiB-memory Foyer process.
 
-The pack inventory covered 1,010,100 live logical objects (the 1M file set plus
-10,100 accumulated branch-probe objects), 35,190,680 logical bytes, and 1,004
-physical immutable packs totaling 35,192,387 bytes. All objects were packed;
-the 1,010,100 unique extents accounted for 35,190,680 live bytes, yielding
-9,999 basis points utilization. The first exact implementation used a durable
-seen-tree entry per extent and did not reach 100K objects in several minutes.
-The revised cursor stores one sorted extent summary per physical pack and
-completed in 298.4 seconds. That is bounded and restartable but still an offline
-maintenance operation; pack manifests should eventually carry pre-aggregated
-live-range summaries so inventory scales with packs without repeatedly decoding
-all logical objects.
-
 Deep fsck now binds the snapshot's object/version roots into its durable cursor,
 uses range-readable commit metadata during DAG discovery, checkpoints every
-10K logical records, and stores only compact per-physical-pack identities in
-its maintenance tree. Logical extent checksums are verified page-by-page using
-bounded concurrent full-pack reads. The final 1M run checked 1,010,100 current
-objects, 1,020,801 logical versions, and 70,582,197 referenced logical bytes in
-38.79 seconds. It reduced 2,030,901 logical payload references to 1,004 unique
-physical packs; deep content traffic was 39,070,167 bytes and total provider
-download was 39,355,355 bytes. The process ended at 250,752 KiB RSS. An earlier
-prototype that durably rewrote every extent summary uploaded 3.53 GB and grew
-to 1.1 GB RSS; it was rejected and replaced by the compact manifest design.
+10K logical records, and deduplicates checks by complete physical-object
+identity. The former packed-payload numbers are not evidence for this revised
+whole-object fsck path; the 100K, 500K, and 1M gates must be rerun.
 
 GC now checkpoints its cursor under the repository-wide maintenance epoch at
 start and after every returned page. A new process resumed the measured 1M run
 after two forced terminations; an explicit recovery operation can abandon only
 legacy/crashed epochs that never published a cursor. Node marking dequeues a
 bounded wave, batch-checks marks, fetches nodes with concurrency 32, deduplicates
-physical pack marks within version leaves, and publishes one work-tree mutation
+physical payload marks within version leaves, and publishes one work-tree mutation
 per wave. Candidate scanning batch-probes reachability and publishes candidates
-once per provider page. The resumed final segment completed in 126.1 seconds,
-deleted 186 exact unreachable versions totaling 4,046,261 bytes, downloaded
-888 KB, uploaded 437 KB, and ended at 44,000 KiB RSS. This proves restart and
-pack-safe sweep locally; a clean uninterrupted end-to-end timing and deliberate
-mid-sweep restart remain release gates.
-
-A fresh native RustFS restart gate uploaded a 33 MiB object in three native
-multipart parts, stopped after the first part, serialized the provider upload
-checkpoint, reopened the repository, reconciled with `ListParts`, uploaded only
-the remaining two parts, and completed in 4.21 seconds. The resulting Prolly
-binding references one physical S3 object. The resumed phase issued zero create
-calls, two part uploads, one completion, at least two `ListParts` calls, and no
-abort; it did not replay the first 16 MiB.
+once per provider page. The former packed-object GC timing is not evidence for
+the whole-object layout. Cross-process fencing and restart semantics remain,
+but clean end-to-end 100K–1M timing and deliberate mid-sweep restart must be
+rerun.
 
 The 500K grouped ingest uploaded 2.56 GB for 17.5 MB of logical content, about
 146x byte amplification. Direct-child diff now pages the exact commit delta
@@ -121,15 +108,12 @@ version trees.
 
 ## Supported envelope
 
-- Reliability semantics, bounded-memory grouped ingestion, complete listing,
-  restart-cold reads, branch creation, and 100/10K-key direct-child diff/merge
-  are exercised at 500K files. This is a qualified local functional envelope,
-  not yet a 500K production SLO: cache-cold reads and listings remain sensitive
-  to host contention and transfer hundreds of megabytes.
-- Do not claim 1M production support until the remaining cold-cache, interrupted
-  fsck resume, clean full-GC timing, lifecycle/fencing, and real-provider cost/throttling matrix
-  passes. Warm/persistent traversal, sparse direct-child history operations,
-  rebuild, bounded RSS, pack inventory, and deep fsck now have local 1M evidence.
+- Metadata listing, branch creation, and 100/10K-key direct-child diff/merge
+  have historical 500K–1M local evidence. The current whole-object payload
+  architecture does not yet have a qualified 500K or 1M end-to-end envelope.
+- Do not claim 1M production support until cold/warm/persistent reads, grouped
+  whole-object ingest, interrupted fsck, clean full GC, lifecycle/fencing, and
+  the real-provider cost/throttling matrix pass on the revised format.
 - One-file-per-commit history is reliable through 10K and repeated authority
   renewal, but 13.44 commits/s and 33.94 calls/commit make it unsuitable for
   bulk ingest.
