@@ -9,9 +9,10 @@ this machine, not AWS SLO evidence.
 > Architecture notice: the historical results table was collected with an
 > experimental payload-packing and Prolly-owned multipart implementation that
 > has since been removed. It remains useful as a metadata-tree baseline but does
-> not qualify the current architecture. The corrected 10K and 100K measurements
-> in this section use one complete provider object per distinct payload. The
-> 500K and 1M gates still require a whole-object rerun.
+> not qualify the current architecture. The corrected 10K, 100K, 500K, and 1M
+> measurements in this section use one complete provider object per distinct
+> payload. Historical packed-payload rows remain labeled and must not be used
+> to qualify the current build.
 
 ## Corrected whole-object baseline
 
@@ -152,6 +153,46 @@ running the unchanged algorithms over 500K would multiply provider cost without
 adding design evidence. Their next qualification follows append-only fsck work
 segments and journal-driven GC candidate enumeration.
 
+### Corrected whole-object 1M gate
+
+The qualified 500K repository was extended by another 500K unique 35-byte
+objects in 50 grouped commits. The extension took 2,093.90 seconds at 238.8
+files/s, issued 519,185 calls with zero retries (1.0384 calls/file), uploaded
+1.190 GB, downloaded 692.83 MB, and reached 254,656 KiB RSS at the stage
+boundary. Upload amplification was 68.0x over 17.5 MB of new logical input.
+Mean 10K-object commit time grew to 41.88 seconds. One complete conditional
+payload PUT remained mandatory per distinct body; the growing excess is
+metadata publication and maintenance work, not payload packing.
+
+The first full 1M list took 255.17 seconds at 3.92K entries/s with a 2.725
+second page p99, 13,337 GETs, and 578.20 MB downloaded. A cold Foyer fill was
+similarly expensive at 237.48 seconds, 4.21K entries/s, and 611.47 MB. A new
+process reopening that persistent metadata cache listed the same snapshot in
+24.11 seconds at 41.48K entries/s with a 146 ms page p99, 2,027 GETs, and 1.21
+MB downloaded. Persistence therefore removes most metadata transfer after
+warmup but does not fix the first-instance traversal envelope.
+
+A fresh process performed one thousand random reads before listing. It reached
+101.7 reads/s with 768 ms p99, 4,158 GETs, and 156.62 MB downloaded for 35 KB
+of logical bodies: 4.158 calls/read and about 4,475x download amplification.
+After the in-process metadata working set was warm, reads reached 1,467/s with
+34.5 ms p99, exactly two GETs/read, and 727 KB downloaded. Reopening the fully
+populated Foyer cache eliminated metadata misses and transferred only 757 KB,
+but this heavily loaded local provider delivered 100 reads/s with 2.38 second
+p99. The remaining branch/ref and whole-payload requests, plus provider behavior
+at one million physical objects, need an isolated real-provider matrix.
+
+For a 100-key branch, creation, write, direct-child diff, and merge took 454
+ms, 2.35 seconds, 11.7 ms, and 2.01 seconds. For a 10K-key branch they took
+1.39 seconds, 78.45 seconds, 206.5 ms, and 4.18 seconds. Diff and merge retain
+structural pruning; whole-object branch preparation remains request-rate bound.
+A restartable index rebuild over 110 publications and 24,584 nodes completed in
+9.32 seconds and subsequent catch-up reported zero lag.
+
+The unchanged deep-fsck and GC algorithms were not rerun at 1M. Their 100K
+request and byte amplification already rejected the algorithms; a larger run
+would add provider cost without testing a revised implementation.
+
 ## Results
 
 | Workload | Result |
@@ -236,9 +277,10 @@ version trees.
 
 ## Supported envelope
 
-- Metadata listing, branch creation, and 100/10K-key direct-child diff/merge
-  have historical 500K–1M local evidence. The current whole-object payload
-  architecture does not yet have a qualified 500K or 1M end-to-end envelope.
+- Whole-object ingest, metadata listing, point reads, branch creation, and
+  100/10K-key direct-child diff/merge now have local evidence through 1M.
+  Ingest, first-instance list/read latency, and metadata byte amplification
+  fail their production gates; this is a measured ceiling, not a support claim.
 - Do not claim 1M production support until cold/warm/persistent reads, grouped
   whole-object ingest, interrupted fsck, clean full GC, lifecycle/fencing, and
   the real-provider cost/throttling matrix pass on the revised format.
