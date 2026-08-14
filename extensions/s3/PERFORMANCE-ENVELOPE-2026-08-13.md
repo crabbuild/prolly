@@ -118,6 +118,40 @@ even when almost nothing is reclaimable. A durable append-only physical-object
 journal should replace repeated namespace inventory while preserving the
 maintenance barrier and whole-object payload model.
 
+### Corrected whole-object 500K gate
+
+The qualified 100K repository was extended by 400K unique 35-byte objects in
+40 grouped commits. The extension took 1,167.97 seconds at 342.5 files/s,
+issued 408,411 calls with zero retries (1.021 calls/file), uploaded 871.38 MB,
+downloaded 545.77 MB, and reached 295,888 KiB RSS. Upload amplification was
+62.2x over 14.0 MB of logical input. Correctness held across the sustained
+19.5-minute session, but throughput and metadata amplification both fail the
+release targets.
+
+With an insufficient 256 MiB in-process cache, the first full 500K list took
+26.71 seconds at 18.7K entries/s, 133 ms page p99, and 276.4 MB downloaded. A
+second pass still took 29.10 seconds and 269.9 MB because the traversal working
+set churned out of cache. A new process backed by a populated 2 GiB Foyer cache
+listed 500K in 8.18 seconds at 61.2K entries/s with 26.3 ms page p99 and only
+600 KB downloaded. It retained 5,231 node hits with zero misses.
+
+A genuine fresh-process cold point-read pass reached only 162 reads/s with 529
+ms p99, 4.061 calls/read, and 152.57 MB downloaded for 35 KB of logical bodies.
+After the working set was resident, point reads reached 1,775 reads/s with
+21.8 ms p99. A separately reopened persistent-Foyer process reached 1,825
+reads/s with 29.2 ms p99, exactly two GETs/read, and 743 KB downloaded.
+
+Branch creation took 151 ms for the 100-key case and 566 ms for the 10K-key
+case. Direct-child diff took 12.6 ms and 93.7 ms; merge took 766 ms and 2.33
+seconds respectively. Preparing the 10K whole-object delta took 30.54 seconds
+at 327 files/s. Index rebuild over 58 publications and 12,320 nodes completed
+in 1.388 seconds, after which catch-up reported zero lag.
+
+The 100K deep-fsck and GC algorithms already failed their amplification gates;
+running the unchanged algorithms over 500K would multiply provider cost without
+adding design evidence. Their next qualification follows append-only fsck work
+segments and journal-driven GC candidate enumeration.
+
 ## Results
 
 | Workload | Result |
