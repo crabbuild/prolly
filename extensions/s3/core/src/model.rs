@@ -1587,62 +1587,6 @@ pub struct PayloadBinding {
     /// Inclusive logical extent inside the physical pack.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pack_range: Option<(u64, u64)>,
-    /// Content-addressed manifest for a bounded-memory chunked payload.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chunk_manifest: Option<ChunkManifestBinding>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChunkManifestBinding {
-    pub checksum_sha256: [u8; 32],
-    pub chunk_count: u32,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PayloadChunk {
-    pub path: ObjectPath,
-    pub provider_version_id: Option<String>,
-    pub provider_etag: String,
-    pub size: u64,
-    pub checksum_sha256: [u8; 32],
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ChunkManifest {
-    pub format_version: u8,
-    pub logical_size: u64,
-    pub logical_checksum_sha256: [u8; 32],
-    pub chunks: Vec<PayloadChunk>,
-}
-
-impl ChunkManifest {
-    pub const FORMAT_VERSION: u8 = 1;
-
-    pub fn validate(&self) -> Result<()> {
-        let total = self.chunks.iter().try_fold(0_u64, |total, chunk| {
-            if chunk.size == 0 || chunk.provider_etag.is_empty() || chunk.checksum_sha256 == [0; 32]
-            {
-                return Err(Error::new(
-                    ErrorCode::CorruptCommit,
-                    "chunk manifest contains a malformed chunk",
-                ));
-            }
-            total.checked_add(chunk.size).ok_or_else(|| {
-                Error::new(ErrorCode::EntityTooLarge, "chunk manifest size overflow")
-            })
-        })?;
-        if self.format_version != Self::FORMAT_VERSION
-            || self.chunks.is_empty()
-            || total != self.logical_size
-            || self.logical_checksum_sha256 == [0; 32]
-        {
-            return Err(Error::new(
-                ErrorCode::CorruptCommit,
-                "chunk manifest is malformed",
-            ));
-        }
-        Ok(())
-    }
 }
 
 impl PayloadBinding {
@@ -1652,17 +1596,7 @@ impl PayloadBinding {
             (Some(physical), Some((start, end))) => physical != [0; 32] && start <= end,
             _ => false,
         };
-        let chunk_shape_valid = self.chunk_manifest.as_ref().is_none_or(|manifest| {
-            manifest.checksum_sha256 != [0; 32]
-                && manifest.chunk_count > 0
-                && self.pack_checksum_sha256.is_none()
-                && self.pack_range.is_none()
-        });
-        if self.provider_etag.is_empty()
-            || self.checksum_sha256 == [0; 32]
-            || !pack_shape_valid
-            || !chunk_shape_valid
-        {
+        if self.provider_etag.is_empty() || self.checksum_sha256 == [0; 32] || !pack_shape_valid {
             return Err(Error::new(
                 ErrorCode::CorruptCommit,
                 "physical payload binding is malformed",
@@ -1672,19 +1606,11 @@ impl PayloadBinding {
     }
 
     pub fn physical_checksum_sha256(&self) -> [u8; 32] {
-        self.chunk_manifest
-            .as_ref()
-            .map(|manifest| manifest.checksum_sha256)
-            .or(self.pack_checksum_sha256)
-            .unwrap_or(self.checksum_sha256)
+        self.pack_checksum_sha256.unwrap_or(self.checksum_sha256)
     }
 
     pub fn is_packed(&self) -> bool {
         self.pack_range.is_some()
-    }
-
-    pub fn is_chunked(&self) -> bool {
-        self.chunk_manifest.is_some()
     }
 }
 

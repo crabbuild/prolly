@@ -551,9 +551,6 @@ bytes, and admission rejections.
   descriptors and only the node ranges on their traversal frontier.
 - Large commit deltas are external Prolly trees, keeping commit descriptors and
   restart metadata bounded independently of batch size.
-- Streamed objects larger than 8 MiB use immutable content-addressed chunks and
-  a content-addressed manifest. Upload and range-read windows are bounded and
-  chunk checksums/tokens are validated independently.
 - Same-branch writers contend on one ref CAS; different branches publish
   independently.
 
@@ -564,22 +561,14 @@ latency or cost claim substitutes for AWS qualification.
 ## Limitations
 
 - The client must be the exclusive authority for its repository prefix.
-- One logical file must fit the repository object-size limit; individual
-  streamed chunks are 8 MiB and no longer require a whole-file disk spool.
-- Retrying a streamed upload deduplicates completed chunks by content identity,
-  but the convenience `put_stream` path replays the input source from byte
-  zero. Advanced callers can persist each descriptor returned by
-  `CommitSession::upload_resumable_chunk`, reopen the durable session, continue
-  at the next source offset, and finish with `put_uploaded_chunks` without
-  reuploading completed chunks. The caller is responsible for durably pairing
-  descriptors with source offsets and whole-object SHA-256/MD5 state.
-- Client-side chunk encryption is not yet implemented. Use qualified provider
-  encryption-at-rest controls until an explicit client-side encryption policy
-  is configured; convergent encryption must not be inferred from content
-  addressing because it leaks equality.
+- One file must fit the repository and provider single-object size limits.
+- Prolly does not define a chunked file representation. Large spooled uploads
+  use provider-native multipart and complete as one physical S3 object.
 - Concurrent writes to one branch can conflict; batch related changes.
-- GC closes publication admission through the repository-wide durable
-  coordinator, checkpoints its epoch cursor, and resumes after process restart.
+- Concurrent GC closes publication admission through the durable repository
+  coordinator, fences writer handles in other processes, checkpoints its epoch,
+  and resumes after process restart. Writers bypassing the repository protocol
+  remain unsupported.
 - Snapshot clone/fetch/push preserves only the selected logical state. The
   `history_` variants preserve the source commit DAG, but not source commit IDs
   or reflog identity.

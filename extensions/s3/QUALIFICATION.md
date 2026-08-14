@@ -58,10 +58,10 @@ Run ignored scale tests explicitly and record:
 - cold, prewarmed, and persistent-cache reads;
 - sparse diff and merge at 10K+ keys;
 - restart during staging, merge, index rebuild, and publication response loss.
-- chunk-manifest upload/resume across a real process restart, including proof
-  that already durable chunks are not replayed;
-- legacy file-spool multipart create/part/complete/abort behavior where that
-  API remains enabled;
+- provider-native multipart create/part/complete/abort behavior while retaining
+  exactly one physical S3 object per logical large object;
+- multipart crash/restart reconciliation, including proof that completed native
+  parts are not uploaded again;
 - cross-process publication fencing throughout a complete GC epoch;
 - payload-pack utilization before and after bounded repack pages.
 
