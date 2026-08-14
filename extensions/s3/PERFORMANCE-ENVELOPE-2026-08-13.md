@@ -40,6 +40,7 @@ this machine, not AWS SLO evidence.
 | 1M random reads, persistent-warm Foyer (1K samples) | 936 reads/s, p99 76.7 ms, 1.21 MB downloaded |
 | 1M branch / 100-key direct diff / merge | 87.7 ms / 8.24 ms / 582 ms |
 | 1.01M-object exact payload-pack inventory | 298.4 s, 1,011 restartable pages, 1,004 physical packs, 99.99% utilization |
+| 1.01M current / 1.02M version deep fsck | 38.79 s, 2.03M logical references, 1,004 physical packs, 39.36 MB downloaded, 23.25 MB uploaded, 245 MiB RSS |
 | 65 MiB streamed multipart object | 3.78 s; multipart upload and historical range read passed |
 
 The original 500K list failure used the compatibility API that rebuilt a
@@ -77,6 +78,18 @@ maintenance operation; pack manifests should eventually carry pre-aggregated
 live-range summaries so inventory scales with packs without repeatedly decoding
 all logical objects.
 
+Deep fsck now binds the snapshot's object/version roots into its durable cursor,
+uses range-readable commit metadata during DAG discovery, checkpoints every
+10K logical records, and stores only compact per-physical-pack identities in
+its maintenance tree. Logical extent checksums are verified page-by-page using
+bounded concurrent full-pack reads. The final 1M run checked 1,010,100 current
+objects, 1,020,801 logical versions, and 70,582,197 referenced logical bytes in
+38.79 seconds. It reduced 2,030,901 logical payload references to 1,004 unique
+physical packs; deep content traffic was 39,070,167 bytes and total provider
+download was 39,355,355 bytes. The process ended at 250,752 KiB RSS. An earlier
+prototype that durably rewrote every extent summary uploaded 3.53 GB and grew
+to 1.1 GB RSS; it was rejected and replaced by the compact manifest design.
+
 The 500K grouped ingest uploaded 2.56 GB for 17.5 MB of logical content, about
 146x byte amplification. Direct-child diff now pages the exact commit delta
 rather than allowing tree boundary shifts to trigger a collected structural
@@ -91,8 +104,10 @@ version trees.
   are exercised at 500K files. This is a qualified local functional envelope,
   not yet a 500K production SLO: cache-cold reads and listings remain sensitive
   to host contention and transfer hundreds of megabytes.
-- Do not claim 1M production support until the full cold/warm/persistent-cache,
-  restart, rebuild, fsck, GC, RSS, and provider-cost matrix passes.
+- Do not claim 1M production support until the remaining cold-cache, interrupted
+  fsck resume, GC, lifecycle/fencing, and real-provider cost/throttling matrix
+  passes. Warm/persistent traversal, sparse direct-child history operations,
+  rebuild, bounded RSS, pack inventory, and deep fsck now have local 1M evidence.
 - One-file-per-commit history is reliable through 10K and repeated authority
   renewal, but 13.44 commits/s and 33.94 calls/commit make it unsuitable for
   bulk ingest.

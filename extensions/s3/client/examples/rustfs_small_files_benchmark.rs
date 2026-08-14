@@ -625,10 +625,10 @@ async fn main() -> BenchResult {
         let mut cursor = client.start_fsck(fsck_mode == "deep").await?;
         let mut pages = 0usize;
         loop {
-            let page = client.advance_fsck(&cursor, 1_000).await?;
+            let page = client.advance_fsck(&cursor, 10_000).await?;
             pages += 1;
             cursor = page.cursor;
-            if pages % 100 == 0 {
+            if pages % 10 == 0 {
                 println!(
                     "FSCK_PROGRESS mode={fsck_mode} pages={pages} phase={:?} commits={} current_objects={} logical_versions={}",
                     cursor.phase,
@@ -642,7 +642,7 @@ async fn main() -> BenchResult {
             }
         }
         println!(
-            "FSCK mode={fsck_mode} wall_ms={:.3} pages={pages} commits={} reachable_nodes={} current_objects={} logical_versions={} payloads_verified={} payload_bytes_verified={} deep_content_bytes_verified={} packed_payloads_verified={} packed_logical_bytes_verified={}",
+            "FSCK mode={fsck_mode} wall_ms={:.3} pages={pages} commits={} reachable_nodes={} current_objects={} logical_versions={} payloads_verified={} payload_bytes_verified={} deep_content_bytes_verified={} physical_payloads_verified={} physical_payload_bytes_verified={} deep_physical_bytes_read={} packed_payloads_verified={} packed_logical_bytes_verified={}",
             millis(started.elapsed()),
             cursor.report.commits,
             cursor.report.reachable_nodes,
@@ -651,6 +651,9 @@ async fn main() -> BenchResult {
             cursor.report.payloads_verified,
             cursor.report.payload_bytes_verified,
             cursor.report.deep_content_bytes_verified,
+            cursor.report.physical_payloads_verified,
+            cursor.report.physical_payload_bytes_verified,
+            cursor.report.deep_physical_bytes_read,
             cursor.report.packed_payloads_verified,
             cursor.report.packed_logical_bytes_verified,
         );

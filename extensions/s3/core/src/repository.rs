@@ -318,6 +318,7 @@ pub enum FsckPhase {
     DiscoverCommits,
     VerifyObjects,
     VerifyVersions,
+    VerifyPayloads,
     Complete,
 }
 
@@ -331,6 +332,12 @@ pub struct FsckReport {
     pub payload_bytes_verified: u64,
     pub deep_content_bytes_verified: u64,
     #[serde(default)]
+    pub physical_payloads_verified: u64,
+    #[serde(default)]
+    pub physical_payload_bytes_verified: u64,
+    #[serde(default)]
+    pub deep_physical_bytes_read: u64,
+    #[serde(default)]
     pub packed_payloads_verified: u64,
     #[serde(default)]
     pub packed_logical_bytes_verified: u64,
@@ -341,11 +348,35 @@ pub struct FsckCursor {
     pub repository: crate::RepositoryId,
     pub branch: String,
     pub snapshot: CommitId,
+    pub snapshot_objects: RootManifest,
+    pub snapshot_versions: RootManifest,
+    pub job: OperationId,
+    pub payloads: RootManifest,
     pub closure: CommitClosureCursor,
     pub phase: FsckPhase,
     pub after: Option<Vec<u8>>,
     pub deep: bool,
     pub report: FsckReport,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+struct FsckLogicalExtent {
+    range: Option<(u64, u64)>,
+    size: u64,
+    checksum_sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct FsckPhysicalPayload {
+    binding: crate::PayloadBinding,
+    expected_minimum_len: u64,
+    direct_size: Option<u64>,
+}
+
+#[derive(Clone, Debug)]
+struct FsckPagePayload {
+    binding: crate::PayloadBinding,
+    extents: Vec<FsckLogicalExtent>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3400,7 +3431,7 @@ impl<P: ObjectPlane> Repository<P> {
                 match state.as_deref() {
                     Some([1]) => {}
                     Some([0]) => {
-                        let commit = self.load_commit_object(work.commit).await?.commit;
+                        let commit = (*self.load_commit_metadata(work.commit).await?).clone();
                         mutations.push(Mutation::Upsert {
                             key: seen_key,
                             val: vec![1],
@@ -3424,7 +3455,7 @@ impl<P: ObjectPlane> Repository<P> {
                         ));
                     }
                     None => {
-                        let commit = self.load_commit_object(work.commit).await?.commit;
+                        let commit = (*self.load_commit_metadata(work.commit).await?).clone();
                         mutations.push(Mutation::Upsert {
                             key: seen_key,
                             val: vec![0],
@@ -3724,10 +3755,17 @@ impl<P: ObjectPlane> Repository<P> {
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
         let snapshot = self.head(branch).await?;
+        let snapshot_commit = self.load_commit_object(snapshot).await?.commit;
+        let job = self.options.ids.operation();
+        let payloads = self.fsck_payload_engine(job)?.create();
         Ok(FsckCursor {
             repository: self.format.repository_id,
             branch: branch.to_string(),
             snapshot,
+            snapshot_objects: snapshot_commit.state.objects,
+            snapshot_versions: snapshot_commit.state.versions,
+            job,
+            payloads: RootManifest::from_tree(&payloads)?,
             closure: self.start_commit_closure(&[snapshot]).await?,
             phase: FsckPhase::DiscoverCommits,
             after: None,
@@ -3740,16 +3778,28 @@ impl<P: ObjectPlane> Repository<P> {
     /// current objects, or logical versions. Persist the returned cursor after
     /// every page.
     pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
-        if !(1..=1_000).contains(&max_steps) {
+        if !(1..=10_000).contains(&max_steps) {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
-                "fsck page size must be between 1 and 1,000",
+                "fsck page size must be between 1 and 10,000",
             ));
         }
         if cursor.repository != self.format.repository_id {
             return Err(Error::new(
                 ErrorCode::InvalidContinuationToken,
                 "fsck cursor belongs to another repository",
+            ));
+        }
+        if cursor.job.is_nil()
+            || cursor.payloads.format_digest != tree_format_digest(&self.format.state_tree_format)?
+            || cursor.snapshot_objects.format_digest
+                != tree_format_digest(&self.format.state_tree_format)?
+            || cursor.snapshot_versions.format_digest
+                != tree_format_digest(&self.format.state_tree_format)?
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck payload cursor is malformed",
             ));
         }
         validate_branch(&cursor.branch)?;
@@ -3785,8 +3835,7 @@ impl<P: ObjectPlane> Repository<P> {
                 }
             }
             FsckPhase::VerifyObjects => {
-                let commit = self.load_commit_object(next.snapshot).await?.commit;
-                let tree = self.tree_from_root(&commit.state.objects)?;
+                let tree = self.tree_from_root(&next.snapshot_objects)?;
                 let engine = self.engine(self.node_store.clone());
                 let mut entries = match next.after.as_deref() {
                     Some(after) => engine.range_after(&tree, after, None).await?,
@@ -3801,36 +3850,59 @@ impl<P: ObjectPlane> Repository<P> {
                     let (key, encoded) = entry?;
                     let current: CurrentObject = decode_canonical(&encoded)?;
                     current.version.validate()?;
-                    let (payloads, bytes, deep_bytes) = self
-                        .verify_payload_metadata(&current.version, next.deep)
-                        .await?;
                     next.report.current_objects =
                         checked_fsck_add(next.report.current_objects, 1, "current-object")?;
-                    next.report.payloads_verified =
-                        checked_fsck_add(next.report.payloads_verified, payloads, "payload")?;
-                    next.report.payload_bytes_verified = checked_fsck_add(
-                        next.report.payload_bytes_verified,
-                        bytes,
-                        "payload-byte",
-                    )?;
-                    next.report.deep_content_bytes_verified = checked_fsck_add(
-                        next.report.deep_content_bytes_verified,
-                        deep_bytes,
-                        "deep-content-byte",
-                    )?;
+                    record_fsck_logical_payload(&mut next.report, &current.version, next.deep)?;
                     record_fsck_packed_payload(&mut next.report, &current.version)?;
                     next.after = Some(key);
                     processed += 1;
                 }
             }
             FsckPhase::VerifyVersions => {
-                let commit = self.load_commit_object(next.snapshot).await?.commit;
-                let tree = self.tree_from_root(&commit.state.versions)?;
+                let tree = self.tree_from_root(&next.snapshot_versions)?;
                 let engine = self.engine(self.node_store.clone());
                 let mut entries = match next.after.as_deref() {
                     Some(after) => engine.range_after(&tree, after, None).await?,
                     None => engine.prefix(&tree, b"").await?,
                 };
+                let mut versions = Vec::with_capacity(max_steps);
+                while processed < max_steps {
+                    let Some(entry) = entries.next().await else {
+                        next.phase = FsckPhase::VerifyPayloads;
+                        next.after = None;
+                        break;
+                    };
+                    let (key, encoded) = entry?;
+                    let version: ObjectVersion = decode_canonical(&encoded)?;
+                    version.validate()?;
+                    next.report.logical_versions =
+                        checked_fsck_add(next.report.logical_versions, 1, "logical-version")?;
+                    record_fsck_logical_payload(&mut next.report, &version, next.deep)?;
+                    record_fsck_packed_payload(&mut next.report, &version)?;
+                    versions.push(version);
+                    next.after = Some(key);
+                    processed += 1;
+                }
+                next.payloads = self
+                    .stage_fsck_payloads(next.job, &next.payloads, &versions)
+                    .await?;
+                if next.deep {
+                    let deep_bytes = self.verify_fsck_logical_page(&versions).await?;
+                    next.report.deep_physical_bytes_read = checked_fsck_add(
+                        next.report.deep_physical_bytes_read,
+                        deep_bytes,
+                        "deep-physical-byte",
+                    )?;
+                }
+            }
+            FsckPhase::VerifyPayloads => {
+                let payloads = self.tree_from_root(&next.payloads)?;
+                let engine = self.fsck_payload_engine(next.job)?;
+                let mut entries = match next.after.as_deref() {
+                    Some(after) => engine.range_after(&payloads, after, None).await?,
+                    None => engine.prefix(&payloads, b"").await?,
+                };
+                let mut records = Vec::with_capacity(max_steps);
                 while processed < max_steps {
                     let Some(entry) = entries.next().await else {
                         next.phase = FsckPhase::Complete;
@@ -3838,27 +3910,38 @@ impl<P: ObjectPlane> Repository<P> {
                         break;
                     };
                     let (key, encoded) = entry?;
-                    let version: ObjectVersion = decode_canonical(&encoded)?;
-                    version.validate()?;
-                    let (payloads, bytes, deep_bytes) =
-                        self.verify_payload_metadata(&version, next.deep).await?;
-                    next.report.logical_versions =
-                        checked_fsck_add(next.report.logical_versions, 1, "logical-version")?;
-                    next.report.payloads_verified =
-                        checked_fsck_add(next.report.payloads_verified, payloads, "payload")?;
-                    next.report.payload_bytes_verified = checked_fsck_add(
-                        next.report.payload_bytes_verified,
-                        bytes,
-                        "payload-byte",
-                    )?;
-                    next.report.deep_content_bytes_verified = checked_fsck_add(
-                        next.report.deep_content_bytes_verified,
-                        deep_bytes,
-                        "deep-content-byte",
-                    )?;
-                    record_fsck_packed_payload(&mut next.report, &version)?;
+                    records.push(decode_canonical::<FsckPhysicalPayload>(&encoded)?);
                     next.after = Some(key);
                     processed += 1;
+                }
+                let deep = next.deep;
+                let verified = stream::iter(records.into_iter().map(|record| async move {
+                    if deep {
+                        Ok((record.expected_minimum_len, 0))
+                    } else {
+                        self.verify_fsck_physical_payload(&record).await
+                    }
+                }))
+                .buffered(32)
+                .collect::<Vec<_>>()
+                .await;
+                for result in verified {
+                    let (physical_bytes, deep_bytes) = result?;
+                    next.report.physical_payloads_verified = checked_fsck_add(
+                        next.report.physical_payloads_verified,
+                        1,
+                        "physical-payload",
+                    )?;
+                    next.report.physical_payload_bytes_verified = checked_fsck_add(
+                        next.report.physical_payload_bytes_verified,
+                        physical_bytes,
+                        "physical-payload-byte",
+                    )?;
+                    next.report.deep_physical_bytes_read = checked_fsck_add(
+                        next.report.deep_physical_bytes_read,
+                        deep_bytes,
+                        "deep-physical-byte",
+                    )?;
                 }
             }
             FsckPhase::Complete => {}
@@ -6342,52 +6425,196 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    async fn verify_payload_metadata(
+    async fn stage_fsck_payloads(
         &self,
-        version: &ObjectVersion,
-        deep: bool,
-    ) -> Result<(u64, u64, u64)> {
-        let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
-            return Ok((0, 0, 0));
-        };
-        let binding = version.binding.as_ref().ok_or_else(|| {
-            Error::new(
-                ErrorCode::CorruptCommit,
-                "live object version has no payload binding",
-            )
-        })?;
-        if binding.path != self.payloads.expected_path(binding)? {
-            return Err(Error::new(
-                ErrorCode::CorruptContent,
-                "payload binding path does not match its content checksum",
-            ));
+        job: OperationId,
+        root: &RootManifest,
+        versions: &[ObjectVersion],
+    ) -> Result<RootManifest> {
+        let engine = self.fsck_payload_engine(job)?;
+        let mut tree = self.tree_from_root(root)?;
+        let mut pending = BTreeMap::<Vec<u8>, FsckPhysicalPayload>::new();
+        for version in versions {
+            let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
+                continue;
+            };
+            let binding = version.binding.as_ref().ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "live object version has no payload binding",
+                )
+            })?;
+            if binding.path != self.payloads.expected_path(binding)? {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "payload binding path does not match its content checksum",
+                ));
+            }
+            let expected_minimum_len = binding
+                .pack_range
+                .map_or(*size, |(_, end)| end.saturating_add(1));
+            let record = pending
+                .entry(payload_pack_physical_key(binding))
+                .or_insert_with(|| FsckPhysicalPayload {
+                    binding: binding.clone(),
+                    expected_minimum_len,
+                    direct_size: (!binding.is_packed()).then_some(*size),
+                });
+            validate_same_fsck_physical_binding(&record.binding, binding)?;
+            record.expected_minimum_len = record.expected_minimum_len.max(expected_minimum_len);
+            if !binding.is_packed() && record.direct_size != Some(*size) {
+                return Err(Error::new(
+                    ErrorCode::ChecksumMismatch,
+                    "direct payload bindings disagree about object size",
+                ));
+            }
         }
+        let keys = pending.keys().cloned().collect::<Vec<_>>();
+        let existing = engine.get_many(&tree, &keys).await?;
+        let mut mutations = Vec::with_capacity(pending.len());
+        for ((key, mut record), existing) in pending.into_iter().zip(existing) {
+            if let Some(encoded) = existing {
+                let accumulated: FsckPhysicalPayload = decode_canonical(&encoded)?;
+                validate_same_fsck_physical_binding(&accumulated.binding, &record.binding)?;
+                if accumulated.direct_size != record.direct_size {
+                    return Err(Error::new(
+                        ErrorCode::ChecksumMismatch,
+                        "payload records disagree about direct object size",
+                    ));
+                }
+                if accumulated.expected_minimum_len >= record.expected_minimum_len {
+                    continue;
+                }
+                record.expected_minimum_len = record
+                    .expected_minimum_len
+                    .max(accumulated.expected_minimum_len);
+            }
+            mutations.push(Mutation::Upsert {
+                key,
+                val: encode_canonical(&record)?,
+            });
+        }
+        if !mutations.is_empty() {
+            tree = engine.batch(&tree, mutations).await?;
+        }
+        RootManifest::from_tree(&tree)
+    }
+
+    async fn verify_fsck_physical_payload(
+        &self,
+        record: &FsckPhysicalPayload,
+    ) -> Result<(u64, u64)> {
+        let binding = &record.binding;
         let metadata =
             self.plane.head(&binding.path).await?.ok_or_else(|| {
                 Error::new(ErrorCode::MissingClosure, "immutable payload is missing")
             })?;
-        let expected_physical_len = binding
-            .pack_range
-            .map(|(_, end)| end.saturating_add(1))
-            .unwrap_or(*size);
-        if metadata.len < expected_physical_len
-            || (!binding.is_packed() && metadata.len != *size)
+        if metadata.len < record.expected_minimum_len
+            || record
+                .direct_size
+                .is_some_and(|direct_size| metadata.len != direct_size)
             || metadata.sha256 != binding.physical_checksum_sha256()
             || metadata.token.etag != binding.provider_etag
             || metadata.token.version_id != binding.provider_version_id
         {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
-                "immutable payload metadata does not match its logical binding",
+                "immutable payload metadata does not match its physical binding",
             ));
         }
-        let deep_bytes = if deep {
-            u64::try_from(self.payloads.get(binding).await?.len())
-                .map_err(|_| Error::new(ErrorCode::EntityTooLarge, "payload length exceeds u64"))?
-        } else {
-            0
-        };
-        Ok((1, *size, deep_bytes))
+        Ok((metadata.len, 0))
+    }
+
+    async fn verify_fsck_logical_page(&self, versions: &[ObjectVersion]) -> Result<u64> {
+        let mut pending = BTreeMap::<Vec<u8>, FsckPagePayload>::new();
+        for version in versions {
+            let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
+                continue;
+            };
+            let binding = version.binding.as_ref().ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "live object version has no payload binding",
+                )
+            })?;
+            let record = pending
+                .entry(payload_pack_physical_key(binding))
+                .or_insert_with(|| FsckPagePayload {
+                    binding: binding.clone(),
+                    extents: Vec::new(),
+                });
+            validate_same_fsck_physical_binding(&record.binding, binding)?;
+            record.extents.push(FsckLogicalExtent {
+                range: binding.pack_range,
+                size: *size,
+                checksum_sha256: binding.checksum_sha256,
+            });
+        }
+        let verified = stream::iter(
+            pending
+                .into_values()
+                .map(|record| async move { self.verify_fsck_page_payload(record).await }),
+        )
+        .buffered(32)
+        .collect::<Vec<_>>()
+        .await;
+        verified.into_iter().try_fold(0_u64, |total, result| {
+            total
+                .checked_add(result?)
+                .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "deep fsck byte overflow"))
+        })
+    }
+
+    async fn verify_fsck_page_payload(&self, record: FsckPagePayload) -> Result<u64> {
+        let binding = &record.binding;
+        let physical_version =
+            binding
+                .provider_version_id
+                .as_ref()
+                .map(|version_id| PhysicalVersion::Versioned {
+                    version_id: version_id.clone(),
+                });
+        let stored = self
+            .plane
+            .get(GetRequest {
+                path: binding.path.clone(),
+                range: None,
+                physical_version,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "immutable payload is missing"))?;
+        if crate::codec::sha256(&stored.bytes) != binding.physical_checksum_sha256() {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "immutable physical payload checksum mismatch",
+            ));
+        }
+        for extent in &record.extents {
+            let bytes = match extent.range {
+                Some((start, end)) => {
+                    let start = usize::try_from(start).map_err(|_| {
+                        Error::new(ErrorCode::EntityTooLarge, "payload extent exceeds usize")
+                    })?;
+                    let end = usize::try_from(end).map_err(|_| {
+                        Error::new(ErrorCode::EntityTooLarge, "payload extent exceeds usize")
+                    })?;
+                    stored.bytes.get(start..=end).ok_or_else(|| {
+                        Error::new(ErrorCode::CorruptContent, "payload extent exceeds pack")
+                    })?
+                }
+                None => stored.bytes.as_slice(),
+            };
+            if u64::try_from(bytes.len()).ok() != Some(extent.size)
+                || crate::codec::sha256(bytes) != extent.checksum_sha256
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "immutable logical payload checksum mismatch",
+                ));
+            }
+        }
+        u64::try_from(stored.bytes.len())
+            .map_err(|_| Error::new(ErrorCode::EntityTooLarge, "payload length exceeds u64"))
     }
 
     async fn gc_drain_publication_tickets(
@@ -6486,6 +6713,25 @@ impl<P: ObjectPlane> Repository<P> {
                 "{}/administration/payload-pack-stats/{job}/tree",
                 self.options.repository_prefix
             ),
+        )))
+    }
+
+    fn fsck_payload_engine(&self, job: OperationId) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck job ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new_cached_direct(
+            self.plane.clone(),
+            format!(
+                "{}/administration/fsck/{job}/payloads",
+                self.options.repository_prefix
+            ),
+            self.format.repository_id,
+            tree_format_digest(&self.format.state_tree_format)?,
+            self.node_cache.clone(),
         )))
     }
 
@@ -9094,6 +9340,51 @@ fn checked_fsck_add(current: u64, add: u64, counter: &str) -> Result<u64> {
             format!("fsck {counter} counter overflow"),
         )
     })
+}
+
+fn record_fsck_logical_payload(
+    report: &mut FsckReport,
+    version: &ObjectVersion,
+    deep: bool,
+) -> Result<()> {
+    let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
+        return Ok(());
+    };
+    if version.binding.is_none() {
+        return Err(Error::new(
+            ErrorCode::CorruptCommit,
+            "live object version has no payload binding",
+        ));
+    }
+    report.payloads_verified = checked_fsck_add(report.payloads_verified, 1, "payload")?;
+    report.payload_bytes_verified =
+        checked_fsck_add(report.payload_bytes_verified, *size, "payload-byte")?;
+    if deep {
+        report.deep_content_bytes_verified = checked_fsck_add(
+            report.deep_content_bytes_verified,
+            *size,
+            "deep-content-byte",
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_same_fsck_physical_binding(
+    existing: &crate::PayloadBinding,
+    candidate: &crate::PayloadBinding,
+) -> Result<()> {
+    if existing.path != candidate.path
+        || existing.provider_etag != candidate.provider_etag
+        || existing.provider_version_id != candidate.provider_version_id
+        || existing.physical_checksum_sha256() != candidate.physical_checksum_sha256()
+        || existing.is_packed() != candidate.is_packed()
+    {
+        return Err(Error::new(
+            ErrorCode::ChecksumMismatch,
+            "logical payload bindings disagree about their physical object",
+        ));
+    }
+    Ok(())
 }
 
 fn record_fsck_packed_payload(report: &mut FsckReport, version: &ObjectVersion) -> Result<()> {

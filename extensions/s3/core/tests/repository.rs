@@ -2,9 +2,9 @@ use std::{collections::BTreeMap, io::Write as _, sync::Arc};
 
 use md5::{Digest as _, Md5};
 use prolly_s3_core::{
-    FixedClock, GetRequest, ListRequest, LogicalObjectVersionKind, MemoryNodeCache,
-    MemoryObjectPlane, ObjectHeaders, ObjectPath, ObjectPlane, ProviderPerKeyVersionLimit,
-    Repository, RepositoryOptions, SequenceIdSource,
+    decode_canonical, encode_canonical, FixedClock, GetRequest, ListRequest,
+    LogicalObjectVersionKind, MemoryNodeCache, MemoryObjectPlane, ObjectHeaders, ObjectPath,
+    ObjectPlane, ProviderPerKeyVersionLimit, Repository, RepositoryOptions, SequenceIdSource,
 };
 use sha2::Sha256;
 
@@ -987,10 +987,14 @@ async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
 
     let mut fsck = repository.start_fsck("main", true).await.unwrap();
     while fsck.phase != prolly_s3_core::FsckPhase::Complete {
-        fsck = repository.advance_fsck(&fsck, 100).await.unwrap().cursor;
+        let page = repository.advance_fsck(&fsck, 100).await.unwrap();
+        fsck = decode_canonical(&encode_canonical(&page.cursor).unwrap()).unwrap();
     }
     assert_eq!(fsck.report.packed_payloads_verified, 6);
     assert_eq!(fsck.report.packed_logical_bytes_verified, 24);
+    assert_eq!(fsck.report.physical_payloads_verified, 1);
+    assert_eq!(fsck.report.physical_payload_bytes_verified, 8);
+    assert_eq!(fsck.report.deep_physical_bytes_read, 8);
 
     repository
         .put_object(
