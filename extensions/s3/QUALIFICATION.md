@@ -219,3 +219,14 @@ wire attempts, cache behavior, and resident memory. Set the provider-specific
 `PROLLY_RUSTFS_PERF_{READ,WRITE,LIST,DELETE}_USD_PER_1000` rates to include an
 estimated request cost in every metrics row; zero is the default so the harness
 never assumes an AWS or S3-compatible provider's pricing.
+
+`PROLLY_RUSTFS_PERF_TREE_TARGET_ENTRIES` creates a new repository with a
+bounded experimental metadata-tree geometry (maximum eight times the target
+and a 1 MiB hard node limit). Omit it to use the canonical default. Reopen runs
+must pass the same value because tree geometry is part of repository identity;
+compare cold reads, warm full listing, write amplification, and RSS before
+promoting a new default.
+
+Set `PROLLY_RUSTFS_PERF_PREWARM_LEVELS` on a fresh reopen process to measure
+the bounded startup cost and the resulting point-read tail latency separately.
+This preloads only shared metadata-tree levels and never reads payload bodies.

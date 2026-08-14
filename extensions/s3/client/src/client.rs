@@ -24,7 +24,7 @@ use prolly_s3_core::{
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
     RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
     RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
-    VersionSummary,
+    TreeFormat, VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 use tokio::{
@@ -77,6 +77,7 @@ pub struct ClientBuilder {
     repository_prefix: Option<String>,
     default_branch: Option<String>,
     writer: Option<String>,
+    state_tree_format: Option<TreeFormat>,
     authority_lease_duration: Option<Duration>,
     read_only: bool,
     max_cached_node_pack_bytes: Option<usize>,
@@ -326,6 +327,17 @@ impl Client {
         self.ensure_provider_qualified()?;
         self.repository
             .prewarm_node_cache(&self.branch, snapshot)
+            .await
+    }
+
+    pub async fn prewarm_node_cache_levels(
+        &self,
+        snapshot: CommitId,
+        levels: usize,
+    ) -> Result<NodeCachePrewarmReport> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .prewarm_node_cache_levels(&self.branch, snapshot, levels)
             .await
     }
 
@@ -2341,6 +2353,14 @@ impl ClientBuilder {
         self
     }
 
+    /// Select the persisted tree geometry when initializing a repository.
+    /// Opening an existing repository must supply the identical format. Shape
+    /// experiments therefore require a new repository prefix.
+    pub fn state_tree_format(mut self, format: TreeFormat) -> Self {
+        self.state_tree_format = Some(format);
+        self
+    }
+
     pub fn read_only(mut self, read_only: bool) -> Self {
         self.read_only = read_only;
         self
@@ -2485,6 +2505,9 @@ impl ClientBuilder {
         if let Some(duration) = self.authority_lease_duration {
             options.authority_lease_millis = u64::try_from(duration.as_millis())
                 .map_err(|_| invalid("authority lease duration exceeds u64 milliseconds"))?;
+        }
+        if let Some(format) = self.state_tree_format {
+            options.state_tree_format = format;
         }
         if let Some(bytes) = self.max_cached_node_pack_bytes {
             options.max_cached_node_pack_bytes = bytes;

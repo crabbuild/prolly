@@ -17,8 +17,8 @@ use aws_sdk_s3::{
 use futures_util::{stream, StreamExt};
 use prolly_s3_client::{
     core::{
-        GcPhase, MergePhase, MergePolicy, NodeCacheSnapshot, ObjectHeaders,
-        ProviderPerKeyVersionLimit,
+        BoundaryRule, GcPhase, MergePhase, MergePolicy, NodeCacheSnapshot, ObjectHeaders,
+        ProviderPerKeyVersionLimit, TreeFormat,
     },
     BulkWriteOptions, CheckoutRef, Client, HmacAttestationSigner, ProviderIdentity, PutObjectInput,
     S3OperationMetrics, S3WireAttemptInterceptor, S3WireAttemptMetrics,
@@ -242,6 +242,11 @@ async fn main() -> BenchResult {
     let read_passes = env("PROLLY_RUSTFS_PERF_READ_PASSES", "1").parse::<usize>()?;
     let run_branches = env("PROLLY_RUSTFS_PERF_BRANCH", "true").parse::<bool>()?;
     let node_cache_mib = env("PROLLY_RUSTFS_PERF_NODE_CACHE_MIB", "64").parse::<usize>()?;
+    let prewarm_levels = env("PROLLY_RUSTFS_PERF_PREWARM_LEVELS", "0").parse::<usize>()?;
+    let tree_target_entries = std::env::var("PROLLY_RUSTFS_PERF_TREE_TARGET_ENTRIES")
+        .ok()
+        .map(|value| value.parse::<u32>())
+        .transpose()?;
     let rebuild_index = env("PROLLY_RUSTFS_PERF_REBUILD_INDEX", "false").parse::<bool>()?;
     let run_gc = env("PROLLY_RUSTFS_PERF_GC", "false").parse::<bool>()?;
     let abandon_incomplete_gc =
@@ -266,6 +271,8 @@ async fn main() -> BenchResult {
             .iter()
             .any(|changes| *changes > MUTATIONS_PER_COMMIT)
         || node_cache_mib == 0
+        || prewarm_levels > 64
+        || tree_target_entries.is_some_and(|target| !(4..=65_536).contains(&target))
     {
         return Err("read sample size and read/write concurrency must be positive".into());
     }
@@ -331,6 +338,14 @@ async fn main() -> BenchResult {
         )?))
         .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
         .max_cached_node_bytes(node_cache_mib * 1024 * 1024);
+    if let Some(target) = tree_target_entries {
+        let mut tree_format = TreeFormat::default();
+        tree_format.chunking.rule = BoundaryRule::HashThreshold { factor: target };
+        tree_format.chunking.target = u64::from(target);
+        tree_format.chunking.max = u64::from(target) * 8;
+        tree_format.chunking.hard_max_node_bytes = 1024 * 1024;
+        builder = builder.state_tree_format(tree_format);
+    }
     #[cfg(feature = "foyer-cache")]
     if let Some(cache) = &foyer_cache {
         builder = builder.node_cache(cache.clone());
@@ -342,7 +357,8 @@ async fn main() -> BenchResult {
     };
 
     println!(
-        "CONFIG endpoint={endpoint} bucket={bucket} prefix={prefix} writer={writer} open_mode={open_mode} stages={stages:?} existing_files={existing_files} branch_changes={branch_changes:?} list_prefixes={list_prefixes:?} list_passes={list_passes} read_passes={read_passes} branch={run_branches} node_cache_mib={node_cache_mib} foyer={} rebuild_index={rebuild_index} foreground={run_foreground} fsck={fsck_mode} gc={run_gc} gc_grace_millis={gc_grace_millis} object_bytes={} mutations_per_commit={MUTATIONS_PER_COMMIT} write_concurrency={write_concurrency} read_samples={read_sample_size} read_concurrency={read_concurrency}",
+        "CONFIG endpoint={endpoint} bucket={bucket} prefix={prefix} writer={writer} open_mode={open_mode} stages={stages:?} existing_files={existing_files} branch_changes={branch_changes:?} list_prefixes={list_prefixes:?} list_passes={list_passes} read_passes={read_passes} branch={run_branches} node_cache_mib={node_cache_mib} prewarm_levels={prewarm_levels} tree_target_entries={} foyer={} rebuild_index={rebuild_index} foreground={run_foreground} fsck={fsck_mode} gc={run_gc} gc_grace_millis={gc_grace_millis} object_bytes={} mutations_per_commit={MUTATIONS_PER_COMMIT} write_concurrency={write_concurrency} read_samples={read_sample_size} read_concurrency={read_concurrency}",
+        tree_target_entries.map_or_else(|| "default".to_string(), |target| target.to_string()),
         if cfg!(feature = "foyer-cache")
             && std::env::var_os("PROLLY_RUSTFS_PERF_FOYER_DIR").is_some()
         {
@@ -435,6 +451,25 @@ async fn main() -> BenchResult {
         print_provider_metrics("index_catchup", client.reset_s3_operation_metrics());
         print_wire_metrics("index_catchup", wire.reset());
         print_cache_metrics("index_catchup", cache_before, client.node_cache_snapshot());
+        if prewarm_levels > 0 {
+            let cache_before = client.node_cache_snapshot();
+            client.reset_s3_operation_metrics();
+            wire.reset();
+            let started = Instant::now();
+            let snapshot = client.head().await?;
+            let report = client
+                .prewarm_node_cache_levels(snapshot, prewarm_levels)
+                .await?;
+            println!(
+                "PREWARM target={target} levels={prewarm_levels} wall_ms={:.3} object_nodes={} version_nodes={}",
+                millis(started.elapsed()),
+                report.object_nodes,
+                report.version_nodes,
+            );
+            print_provider_metrics("prewarm", client.reset_s3_operation_metrics());
+            print_wire_metrics("prewarm", wire.reset());
+            print_cache_metrics("prewarm", cache_before, client.node_cache_snapshot());
+        }
         if !run_foreground {
             prior_target = target;
             continue;

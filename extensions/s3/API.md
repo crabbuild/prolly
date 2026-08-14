@@ -56,6 +56,7 @@ Start with `Client::builder` (the `builder` constructor). The builder exposes:
 |---|---|
 | AWS transport and location | `aws_client`, `bucket`, `repository_prefix`, `default_branch` |
 | Writer identity and fencing | `writer`, `authority_lease_duration`, `read_only` |
+| Persisted metadata-tree geometry | `state_tree_format` (initialization-time; must match on reopen) |
 | Provider qualification | `provider_identity`, `attestation_signer`, `provider_attestation`, `provider_attestation_validity`, `provider_per_key_version_limit` |
 | Immutable-node caching | `node_cache`, `max_cached_node_pack_bytes`, `max_cached_node_locations`, `max_cached_node_bytes` |
 | Index maintenance | `background_index_maintenance`, `journal_index_max_unindexed_events`, `operation_index_limits` |
@@ -266,6 +267,8 @@ These methods are operational controls, not normal foreground request paths:
 
 - `node_cache_snapshot` returns immutable-node cache counters.
 - `prewarm_node_cache` traverses both state trees for one snapshot.
+- `prewarm_node_cache_levels` loads only a bounded number of shared upper
+  levels, avoiding a full scan before point-read traffic.
 - `s3_operation_metrics` returns provider operation and wire-attempt counters.
 - `reset_s3_operation_metrics` atomically returns and resets those counters.
 

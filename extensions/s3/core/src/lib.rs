@@ -52,7 +52,10 @@ pub use operation_index::{
     DEFAULT_OPERATION_INDEX_MAX_UNINDEXED_EVENTS, DEFAULT_OPERATION_INDEX_MERGE_FANOUT,
 };
 pub use payload::ImmutablePayloadStore;
-pub use prolly::Cid;
+pub use prolly::{
+    BoundaryInput, BoundaryRule, ChunkMeasure, ChunkingSpec, Cid, HashAlgorithm, NodeLayoutSpec,
+    TreeFormat,
+};
 pub use publication::{
     AppliedBranchBarrier, CommitPublication, LoadedRef, PublicationJournalCursor,
     PublicationJournalEntry, PublicationJournalPage, ShardedBranchPublisher,

@@ -87,6 +87,20 @@ async fn repository_put_read_replay_and_reopen_use_only_authority() {
         .await
         .unwrap();
     assert!(!first.idempotent_replay);
+    let upper = repository
+        .prewarm_node_cache_levels("main", first.id, 1)
+        .await
+        .unwrap();
+    assert_eq!(upper.object_nodes, 1);
+    assert_eq!(upper.version_nodes, 1);
+    assert_eq!(
+        repository
+            .prewarm_node_cache_levels("main", first.id, 0)
+            .await
+            .unwrap_err()
+            .code,
+        prolly_s3_core::ErrorCode::InvalidLimit
+    );
     let replay = repository
         .put_object_with_operation(
             "main",
@@ -116,6 +130,22 @@ async fn repository_put_read_replay_and_reopen_use_only_authority() {
         hex::encode(repository.format().repository_id.as_bytes())
     )));
     assert_ne!(binding.path.as_str(), "docs/readme.txt");
+
+    plane.reset_request_counts();
+    assert_eq!(
+        repository
+            .get_object("main", b"docs/readme.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"repository"
+    );
+    assert_eq!(
+        plane.request_snapshot().get,
+        2,
+        "a locally indexed exact branch target needs only the ref and whole payload GETs"
+    );
 
     repository.advance_branch_indexes("main").await.unwrap();
     let read_only = Repository::open(

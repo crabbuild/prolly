@@ -79,6 +79,24 @@ was warm, the same repository reached 1,712 reads/s with 23.5 ms p99 and 1.23
 MB downloaded. A new persistent-Foyer process reached 1,594 reads/s with 49.0
 ms p99 and 1.23 MB downloaded.
 
+Tree-geometry probes at 10K rejected smaller target leaf counts. The default
+128-entry geometry reached 925 cold reads/s with 91.2 ms p99, 3,169 calls, and
+7.33 MB downloaded. Targets 64, 32, and 16 produced p99 values of 151, 120,
+and 455 ms respectively while adding traversal requests; the default remains
+canonical. A two-level 100K prewarm loaded 23 shared nodes with 64 calls and
+701 KB but reduced cold ranged leaf fetches only from 563 to 536, so bounded
+prewarm remains an opt-in deployment tool rather than the default.
+
+An exact-target local readiness marker now avoids rereading the durable journal
+index head after this process completes catch-up. A regression test fixes the
+steady read shape at one branch-ref GET plus one complete-payload GET. On the
+100K RustFS repository, a warm 1K-read pass fell from 3,000 to 2,002 calls and
+from about 1.23 MB to 744 KB downloaded; it reached 1,212 reads/s with 54.3 ms
+p99 on the now-heavily loaded shared provider. A fresh cold run likewise fell
+from 4,104 to 3,116 calls, although host contention made its latency unsuitable
+for before/after comparison. A changed branch target cannot use the marker and
+falls back to durable index validation.
+
 Branch creation took 157 ms for the 100-key case and 270 ms for the 10K-key
 case. Direct-child diff took 10.4 ms for 100 keys and 131 ms for 10K keys;
 merge took 469 ms and 1.087 seconds respectively. Preparing the 10K whole-object

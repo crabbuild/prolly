@@ -1169,6 +1169,86 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
+    /// Load only the root and a bounded number of upper tree levels. This
+    /// avoids a full-snapshot scan while removing repeated cold traversal of
+    /// shared internal paths before point-read traffic begins.
+    pub async fn prewarm_node_cache_levels(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+        levels: usize,
+    ) -> Result<NodeCachePrewarmReport> {
+        if !(1..=64).contains(&levels) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "node-cache prewarm levels must be within 1..=64",
+            ));
+        }
+        validate_branch(branch)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let before = self.node_store.node_cache_snapshot();
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let object_nodes = self
+            .prewarm_root_levels(&commit.state.objects, levels)
+            .await?;
+        let version_nodes = self
+            .prewarm_root_levels(&commit.state.versions, levels)
+            .await?;
+        Ok(NodeCachePrewarmReport {
+            snapshot,
+            object_nodes,
+            version_nodes,
+            before,
+            after: self.node_store.node_cache_snapshot(),
+        })
+    }
+
+    async fn prewarm_root_levels(&self, root: &RootManifest, levels: usize) -> Result<usize> {
+        let mut frontier = root.root.iter().cloned().collect::<Vec<_>>();
+        let mut seen = BTreeSet::new();
+        let mut loaded_nodes = 0usize;
+        for _ in 0..levels {
+            frontier.retain(|cid| seen.insert(cid.clone()));
+            if frontier.is_empty() {
+                break;
+            }
+            let loaded = stream::iter(frontier.into_iter().map(|cid| async move {
+                let bytes = self.node_store.get(cid.as_bytes()).await?.ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "prewarm node is missing")
+                })?;
+                let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                    .map_err(|error| {
+                        Error::new(
+                            ErrorCode::CorruptNode,
+                            format!("prewarm node could not be decoded: {error}"),
+                        )
+                    })?;
+                Ok::<_, Error>(node)
+            }))
+            .buffered(32)
+            .collect::<Vec<_>>()
+            .await;
+            let mut next = Vec::new();
+            for node in loaded {
+                let node = node?;
+                loaded_nodes = loaded_nodes.saturating_add(1);
+                if !node.leaf {
+                    for child in node.vals {
+                        next.push(prolly::Cid(child.try_into().map_err(|_| {
+                            Error::new(
+                                ErrorCode::CorruptNode,
+                                "prewarm internal child CID is invalid",
+                            )
+                        })?));
+                    }
+                }
+            }
+            frontier = next;
+        }
+        Ok(loaded_nodes)
+    }
+
     pub async fn head(&self, branch: &str) -> Result<CommitId> {
         self.locator.register(branch)?;
         Ok(self.publisher.load(branch).await?.value.target)
@@ -5698,6 +5778,7 @@ impl<P: ObjectPlane> Repository<P> {
             .remove(branch);
         let reference = self.publisher.load(branch).await?;
         self.record_branch_catalog(&reference).await?;
+        self.mark_local_index_head(branch, reference.value.target)?;
         Ok(report)
     }
 
@@ -6189,6 +6270,15 @@ impl<P: ObjectPlane> Repository<P> {
         branch: &str,
         reference: &LoadedRef,
     ) -> Result<()> {
+        if self
+            .local_index_heads
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "local-index lock poisoned"))?
+            .get(branch)
+            .is_some_and(|target| *target == reference.value.target)
+        {
+            return Ok(());
+        }
         let health = self.branch_index_health_for(branch, reference).await?;
         Self::check_branch_index_health(health)
     }

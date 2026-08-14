@@ -533,6 +533,8 @@ that fits the configured disk block; larger nodes are deliberately rejected
 from cache admission and continue to use the provider fallback.
 
 Use `prewarm_node_cache(snapshot)` during startup to traverse both state trees.
+Use `prewarm_node_cache_levels(snapshot, levels)` when startup should load only
+the roots and shared upper paths instead of scanning every leaf.
 Use `node_cache_snapshot()` before and after to observe hits, misses,
 insertions, corruptions, coalesced waits, ranged fetches, fetched and avoided
 bytes, and admission rejections.
