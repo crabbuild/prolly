@@ -1535,19 +1535,19 @@ async fn rustfs_10k_concurrent_commit_regression_gate() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
-#[ignore = "uploads a 65 MiB multipart payload to live RustFS"]
-async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
+#[ignore = "uploads a 65 MiB single object to live RustFS"]
+async fn rustfs_streamed_large_object_uses_one_provider_object() {
     assert!(
         rustfs_enabled(),
-        "set PROLLY_S3_RUSTFS=1 to run the multipart RustFS gate"
+        "set PROLLY_S3_RUSTFS=1 to run the large-object RustFS gate"
     );
     const SIZE: usize = 65 * 1_024 * 1_024;
     let (aws, bucket) = rustfs_client().await;
     let client = Client::builder()
         .aws_client(aws)
         .bucket(&bucket)
-        .repository_prefix(unique_name("multipart-stream"))
-        .writer("rustfs-multipart-writer")
+        .repository_prefix(unique_name("single-object-stream"))
+        .writer("rustfs-single-object-writer")
         .provider_identity(provider_identity())
         .attestation_signer(attestation_signer())
         .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
@@ -1558,7 +1558,7 @@ async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
     client.reset_s3_operation_metrics();
     let mut session = client
         .begin_commit()
-        .message("multipart stream")
+        .message("single-object stream")
         .start()
         .await
         .unwrap();
@@ -1568,10 +1568,8 @@ async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
         .unwrap();
     let receipt = session.publish().await.unwrap();
     let metrics = client.reset_s3_operation_metrics();
-    assert_eq!(metrics.create_multipart_upload, 1);
-    assert!(metrics.upload_part >= 2);
-    assert_eq!(metrics.complete_multipart_upload, 1);
-    assert_eq!(metrics.abort_multipart_upload, 0);
+    // One payload PutObject plus bounded repository metadata publications.
+    assert!(metrics.put_object >= 1);
     assert!(metrics.uploaded_body_bytes >= SIZE as u64);
     assert!(metrics.uploaded_body_bytes < SIZE as u64 + 1024 * 1024);
 
@@ -1588,21 +1586,21 @@ async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
-#[ignore = "uploads and resumes a 33 MiB provider-native multipart object"]
-async fn rustfs_native_multipart_resumes_after_restart_as_one_object() {
+#[ignore = "hands off and publishes a 33 MiB externally uploaded object"]
+async fn rustfs_external_uploader_handoff_survives_restart() {
     assert!(
         rustfs_enabled(),
-        "set PROLLY_S3_RUSTFS=1 to run the resumable multipart gate"
+        "set PROLLY_S3_RUSTFS=1 to run the external-uploader gate"
     );
     const MIB: usize = 1_024 * 1_024;
     let (aws, bucket) = rustfs_client().await;
-    let prefix = unique_name("native-multipart-resume");
+    let prefix = unique_name("external-upload-resume");
     let builder = |aws: aws_sdk_s3::Client| {
         Client::builder()
             .aws_client(aws)
             .bucket(&bucket)
             .repository_prefix(&prefix)
-            .writer("rustfs-native-multipart-writer")
+            .writer("rustfs-external-upload-writer")
             .provider_identity(provider_identity())
             .attestation_signer(attestation_signer())
             .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
@@ -1613,13 +1611,13 @@ async fn rustfs_native_multipart_resumes_after_restart_as_one_object() {
     body.extend(vec![0x33; MIB]);
     let session = client
         .begin_commit()
-        .message("native multipart resume")
+        .message("external upload resume")
         .start()
         .await
         .unwrap();
     let batch = session.id();
-    let mut upload = session
-        .begin_multipart_upload(
+    let upload = session
+        .prepare_external_object_upload(
             "large/resumable.bin",
             body.len() as u64,
             Sha256::digest(&body).into(),
@@ -1627,19 +1625,12 @@ async fn rustfs_native_multipart_resumes_after_restart_as_one_object() {
         )
         .await
         .unwrap();
-    let first_size = upload.expected_part_size(1).unwrap() as usize;
-    let mut tampered = upload.clone();
-    tampered.part_size += 1;
-    assert_eq!(
-        session
-            .upload_multipart_part(&mut tampered, 1, Vec::new())
-            .await
-            .unwrap_err()
-            .code,
-        ErrorCode::InvalidRequest
-    );
-    session
-        .upload_multipart_part(&mut upload, 1, body[..first_size].to_vec())
+    aws.put_object()
+        .bucket(&bucket)
+        .key(upload.path.as_str())
+        .metadata("prolly-sha256", hex::encode(upload.checksum_sha256))
+        .body(ByteStream::from(body.clone()))
+        .send()
         .await
         .unwrap();
     let persisted = serde_json::to_vec(&upload).unwrap();
@@ -1647,35 +1638,13 @@ async fn rustfs_native_multipart_resumes_after_restart_as_one_object() {
     drop(client);
 
     let reopened = builder(aws).open().await.unwrap();
-    reopened.reset_s3_operation_metrics();
     let mut session = reopened.resume_commit(batch).await.unwrap();
-    let mut upload = serde_json::from_slice(&persisted).unwrap();
+    let upload = serde_json::from_slice(&persisted).unwrap();
     session
-        .reconcile_multipart_upload(&mut upload)
-        .await
-        .unwrap();
-    assert_eq!(upload.completed_parts.len(), 1);
-    let mut offset = first_size;
-    for number in 2..=upload.part_count().unwrap() {
-        let len = upload.expected_part_size(number).unwrap() as usize;
-        session
-            .upload_multipart_part(&mut upload, number, body[offset..offset + len].to_vec())
-            .await
-            .unwrap();
-        offset += len;
-    }
-    session
-        .complete_multipart_upload(&mut upload, Default::default(), Default::default())
+        .stage_external_object_upload(&upload, Default::default(), Default::default())
         .await
         .unwrap();
     session.publish().await.unwrap();
-    let metrics = reopened.reset_s3_operation_metrics();
-    assert_eq!(metrics.create_multipart_upload, 0);
-    assert_eq!(metrics.upload_part, 2);
-    assert_eq!(metrics.complete_multipart_upload, 1);
-    assert!(metrics.list_parts >= 2);
-    assert_eq!(metrics.abort_multipart_upload, 0);
-    assert!(metrics.uploaded_body_bytes < body.len() as u64 - 8 * MIB as u64);
     assert_eq!(
         reopened
             .get_object("large/resumable.bin")

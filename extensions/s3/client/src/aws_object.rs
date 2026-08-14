@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeMap,
-    io::SeekFrom,
     ops::RangeInclusive,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -10,12 +9,11 @@ use std::{
 
 use aws_sdk_s3::{
     primitives::ByteStream,
-    types::{CompletedMultipartUpload, CompletedPart, Delete, ObjectIdentifier},
+    types::{Delete, ObjectIdentifier},
     Client,
 };
 use aws_smithy_types::error::metadata::ProvideErrorMetadata;
 use aws_types::request_id::RequestId;
-use futures_util::{stream, StreamExt, TryStreamExt};
 use prolly_s3_core::{
     CompareExchange, CompareExchangeOutcome, DeleteOutcome, Error, ErrorCode, GetRequest,
     ImmutableFilePut, ImmutablePut, ImmutablePutOutcome, ListRequest, ObjectPath, ObjectPlane,
@@ -23,13 +21,7 @@ use prolly_s3_core::{
     StoredMetadata, StoredObject,
 };
 use sha2::{Digest, Sha256};
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
-
-const MULTIPART_THRESHOLD_BYTES: u64 = 64 * 1_024 * 1_024;
-const MIN_MULTIPART_PART_BYTES: u64 = 16 * 1_024 * 1_024;
-const MAX_MULTIPART_PART_BYTES: u64 = 5 * 1_024 * 1_024 * 1_024;
-const MAX_MULTIPART_PARTS: u64 = 10_000;
-const MULTIPART_UPLOAD_CONCURRENCY: usize = 8;
+const MAX_SINGLE_PUT_BYTES: u64 = 5 * 1_024 * 1_024 * 1_024;
 
 /// Object-plane calls issued to the AWS SDK and body bytes handed to or
 /// collected from it. SDK-internal HTTP retries are intentionally not counted;
@@ -39,11 +31,6 @@ pub struct S3OperationMetrics {
     pub get_object: u64,
     pub head_object: u64,
     pub put_object: u64,
-    pub create_multipart_upload: u64,
-    pub upload_part: u64,
-    pub complete_multipart_upload: u64,
-    pub abort_multipart_upload: u64,
-    pub list_parts: u64,
     pub list_objects_v2: u64,
     pub list_object_versions: u64,
     pub delete_object: u64,
@@ -57,11 +44,6 @@ impl S3OperationMetrics {
         self.get_object
             + self.head_object
             + self.put_object
-            + self.create_multipart_upload
-            + self.upload_part
-            + self.complete_multipart_upload
-            + self.abort_multipart_upload
-            + self.list_parts
             + self.list_objects_v2
             + self.list_object_versions
             + self.delete_object
@@ -74,11 +56,6 @@ struct AtomicS3OperationMetrics {
     get_object: AtomicU64,
     head_object: AtomicU64,
     put_object: AtomicU64,
-    create_multipart_upload: AtomicU64,
-    upload_part: AtomicU64,
-    complete_multipart_upload: AtomicU64,
-    abort_multipart_upload: AtomicU64,
-    list_parts: AtomicU64,
     list_objects_v2: AtomicU64,
     list_object_versions: AtomicU64,
     delete_object: AtomicU64,
@@ -87,57 +64,12 @@ struct AtomicS3OperationMetrics {
     downloaded_body_bytes: AtomicU64,
 }
 
-struct MultipartAbortGuard {
-    client: Client,
-    bucket: String,
-    key: String,
-    upload_id: Option<String>,
-    metrics: Arc<AtomicS3OperationMetrics>,
-}
-
-impl MultipartAbortGuard {
-    fn disarm(&mut self) {
-        self.upload_id = None;
-    }
-}
-
-impl Drop for MultipartAbortGuard {
-    fn drop(&mut self) {
-        let Some(upload_id) = self.upload_id.take() else {
-            return;
-        };
-        let client = self.client.clone();
-        let bucket = self.bucket.clone();
-        let key = self.key.clone();
-        let metrics = self.metrics.clone();
-        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-            runtime.spawn(async move {
-                metrics
-                    .abort_multipart_upload
-                    .fetch_add(1, Ordering::Relaxed);
-                let _ = client
-                    .abort_multipart_upload()
-                    .bucket(bucket)
-                    .key(key)
-                    .upload_id(upload_id)
-                    .send()
-                    .await;
-            });
-        }
-    }
-}
-
 impl AtomicS3OperationMetrics {
     fn snapshot(&self) -> S3OperationMetrics {
         S3OperationMetrics {
             get_object: self.get_object.load(Ordering::Relaxed),
             head_object: self.head_object.load(Ordering::Relaxed),
             put_object: self.put_object.load(Ordering::Relaxed),
-            create_multipart_upload: self.create_multipart_upload.load(Ordering::Relaxed),
-            upload_part: self.upload_part.load(Ordering::Relaxed),
-            complete_multipart_upload: self.complete_multipart_upload.load(Ordering::Relaxed),
-            abort_multipart_upload: self.abort_multipart_upload.load(Ordering::Relaxed),
-            list_parts: self.list_parts.load(Ordering::Relaxed),
             list_objects_v2: self.list_objects_v2.load(Ordering::Relaxed),
             list_object_versions: self.list_object_versions.load(Ordering::Relaxed),
             delete_object: self.delete_object.load(Ordering::Relaxed),
@@ -152,11 +84,6 @@ impl AtomicS3OperationMetrics {
             get_object: self.get_object.swap(0, Ordering::Relaxed),
             head_object: self.head_object.swap(0, Ordering::Relaxed),
             put_object: self.put_object.swap(0, Ordering::Relaxed),
-            create_multipart_upload: self.create_multipart_upload.swap(0, Ordering::Relaxed),
-            upload_part: self.upload_part.swap(0, Ordering::Relaxed),
-            complete_multipart_upload: self.complete_multipart_upload.swap(0, Ordering::Relaxed),
-            abort_multipart_upload: self.abort_multipart_upload.swap(0, Ordering::Relaxed),
-            list_parts: self.list_parts.swap(0, Ordering::Relaxed),
             list_objects_v2: self.list_objects_v2.swap(0, Ordering::Relaxed),
             list_object_versions: self.list_object_versions.swap(0, Ordering::Relaxed),
             delete_object: self.delete_object.swap(0, Ordering::Relaxed),
@@ -200,187 +127,6 @@ impl AwsS3ObjectPlane {
         self.metrics.reset()
     }
 
-    pub(crate) async fn begin_native_multipart(
-        &self,
-        path: &ObjectPath,
-        expected_sha256: [u8; 32],
-    ) -> Result<String> {
-        self.metrics
-            .create_multipart_upload
-            .fetch_add(1, Ordering::Relaxed);
-        let created = self
-            .client
-            .create_multipart_upload()
-            .bucket(&self.bucket)
-            .key(path.as_str())
-            .metadata("prolly-sha256", hex::encode(expected_sha256))
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("CreateMultipartUpload resumable", error))?;
-        created.upload_id().map(ToString::to_string).ok_or_else(|| {
-            Error::new(
-                ErrorCode::OutcomeUnknown,
-                "multipart create succeeded without an upload ID",
-            )
-        })
-    }
-
-    pub(crate) async fn upload_native_part(
-        &self,
-        path: &ObjectPath,
-        upload_id: &str,
-        part_number: i32,
-        bytes: Vec<u8>,
-    ) -> Result<String> {
-        self.metrics.upload_part.fetch_add(1, Ordering::Relaxed);
-        self.metrics
-            .uploaded_body_bytes
-            .fetch_add(bytes.len() as u64, Ordering::Relaxed);
-        let uploaded = self
-            .client
-            .upload_part()
-            .bucket(&self.bucket)
-            .key(path.as_str())
-            .upload_id(upload_id)
-            .part_number(part_number)
-            .body(ByteStream::from(bytes))
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("UploadPart resumable", error))?;
-        uploaded.e_tag().map(ToString::to_string).ok_or_else(|| {
-            Error::new(
-                ErrorCode::OutcomeUnknown,
-                "multipart part succeeded without an ETag",
-            )
-        })
-    }
-
-    pub(crate) async fn list_native_parts(
-        &self,
-        path: &ObjectPath,
-        upload_id: &str,
-    ) -> Result<BTreeMap<i32, (String, u64)>> {
-        let mut marker = None;
-        let mut parts = BTreeMap::new();
-        loop {
-            self.metrics.list_parts.fetch_add(1, Ordering::Relaxed);
-            let page = self
-                .client
-                .list_parts()
-                .bucket(&self.bucket)
-                .key(path.as_str())
-                .upload_id(upload_id)
-                .set_part_number_marker(marker)
-                .send()
-                .await
-                .map_err(|error| map_sdk_error("ListParts resumable", error))?;
-            for part in page.parts() {
-                let number = part.part_number().ok_or_else(|| {
-                    Error::new(ErrorCode::CorruptContent, "provider part has no number")
-                })?;
-                let etag = part.e_tag().ok_or_else(|| {
-                    Error::new(ErrorCode::CorruptContent, "provider part has no ETag")
-                })?;
-                let size = u64::try_from(part.size().unwrap_or_default()).map_err(|_| {
-                    Error::new(
-                        ErrorCode::CorruptContent,
-                        "provider part has an invalid size",
-                    )
-                })?;
-                parts.insert(number, (etag.to_string(), size));
-            }
-            if !page.is_truncated().unwrap_or(false) {
-                break;
-            }
-            marker = page.next_part_number_marker().map(ToString::to_string);
-        }
-        Ok(parts)
-    }
-
-    pub(crate) async fn complete_native_multipart(
-        &self,
-        path: &ObjectPath,
-        upload_id: &str,
-        parts: &BTreeMap<i32, String>,
-        size: u64,
-        expected_sha256: [u8; 32],
-    ) -> Result<StoredMetadata> {
-        let completed = CompletedMultipartUpload::builder()
-            .set_parts(Some(
-                parts
-                    .iter()
-                    .map(|(number, etag)| {
-                        CompletedPart::builder()
-                            .part_number(*number)
-                            .e_tag(etag)
-                            .build()
-                    })
-                    .collect(),
-            ))
-            .build();
-        self.metrics
-            .complete_multipart_upload
-            .fetch_add(1, Ordering::Relaxed);
-        let output = self
-            .client
-            .complete_multipart_upload()
-            .bucket(&self.bucket)
-            .key(path.as_str())
-            .upload_id(upload_id)
-            .multipart_upload(completed)
-            .send()
-            .await;
-        let output = match output {
-            Ok(output) => output,
-            Err(error) => {
-                let mapped = map_sdk_error("CompleteMultipartUpload resumable", error);
-                if let Some(existing) = self.head(path).await? {
-                    if existing.len == size && existing.sha256 == expected_sha256 {
-                        return Ok(existing);
-                    }
-                }
-                return Err(mapped);
-            }
-        };
-        Ok(StoredMetadata {
-            token: StorageToken {
-                etag: output.e_tag().unwrap_or_default().to_string(),
-                version_id: output.version_id().map(ToString::to_string),
-            },
-            len: size,
-            sha256: expected_sha256,
-            last_modified_millis: 0,
-            delete_marker: false,
-            user_metadata: BTreeMap::from([(
-                "prolly-sha256".to_string(),
-                hex::encode(expected_sha256),
-            )]),
-        })
-    }
-
-    pub(crate) async fn abort_native_multipart(
-        &self,
-        path: &ObjectPath,
-        upload_id: &str,
-    ) -> Result<()> {
-        self.metrics
-            .abort_multipart_upload
-            .fetch_add(1, Ordering::Relaxed);
-        self.client
-            .abort_multipart_upload()
-            .bucket(&self.bucket)
-            .key(path.as_str())
-            .upload_id(upload_id)
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("AbortMultipartUpload resumable", error))?;
-        Ok(())
-    }
-
-    pub(crate) fn native_multipart_part_size(size: u64) -> Result<u64> {
-        multipart_part_size(size)
-    }
-
     async fn get_current(&self, path: &ObjectPath) -> Result<Option<StoredObject>> {
         self.get(GetRequest {
             path: path.clone(),
@@ -388,139 +134,6 @@ impl AwsS3ObjectPlane {
             physical_version: None,
         })
         .await
-    }
-
-    async fn put_multipart_file(&self, request: &ImmutableFilePut) -> Result<ImmutablePutOutcome> {
-        if let Some(existing) = self.head(&request.path).await? {
-            if existing.len == request.size && existing.sha256 == request.expected_sha256 {
-                return Ok(ImmutablePutOutcome::AlreadyPresent(existing));
-            }
-            return Err(Error::new(
-                ErrorCode::CorruptContent,
-                format!("different bytes exist at {}", request.path),
-            ));
-        }
-
-        self.metrics
-            .create_multipart_upload
-            .fetch_add(1, Ordering::Relaxed);
-        let created = self
-            .client
-            .create_multipart_upload()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .metadata("prolly-sha256", hex::encode(request.expected_sha256))
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("CreateMultipartUpload immutable spool", error))?;
-        let upload_id = created.upload_id().ok_or_else(|| {
-            Error::new(
-                ErrorCode::OutcomeUnknown,
-                "multipart create succeeded without an upload ID",
-            )
-        })?;
-        let mut abort = MultipartAbortGuard {
-            client: self.client.clone(),
-            bucket: self.bucket.clone(),
-            key: request.path.as_str().to_string(),
-            upload_id: Some(upload_id.to_string()),
-            metrics: self.metrics.clone(),
-        };
-
-        let part_size = multipart_part_size(request.size)?;
-        let part_count = request.size.div_ceil(part_size);
-        let parts = stream::iter(0..part_count)
-            .map(|index| {
-                let client = self.client.clone();
-                let bucket = self.bucket.clone();
-                let key = request.path.as_str().to_string();
-                let upload_id = upload_id.to_string();
-                let body_path = request.body_path.clone();
-                let metrics = self.metrics.clone();
-                async move {
-                    let offset = index.checked_mul(part_size).ok_or_else(|| {
-                        Error::new(ErrorCode::EntityTooLarge, "multipart offset overflow")
-                    })?;
-                    let len = part_size.min(request.size - offset);
-                    let mut file = tokio::fs::File::open(body_path)
-                        .await
-                        .map_err(|error| transport_error("multipart spool open", error))?;
-                    file.seek(SeekFrom::Start(offset))
-                        .await
-                        .map_err(|error| transport_error("multipart spool seek", error))?;
-                    let mut bytes = vec![
-                        0;
-                        usize::try_from(len).map_err(|_| {
-                            Error::new(ErrorCode::EntityTooLarge, "multipart part exceeds usize")
-                        })?
-                    ];
-                    file.read_exact(&mut bytes)
-                        .await
-                        .map_err(|error| transport_error("multipart spool read", error))?;
-                    let part_number = i32::try_from(index + 1).map_err(|_| {
-                        Error::new(
-                            ErrorCode::EntityTooLarge,
-                            "multipart part count exceeds i32",
-                        )
-                    })?;
-                    metrics.upload_part.fetch_add(1, Ordering::Relaxed);
-                    metrics
-                        .uploaded_body_bytes
-                        .fetch_add(len, Ordering::Relaxed);
-                    let uploaded = client
-                        .upload_part()
-                        .bucket(bucket)
-                        .key(key)
-                        .upload_id(upload_id)
-                        .part_number(part_number)
-                        .body(ByteStream::from(bytes))
-                        .send()
-                        .await
-                        .map_err(|error| map_sdk_error("UploadPart immutable spool", error))?;
-                    Ok::<CompletedPart, Error>(
-                        CompletedPart::builder()
-                            .part_number(part_number)
-                            .set_e_tag(uploaded.e_tag().map(ToString::to_string))
-                            .build(),
-                    )
-                }
-            })
-            .buffer_unordered(MULTIPART_UPLOAD_CONCURRENCY)
-            .try_collect::<Vec<_>>()
-            .await?;
-        let mut parts = parts;
-        parts.sort_by_key(|part| part.part_number());
-        let completed = CompletedMultipartUpload::builder()
-            .set_parts(Some(parts))
-            .build();
-        self.metrics
-            .complete_multipart_upload
-            .fetch_add(1, Ordering::Relaxed);
-        let output = self
-            .client
-            .complete_multipart_upload()
-            .bucket(&self.bucket)
-            .key(request.path.as_str())
-            .upload_id(upload_id)
-            .multipart_upload(completed)
-            .send()
-            .await
-            .map_err(|error| map_sdk_error("CompleteMultipartUpload immutable spool", error))?;
-        abort.disarm();
-        Ok(ImmutablePutOutcome::Created(StoredMetadata {
-            token: StorageToken {
-                etag: output.e_tag().unwrap_or_default().to_string(),
-                version_id: output.version_id().map(ToString::to_string),
-            },
-            len: request.size,
-            sha256: request.expected_sha256,
-            last_modified_millis: 0,
-            delete_marker: false,
-            user_metadata: BTreeMap::from([(
-                "prolly-sha256".to_string(),
-                hex::encode(request.expected_sha256),
-            )]),
-        }))
     }
 }
 
@@ -700,8 +313,11 @@ impl ObjectPlane for AwsS3ObjectPlane {
                 "immutable spool size changed before upload",
             ));
         }
-        if request.size >= MULTIPART_THRESHOLD_BYTES {
-            return self.put_multipart_file(&request).await;
+        if request.size > MAX_SINGLE_PUT_BYTES {
+            return Err(Error::new(
+                ErrorCode::EntityTooLarge,
+                "object exceeds S3 PutObject limits; upload the single final object with an external provider transfer manager and stage its handoff",
+            ));
         }
         self.metrics.put_object.fetch_add(1, Ordering::Relaxed);
         self.metrics
@@ -1066,25 +682,6 @@ fn format_range(range: &RangeInclusive<u64>) -> String {
     format!("bytes={}-{}", range.start(), range.end())
 }
 
-fn multipart_part_size(size: u64) -> Result<u64> {
-    if size == 0 {
-        return Err(Error::new(
-            ErrorCode::InvalidRequest,
-            "multipart upload requires a nonempty body",
-        ));
-    }
-    let minimum_for_limit = size.div_ceil(MAX_MULTIPART_PARTS);
-    let mebibyte = 1_024 * 1_024;
-    let part_size = MIN_MULTIPART_PART_BYTES.max(minimum_for_limit.div_ceil(mebibyte) * mebibyte);
-    if part_size > MAX_MULTIPART_PART_BYTES || size.div_ceil(part_size) > MAX_MULTIPART_PARTS {
-        return Err(Error::new(
-            ErrorCode::EntityTooLarge,
-            "multipart upload exceeds S3 part limits",
-        ));
-    }
-    Ok(part_size)
-}
-
 fn encode_version_cursor(key: Option<&str>, version: Option<&str>) -> String {
     let key = key.unwrap_or_default();
     let version = version.unwrap_or_default();
@@ -1177,7 +774,7 @@ mod tests {
     use aws_smithy_types::error::metadata::{ErrorMetadata, ProvideErrorMetadata};
     use aws_types::request_id::RequestId;
 
-    use super::{map_sdk_error, multipart_part_size, MAX_MULTIPART_PARTS};
+    use super::map_sdk_error;
     use prolly_s3_core::{ErrorCode, RetryAdvice};
 
     #[derive(Debug)]
@@ -1238,15 +835,5 @@ mod tests {
             mapped.provider_message.as_deref(),
             Some("ErrAccessKeyDisabled")
         );
-    }
-
-    #[test]
-    fn multipart_layout_is_bounded_through_the_repository_limit() {
-        let small = multipart_part_size(64 * 1_024 * 1_024).unwrap();
-        assert_eq!(small, 16 * 1_024 * 1_024);
-        let maximum = 5 * 1_024 * 1_024 * 1_024 * 1_024_u64;
-        let large = multipart_part_size(maximum).unwrap();
-        assert!(maximum.div_ceil(large) <= MAX_MULTIPART_PARTS);
-        assert!(large <= 5 * 1_024 * 1_024 * 1_024);
     }
 }

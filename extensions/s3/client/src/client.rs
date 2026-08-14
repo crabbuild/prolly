@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     io::Write as _,
     str::FromStr as _,
     sync::{Arc, Mutex},
@@ -20,12 +20,12 @@ use prolly_s3_core::{
     MergeConflictPage, MergeCursor, MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData,
     ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectHeaders, ObjectPath, ObjectRangeData,
     ObjectSummary, ObjectVersion, OperationId, OperationIndexRebuildCursor,
-    OperationIndexRebuildStep, PayloadPackStatsCursor, PayloadPackStatsPage, ProviderAttestation,
-    ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
-    PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
-    RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
-    RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
-    VersionSummary,
+    OperationIndexRebuildStep, PayloadPackCandidate, PayloadPackCandidatePage,
+    PayloadPackStatsCursor, PayloadPackStatsPage, ProviderAttestation, ProviderPerKeyVersionLimit,
+    ProviderProfileId, PublicationJournalCursor, PublicationJournalPage, RefCatalogCursor,
+    RefCatalogRepairPage, RefKind, RefMoveReceipt, RepairCursor, RepairPage, Repository,
+    RepositoryOptions, RestoreCursor, RestorePage, Result, RetentionPin, RetentionPinPage,
+    StagedMutation, Tag, TagCatalogPage, TraversalBudget, VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -42,7 +42,6 @@ use crate::{
 #[derive(Clone)]
 pub struct Client {
     repository: Arc<Repository<AwsS3ObjectPlane>>,
-    plane: Arc<AwsS3ObjectPlane>,
     bucket: String,
     /// Branch used to resolve branch-local packed-node indexes. For a detached
     /// checkout this remains the branch from which checkout was requested.
@@ -53,26 +52,19 @@ pub struct Client {
     _branch_index_maintenance: Arc<Mutex<Option<prolly_s3_core::BranchIndexMaintenance>>>,
 }
 
-/// Durable application checkpoint for one provider-native multipart upload.
-/// It contains only S3 upload state; successful completion creates one physical
-/// object and no Prolly chunk objects or chunk manifest.
+/// Durable handoff describing one complete provider object.
+///
+/// Upload this exact object with any S3 transfer manager, including the
+/// `prolly-sha256` metadata value. Prolly never observes upload IDs, parts, or
+/// part checksums; it only verifies the completed whole object before publish.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct MultipartUploadCheckpoint {
+pub struct ExternalObjectUpload {
     pub batch: BatchId,
     pub key: Vec<u8>,
     pub path: ObjectPath,
-    pub upload_id: String,
     pub size: u64,
     pub checksum_sha256: [u8; 32],
     pub checksum_md5: [u8; 16],
-    pub part_size: u64,
-    pub completed_parts: BTreeMap<i32, MultipartCompletedPart>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct MultipartCompletedPart {
-    pub etag: String,
-    pub size: u64,
 }
 
 #[derive(Default)]
@@ -534,6 +526,19 @@ impl Client {
             .await
     }
 
+    pub async fn payload_pack_candidates_page(
+        &self,
+        cursor: &PayloadPackStatsCursor,
+        after: Option<&[u8]>,
+        limit: usize,
+        maximum_utilization_basis_points: u64,
+    ) -> Result<PayloadPackCandidatePage> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .payload_pack_candidates_page(cursor, after, limit, maximum_utilization_basis_points)
+            .await
+    }
+
     /// Repack one snapshot-bound page of direct payloads no larger than the
     /// configured threshold. Each page publishes one deterministic commit;
     /// historical versions remain readable until ordinary retention/GC makes
@@ -579,6 +584,22 @@ impl Client {
                     .then(|| object.key.clone())
             })
             .collect::<Vec<_>>();
+        let session = if selected.is_empty() {
+            None
+        } else {
+            let session = self
+                .begin_commit()
+                .message("payload pack maintenance")
+                .start()
+                .await?;
+            if session.base_commit() != page.snapshot {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "branch moved between repack listing and commit-session start",
+                ));
+            }
+            Some(session)
+        };
         let loaded = stream::iter(selected)
             .map(|key| async move {
                 self.repository
@@ -618,11 +639,159 @@ impl Client {
         let receipt = if inputs.is_empty() {
             None
         } else {
-            let mut session = self
-                .begin_commit()
-                .message("payload pack maintenance")
-                .start()
+            let mut session = session.expect("nonempty repack input opened a session");
+            let staged = self
+                .repository
+                .stage_commit_session_repack_batch(&session.manifest, inputs, options.concurrency)
                 .await?;
+            for mutation in staged {
+                session.insert_staged(mutation);
+            }
+            Some(session.publish().await?)
+        };
+        Ok(PayloadRepackPage {
+            snapshot: page.snapshot,
+            scanned_objects: page.objects.len(),
+            repacked_objects,
+            repacked_bytes,
+            receipt,
+            continuation: page.continuation,
+        })
+    }
+
+    /// Incrementally rewrite current logical objects that still reference one
+    /// of the selected sparse physical packs. Candidate discovery is bound to
+    /// `inventory.snapshot`; each publication is based on a fresh commit
+    /// session and refuses to overwrite a key whose logical value changed.
+    pub async fn repack_sparse_payloads_page(
+        &self,
+        inventory: &PayloadPackStatsCursor,
+        candidates: &[PayloadPackCandidate],
+        prefix: impl AsRef<str>,
+        continuation: Option<&str>,
+        options: PayloadRepackOptions,
+    ) -> Result<PayloadRepackPage> {
+        self.ensure_provider_qualified()?;
+        let branch = self.attached_branch()?;
+        if !inventory.complete
+            || inventory.branch != branch
+            || candidates.is_empty()
+            || candidates.len() > 1_000
+            || !(1..=1_000).contains(&options.page_size)
+            || options.concurrency == 0
+            || options.concurrency > 1_024
+            || options.max_object_bytes == 0
+            || options.max_object_bytes > 4 * 1_024
+            || options
+                .max_object_bytes
+                .checked_mul(options.page_size as u64)
+                .is_none_or(|maximum| maximum > options.max_batch_bytes)
+        {
+            return Err(invalid(
+                "sparse payload repack limits or inventory are invalid",
+            ));
+        }
+        let selected_packs = candidates
+            .iter()
+            .map(|candidate| {
+                (
+                    candidate.path.clone(),
+                    candidate.provider_version_id.clone(),
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        let page = self
+            .repository
+            .list_objects_page_at(
+                branch,
+                inventory.snapshot,
+                prefix.as_ref().as_bytes(),
+                continuation,
+                options.page_size,
+            )
+            .await?;
+        let old_candidates = page
+            .objects
+            .iter()
+            .filter_map(|object| {
+                let binding = object.version.binding.as_ref()?;
+                selected_packs
+                    .contains(&(binding.path.clone(), binding.provider_version_id.clone()))
+                    .then(|| (object.key.clone(), object.version.body.kind.clone()))
+            })
+            .collect::<Vec<_>>();
+        let mut session = if old_candidates.is_empty() {
+            None
+        } else {
+            Some(
+                self.begin_commit()
+                    .message("sparse payload pack compaction")
+                    .start()
+                    .await?,
+            )
+        };
+        let base = session.as_ref().map(CommitSession::base_commit);
+        let loaded = stream::iter(old_candidates.into_iter().map(|(key, expected_kind)| {
+            let selected_packs = &selected_packs;
+            async move {
+                let Some(base) = base else {
+                    return Ok(None);
+                };
+                let Some(current) = self.repository.head_object_at(branch, base, &key).await?
+                else {
+                    return Ok(None);
+                };
+                let Some(binding) = current.version.binding.as_ref() else {
+                    return Ok(None);
+                };
+                if current.version.body.kind != expected_kind
+                    || !selected_packs
+                        .contains(&(binding.path.clone(), binding.provider_version_id.clone()))
+                {
+                    return Ok(None);
+                }
+                self.repository.get_object_at(branch, base, &key).await
+            }
+        }))
+        .buffer_unordered(options.concurrency)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+        let mut inputs = Vec::with_capacity(loaded.len());
+        let mut repacked_bytes = 0_u64;
+        for object in loaded {
+            let LogicalObjectVersionKind::Live {
+                size,
+                headers,
+                user_metadata,
+                tags,
+                ..
+            } = object.version.body.kind
+            else {
+                return Err(invalid("sparse repack selected a delete marker"));
+            };
+            if size > options.max_object_bytes {
+                continue;
+            }
+            repacked_bytes = repacked_bytes
+                .checked_add(size)
+                .ok_or_else(|| invalid("sparse repack byte count overflow"))?;
+            if repacked_bytes > options.max_batch_bytes {
+                return Err(invalid("sparse repack page exceeds its byte limit"));
+            }
+            inputs.push((object.key, object.bytes, headers, user_metadata, tags));
+        }
+        let repacked_objects = inputs.len();
+        let receipt = if inputs.is_empty() {
+            None
+        } else {
+            let mut session = session
+                .take()
+                .expect("selected sparse-pack objects opened a commit session");
             let staged = self
                 .repository
                 .stage_commit_session_repack_batch(&session.manifest, inputs, options.concurrency)
@@ -1960,16 +2129,15 @@ impl CommitSession {
         Ok(())
     }
 
-    /// Start a crash-resumable provider-native multipart upload when the
-    /// complete size and checksums are known. Persist the returned checkpoint
-    /// after every uploaded part. Completion stages exactly one S3 object.
-    pub async fn begin_multipart_upload(
+    /// Prepare a durable whole-object handoff for an external S3 uploader.
+    /// The uploader owns multipart, retry, and resume behavior entirely.
+    pub async fn prepare_external_object_upload(
         &self,
         key: impl Into<String>,
         size: u64,
         checksum_sha256: [u8; 32],
         checksum_md5: [u8; 16],
-    ) -> Result<MultipartUploadCheckpoint> {
+    ) -> Result<ExternalObjectUpload> {
         self.client.ensure_provider_qualified()?;
         let key = key.into().into_bytes();
         let path = self
@@ -1977,162 +2145,52 @@ impl CommitSession {
             .repository
             .commit_session_payload_path(&self.manifest, &key, size, checksum_sha256)
             .await?;
-        let part_size = AwsS3ObjectPlane::native_multipart_part_size(size)?;
-        let upload_id = self
-            .client
-            .plane
-            .begin_native_multipart(&path, checksum_sha256)
-            .await?;
-        Ok(MultipartUploadCheckpoint {
+        Ok(ExternalObjectUpload {
             batch: self.id(),
             key,
             path,
-            upload_id,
             size,
             checksum_sha256,
             checksum_md5,
-            part_size,
-            completed_parts: BTreeMap::new(),
         })
     }
 
-    /// Upload or replace one native provider part. This state is not a Prolly
-    /// object; S3 discards the parts after complete/abort.
-    pub async fn upload_multipart_part(
-        &self,
-        checkpoint: &mut MultipartUploadCheckpoint,
-        part_number: i32,
-        bytes: Vec<u8>,
-    ) -> Result<()> {
-        self.validate_multipart_checkpoint(checkpoint).await?;
-        let expected = checkpoint.expected_part_size(part_number)?;
-        if bytes.len() as u64 != expected {
-            return Err(invalid(format!(
-                "multipart part {part_number} has {} bytes, expected {expected}",
-                bytes.len()
-            )));
-        }
-        let etag = self
-            .client
-            .plane
-            .upload_native_part(&checkpoint.path, &checkpoint.upload_id, part_number, bytes)
-            .await?;
-        checkpoint.completed_parts.insert(
-            part_number,
-            MultipartCompletedPart {
-                etag,
-                size: expected,
-            },
-        );
-        Ok(())
-    }
-
-    /// Reconcile a persisted checkpoint with provider truth after restart or
-    /// an ambiguous part response. Provider-listed parts replace local state.
-    pub async fn reconcile_multipart_upload(
-        &self,
-        checkpoint: &mut MultipartUploadCheckpoint,
-    ) -> Result<()> {
-        self.validate_multipart_checkpoint(checkpoint).await?;
-        let provider = self
-            .client
-            .plane
-            .list_native_parts(&checkpoint.path, &checkpoint.upload_id)
-            .await?;
-        let mut reconciled = BTreeMap::new();
-        for (number, (etag, size)) in provider {
-            let expected = checkpoint.expected_part_size(number)?;
-            if size != expected {
-                return Err(Error::new(
-                    ErrorCode::ChecksumMismatch,
-                    format!(
-                        "provider multipart part {number} has {size} bytes, expected {expected}"
-                    ),
-                ));
-            }
-            reconciled.insert(number, MultipartCompletedPart { etag, size });
-        }
-        checkpoint.completed_parts = reconciled;
-        Ok(())
-    }
-
-    /// Complete the provider upload and stage its resulting single physical
-    /// object in this commit session.
-    pub async fn complete_multipart_upload(
+    /// Verify and stage a completed whole object uploaded to the handoff path.
+    pub async fn stage_external_object_upload(
         &mut self,
-        checkpoint: &mut MultipartUploadCheckpoint,
+        upload: &ExternalObjectUpload,
         headers: ObjectHeaders,
         metadata: BTreeMap<String, String>,
     ) -> Result<()> {
-        self.reconcile_multipart_upload(checkpoint).await?;
-        checkpoint.require_complete()?;
-        let parts = checkpoint
-            .completed_parts
-            .iter()
-            .map(|(number, part)| (*number, part.etag.clone()))
-            .collect();
-        let stored = self
+        upload.validate_for(self)?;
+        let expected_path = self
             .client
-            .plane
-            .complete_native_multipart(
-                &checkpoint.path,
-                &checkpoint.upload_id,
-                &parts,
-                checkpoint.size,
-                checkpoint.checksum_sha256,
+            .repository
+            .commit_session_payload_path(
+                &self.manifest,
+                &upload.key,
+                upload.size,
+                upload.checksum_sha256,
             )
             .await?;
+        if upload.path != expected_path {
+            return Err(invalid("external object handoff path was modified"));
+        }
         let staged = self
             .client
             .repository
-            .stage_commit_session_completed_multipart(
+            .stage_commit_session_existing_object(
                 &self.manifest,
-                checkpoint.key.clone(),
-                checkpoint.size,
-                checkpoint.checksum_sha256,
-                checkpoint.checksum_md5,
-                stored,
+                upload.key.clone(),
+                upload.size,
+                upload.checksum_sha256,
+                upload.checksum_md5,
                 headers,
                 metadata,
             )
             .await?;
         self.insert_staged(staged);
         self.mark_staged_and_checkpoint_if_due().await
-    }
-
-    pub async fn abort_multipart_upload(
-        &self,
-        checkpoint: &MultipartUploadCheckpoint,
-    ) -> Result<()> {
-        self.validate_multipart_checkpoint(checkpoint).await?;
-        self.client
-            .plane
-            .abort_native_multipart(&checkpoint.path, &checkpoint.upload_id)
-            .await
-    }
-
-    async fn validate_multipart_checkpoint(
-        &self,
-        checkpoint: &MultipartUploadCheckpoint,
-    ) -> Result<()> {
-        checkpoint.validate_for(self)?;
-        let expected_path = self
-            .client
-            .repository
-            .commit_session_payload_path(
-                &self.manifest,
-                &checkpoint.key,
-                checkpoint.size,
-                checkpoint.checksum_sha256,
-            )
-            .await?;
-        let expected_part_size = AwsS3ObjectPlane::native_multipart_part_size(checkpoint.size)?;
-        if checkpoint.path != expected_path || checkpoint.part_size != expected_part_size {
-            return Err(invalid(
-                "multipart checkpoint path or part geometry was modified",
-            ));
-        }
-        Ok(())
     }
 
     pub fn delete_object(&mut self, key: impl Into<String>) -> Result<()> {
@@ -2201,51 +2259,16 @@ impl CommitSession {
     }
 }
 
-impl MultipartUploadCheckpoint {
+impl ExternalObjectUpload {
     fn validate_for(&self, session: &CommitSession) -> Result<()> {
         if self.batch != session.id()
-            || self.upload_id.is_empty()
             || self.key.is_empty()
             || self.size == 0
             || self.checksum_sha256 == [0; 32]
-            || self.part_size == 0
         {
             return Err(invalid(
-                "multipart checkpoint is malformed or belongs to another session",
+                "external object handoff is malformed or belongs to another session",
             ));
-        }
-        Ok(())
-    }
-
-    pub fn part_count(&self) -> Result<i32> {
-        let count = self.size.div_ceil(self.part_size);
-        i32::try_from(count).map_err(|_| invalid("multipart part count exceeds i32"))
-    }
-
-    pub fn expected_part_size(&self, part_number: i32) -> Result<u64> {
-        let count = self.part_count()?;
-        if part_number < 1 || part_number > count {
-            return Err(invalid("multipart part number is outside the upload"));
-        }
-        let offset = u64::try_from(part_number - 1)
-            .ok()
-            .and_then(|index| index.checked_mul(self.part_size))
-            .ok_or_else(|| invalid("multipart part offset overflow"))?;
-        Ok(self.part_size.min(self.size - offset))
-    }
-
-    fn require_complete(&self) -> Result<()> {
-        let count = self.part_count()?;
-        for number in 1..=count {
-            let Some(part) = self.completed_parts.get(&number) else {
-                return Err(invalid(format!("multipart part {number} is missing")));
-            };
-            if part.size != self.expected_part_size(number)? || part.etag.is_empty() {
-                return Err(invalid(format!("multipart part {number} is malformed")));
-            }
-        }
-        if self.completed_parts.len() != count as usize {
-            return Err(invalid("multipart checkpoint contains unexpected parts"));
         }
         Ok(())
     }
@@ -2498,7 +2521,6 @@ impl ClientBuilder {
         };
         let client = Client {
             repository,
-            plane,
             bucket,
             branch: branch.clone(),
             checked_out: CheckedOutRef::Branch(branch),

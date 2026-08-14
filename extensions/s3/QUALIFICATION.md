@@ -58,10 +58,11 @@ Run ignored scale tests explicitly and record:
 - cold, prewarmed, and persistent-cache reads;
 - sparse diff and merge at 10K+ keys;
 - restart during staging, merge, index rebuild, and publication response loss.
-- provider-native multipart create/part/complete/abort behavior while retaining
-  exactly one physical S3 object per logical large object;
-- multipart crash/restart reconciliation, including proof that completed native
-  parts are not uploaded again;
+- external provider transfer-manager completion followed by whole-object
+  verification, while retaining exactly one physical S3 object per logical
+  large object;
+- crash/restart between external upload and Prolly publication, with no upload
+  ID or part lifecycle persisted by Prolly;
 - cross-process publication fencing throughout a complete GC epoch;
 - payload-pack utilization before and after bounded repack pages.
 

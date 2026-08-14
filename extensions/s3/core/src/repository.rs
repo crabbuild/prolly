@@ -434,6 +434,38 @@ pub struct PayloadPackStatsPage {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PayloadPackCandidate {
+    pub path: ObjectPath,
+    pub provider_version_id: Option<String>,
+    pub physical_bytes: u64,
+    pub live_bytes: u64,
+    pub live_extents: u64,
+}
+
+impl PayloadPackCandidate {
+    pub fn utilization_basis_points(&self) -> u64 {
+        self.live_bytes
+            .saturating_mul(10_000)
+            .checked_div(self.physical_bytes)
+            .unwrap_or_default()
+            .min(10_000)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PayloadPackCandidatePage {
+    pub packs: Vec<PayloadPackCandidate>,
+    pub after: Option<Vec<u8>>,
+    pub complete: bool,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+struct PayloadPhysicalInventory {
+    binding: crate::PayloadBinding,
+    physical_bytes: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RefMoveReceipt {
     pub branch: String,
     pub old_target: CommitId,
@@ -1936,9 +1968,9 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    /// Resolve the immutable destination for a provider-native multipart
-    /// upload. The provider may hold native parts while the upload is open,
-    /// but completion must create exactly this one physical object.
+    /// Resolve the immutable destination for one externally uploaded provider
+    /// object. Prolly defines the whole-object identity and never observes or
+    /// manages the uploader's transfer parts.
     pub async fn commit_session_payload_path(
         &self,
         session: &CommitSessionManifest,
@@ -1951,61 +1983,50 @@ impl<P: ObjectPlane> Repository<P> {
         if size == 0 || size > self.format.canonical_limits.max_object_bytes {
             return Err(Error::new(
                 ErrorCode::EntityTooLarge,
-                "multipart object size is outside repository limits",
+                "external object size is outside repository limits",
             ));
         }
         if checksum_sha256 == [0; 32] {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
-                "multipart object requires its complete SHA-256",
+                "external object requires its complete SHA-256",
             ));
         }
         self.payloads.path(checksum_sha256)
     }
 
-    /// Stage a provider-completed, single-object multipart upload. This does
-    /// not accept provider part objects or a repository-level chunk manifest.
+    /// Stage one completed provider object. The caller may use any provider
+    /// transfer manager, but only the final object enters the repository.
     #[allow(clippy::too_many_arguments)]
-    pub async fn stage_commit_session_completed_multipart(
+    pub async fn stage_commit_session_existing_object(
         &self,
         session: &CommitSessionManifest,
         key: Vec<u8>,
         size: u64,
         checksum_sha256: [u8; 32],
         checksum_md5: [u8; 16],
-        metadata: crate::StoredMetadata,
         headers: ObjectHeaders,
         user_metadata: BTreeMap<String, String>,
     ) -> Result<StagedMutation> {
         let path = self
             .commit_session_payload_path(session, &key, size, checksum_sha256)
             .await?;
-        if metadata.len != size || metadata.sha256 != checksum_sha256 {
-            return Err(Error::new(
-                ErrorCode::ChecksumMismatch,
-                "completed multipart object metadata does not match its logical object",
-            ));
-        }
         let current = self.plane.head(&path).await?.ok_or_else(|| {
             Error::new(
                 ErrorCode::MissingClosure,
-                "completed multipart object is not readable",
+                "completed external object is not readable",
             )
         })?;
-        if current.len != metadata.len
-            || current.sha256 != metadata.sha256
-            || current.token != metadata.token
-            || current.delete_marker
-        {
+        if current.len != size || current.sha256 != checksum_sha256 || current.delete_marker {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
-                "completed multipart object changed before staging",
+                "completed external object does not match its whole-object identity",
             ));
         }
         let binding = crate::PayloadBinding {
             path,
-            provider_version_id: metadata.token.version_id,
-            provider_etag: metadata.token.etag,
+            provider_version_id: current.token.version_id,
+            provider_etag: current.token.etag,
             checksum_sha256,
             pack_checksum_sha256: None,
             pack_range: None,
@@ -4314,7 +4335,10 @@ impl<P: ObjectPlane> Repository<P> {
             }
             mutations.push(Mutation::Upsert {
                 key,
-                val: metadata.len.to_be_bytes().to_vec(),
+                val: encode_canonical(&PayloadPhysicalInventory {
+                    binding,
+                    physical_bytes: metadata.len,
+                })?,
             });
         }
         for ((key, extents), seen) in pending_extents.into_iter().zip(extent_seen) {
@@ -4361,6 +4385,91 @@ impl<P: ObjectPlane> Repository<P> {
             complete: next.complete,
             cursor: next,
             processed,
+        })
+    }
+
+    /// Page physical packs whose exact live extents are at or below the given
+    /// utilization threshold. The inventory cursor must be complete, binding
+    /// selection to one immutable snapshot before compaction begins.
+    pub async fn payload_pack_candidates_page(
+        &self,
+        cursor: &PayloadPackStatsCursor,
+        after: Option<&[u8]>,
+        limit: usize,
+        maximum_utilization_basis_points: u64,
+    ) -> Result<PayloadPackCandidatePage> {
+        if !cursor.complete
+            || cursor.repository != self.format.repository_id
+            || !(1..=1_000).contains(&limit)
+            || maximum_utilization_basis_points > 10_000
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "pack candidates require a complete cursor, valid limit, and utilization threshold",
+            ));
+        }
+        let engine = self.payload_pack_stats_engine(cursor.job)?;
+        let tree = self.tree_from_root(&cursor.seen)?;
+        let mut entries = match after {
+            Some(after) => engine.range_after(&tree, after, None).await?,
+            None => engine.prefix(&tree, b"p/").await?,
+        };
+        let mut records = Vec::new();
+        let mut last = None;
+        let mut exhausted = true;
+        let mut scanned = 0usize;
+        while scanned < limit {
+            let Some(entry) = entries.next().await else {
+                break;
+            };
+            let (key, encoded) = entry?;
+            if !key.starts_with(b"p/") {
+                break;
+            }
+            exhausted = false;
+            last = Some(key);
+            scanned += 1;
+            let record: PayloadPhysicalInventory = decode_canonical(&encoded)?;
+            if record.binding.is_packed() {
+                records.push(record);
+            }
+        }
+        let extent_keys = records
+            .iter()
+            .map(|record| payload_pack_extent_summary_key(&record.binding))
+            .collect::<Vec<_>>();
+        let extents = engine.get_many(&tree, &extent_keys).await?;
+        let mut packs = Vec::new();
+        for (record, encoded_extents) in records.into_iter().zip(extents) {
+            let extents: Vec<(u64, u64)> = encoded_extents
+                .as_deref()
+                .map(decode_canonical)
+                .transpose()?
+                .unwrap_or_default();
+            let live_bytes = extents.iter().try_fold(0_u64, |total, (start, end)| {
+                end.checked_sub(*start)
+                    .and_then(|length| length.checked_add(1))
+                    .and_then(|length| total.checked_add(length))
+                    .ok_or_else(|| {
+                        Error::new(ErrorCode::CorruptContent, "pack live-byte extent overflow")
+                    })
+            })?;
+            let candidate = PayloadPackCandidate {
+                path: record.binding.path,
+                provider_version_id: record.binding.provider_version_id,
+                physical_bytes: record.physical_bytes,
+                live_bytes,
+                live_extents: extents.len() as u64,
+            };
+            if candidate.utilization_basis_points() <= maximum_utilization_basis_points {
+                packs.push(candidate);
+            }
+        }
+        let complete = exhausted || last.is_none();
+        Ok(PayloadPackCandidatePage {
+            packs,
+            after: (!complete).then_some(last).flatten(),
+            complete,
         })
     }
 

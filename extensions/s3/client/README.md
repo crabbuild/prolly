@@ -544,6 +544,11 @@ bytes, and admission rejections.
 - A tiny-file batch uploads one payload pack per segment; direct payloads use
   bounded parallel uploads. Tree and publication requests are amortized across
   the batch.
+- A completed `PayloadPackStatsCursor` can page exact per-pack live-byte
+  candidates by utilization. `repack_sparse_payloads_page` rewrites only keys
+  that still reference selected physical versions, uses a snapshot-bound list
+  frontier, and skips logically changed keys; immutable historical readers
+  keep using the old pack until retention-aware GC can remove it.
 - A current or historical read resolves a ref/commit/tree path and one payload.
 - Warm immutable-node caches remove most repeated metadata reads.
 - Branch creation inherits immutable derived-index roots from its source and is
@@ -551,11 +556,10 @@ bytes, and admission rejections.
   descriptors and only the node ranges on their traversal frontier.
 - Large commit deltas are external Prolly trees, keeping commit descriptors and
   restart metadata bounded independently of batch size.
-- Callers that know a large object's complete size, SHA-256, and MD5 can use
-  `begin_multipart_upload`, persist `MultipartUploadCheckpoint` after each
-  `upload_multipart_part`, reopen the commit session, reconcile with native S3
-  `ListParts`, and call `complete_multipart_upload`. Provider completion creates
-  one physical object; native parts never enter the Prolly tree or GC domain.
+- Callers that need provider-native multipart or resumable transfer use
+  `prepare_external_object_upload`, upload the single final object with their
+  provider transfer manager, then call `stage_external_object_upload`. Prolly
+  persists no upload ID, part geometry, part ETags, chunks, or chunk manifest.
 - Same-branch writers contend on one ref CAS; different branches publish
   independently.
 
@@ -567,12 +571,14 @@ latency or cost claim substitutes for AWS qualification.
 
 - The client must be the exclusive authority for its repository prefix.
 - One file must fit the repository and provider single-object size limits.
-- Prolly does not define a chunked file representation. Large spooled uploads
-  use provider-native multipart and complete as one physical S3 object.
+- Prolly does not define or manage a chunked file representation. Its built-in
+  upload path uses one `PutObject` up to the provider's 5 GiB single-PUT limit.
+- Larger or resumable transfers must be completed by an external provider
+  transfer manager and handed back as one whole object for verification and
+  publication.
 - The convenience `put_stream` path uses a bounded disk spool because it learns
-  content identity at end-of-stream. The advanced resumable multipart API
-  avoids the spool but requires the complete size and checksums up front; its
-  checkpoint must be durably stored by the application.
+  content identity at end-of-stream. The external-upload handoff avoids Prolly
+  transfer state but requires the complete size and whole-object checksums.
 - Concurrent writes to one branch can conflict; batch related changes.
 - Concurrent GC closes publication admission through the durable repository
   coordinator, fences writer handles in other processes, checkpoints its epoch,

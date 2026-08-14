@@ -1042,6 +1042,81 @@ async fn repository_small_object_pack_deduplicates_and_bounds_logical_ranges() {
 }
 
 #[tokio::test]
+async fn repository_pack_inventory_pages_exact_sparse_candidates() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane,
+        RepositoryOptions {
+            repository_prefix: ".tests/sparse-pack-candidates".to_string(),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let session = repository
+        .begin_commit_session("main", "three packed objects", 60_000)
+        .await
+        .unwrap();
+    let staged = repository
+        .stage_commit_session_put_batch(
+            &session,
+            vec![
+                (
+                    b"a".to_vec(),
+                    b"aaaa".to_vec(),
+                    Default::default(),
+                    BTreeMap::new(),
+                ),
+                (
+                    b"b".to_vec(),
+                    b"bbbb".to_vec(),
+                    Default::default(),
+                    BTreeMap::new(),
+                ),
+                (
+                    b"c".to_vec(),
+                    b"cccc".to_vec(),
+                    Default::default(),
+                    BTreeMap::new(),
+                ),
+            ],
+            3,
+        )
+        .await
+        .unwrap();
+    repository
+        .publish_commit_session(session, staged)
+        .await
+        .unwrap();
+    repository
+        .delete_objects("main", vec![b"a".to_vec(), b"b".to_vec()])
+        .await
+        .unwrap();
+    repository.advance_branch_indexes("main").await.unwrap();
+
+    let mut inventory = repository.start_payload_pack_stats("main").await.unwrap();
+    while !inventory.complete {
+        inventory = repository
+            .advance_payload_pack_stats(&inventory, 1)
+            .await
+            .unwrap()
+            .cursor;
+    }
+    assert_eq!(inventory.report.unique_pack_bytes, 12);
+    assert_eq!(inventory.report.unique_packed_extent_bytes, 4);
+    let candidates = repository
+        .payload_pack_candidates_page(&inventory, None, 10, 5_000)
+        .await
+        .unwrap();
+    assert_eq!(candidates.packs.len(), 1);
+    assert_eq!(candidates.packs[0].physical_bytes, 12);
+    assert_eq!(candidates.packs[0].live_bytes, 4);
+    assert_eq!(candidates.packs[0].live_extents, 1);
+    assert_eq!(candidates.packs[0].utilization_basis_points(), 3_333);
+}
+
+#[tokio::test]
 async fn large_commit_delta_is_external_and_survives_toc_only_reopen() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let options = RepositoryOptions {

@@ -145,9 +145,10 @@ version trees.
    remaining two mutable/control GETs per warm page.
 3. Keep delta-driven diff/merge for direct children; add an equivalent bounded
    change index for arbitrary non-parent snapshot pairs and divergent merges.
-4. Replace the bounded disk spool with resumable provider-native multipart
-   state. Completion must produce exactly one physical S3 object per logical
-   large object; Prolly must not own chunk manifests or chunk garbage
-   collection. Use native ranged GETs and provider encryption controls.
+4. Keep multipart and resumable-transfer state outside Prolly. A provider
+   transfer manager uploads the final content-addressed object, then hands its
+   whole-object identity back for verification and publication. Prolly must
+   not own upload IDs, part geometry, part ETags, chunk manifests, or chunk
+   garbage collection. Use native ranged GETs and provider encryption controls.
 5. Fault-inject cross-process GC ticket expiry, process death, lifecycle,
    replication, retention, and Object Lock behavior on real providers.

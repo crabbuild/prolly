@@ -100,15 +100,11 @@ fn key(index: usize) -> String {
 
 fn print_provider_metrics(label: &str, metrics: S3OperationMetrics) {
     println!(
-        "METRICS phase={label} s3_calls={} get={} head={} put={} multipart_create={} multipart_parts={} multipart_complete={} multipart_abort={} list={} list_versions={} delete={} delete_batch={} uploaded_bytes={} downloaded_bytes={}",
+        "METRICS phase={label} s3_calls={} get={} head={} put={} list={} list_versions={} delete={} delete_batch={} uploaded_bytes={} downloaded_bytes={}",
         metrics.total_calls(),
         metrics.get_object,
         metrics.head_object,
         metrics.put_object,
-        metrics.create_multipart_upload,
-        metrics.upload_part,
-        metrics.complete_multipart_upload,
-        metrics.abort_multipart_upload,
         metrics.list_objects_v2,
         metrics.list_object_versions,
         metrics.delete_object,
