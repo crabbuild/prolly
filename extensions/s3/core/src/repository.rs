@@ -2221,6 +2221,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
+        self.require_publication_admission_open().await?;
         let permit = self.active_permit(&session.branch, now).await?;
         if permit.stamp() != session.identity.authority {
             return Err(Error::new(
@@ -2404,6 +2405,7 @@ impl<P: ObjectPlane> Repository<P> {
                     idempotent_replay: false,
                 })
             }
+            Err(error) if error.code != ErrorCode::OutcomeUnknown => Err(error),
             Err(error) => {
                 if let Some(receipt) = self
                     .reconcile_operation(
@@ -2536,6 +2538,9 @@ impl<P: ObjectPlane> Repository<P> {
                 "repository is read-only",
             ));
         }
+        if !reconcile_before_publication {
+            self.require_publication_admission_open().await?;
+        }
         self.validate_key(&key)?;
         if bytes.len() as u64 > self.format.canonical_limits.max_object_bytes {
             return Err(Error::new(
@@ -2574,6 +2579,7 @@ impl<P: ObjectPlane> Repository<P> {
             {
                 return Ok(receipt);
             }
+            self.require_publication_admission_open().await?;
         }
         let binding = self.payloads.put(bytes).await?;
 
@@ -3009,6 +3015,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
+        self.require_publication_admission_open().await?;
         let permit = self.active_permit(branch, now).await?;
         self.authority.validate_active(&permit, now).await?;
         self.require_branch_indexes_ready(branch).await?;
@@ -3744,6 +3751,30 @@ impl<P: ObjectPlane> Repository<P> {
             complete,
             budget_exhausted: !complete && steps == max_steps,
         })
+    }
+
+    /// Fail fast before payload preparation or tree construction when another
+    /// process owns a durable repository-wide maintenance epoch. The mutable
+    /// control observer repeats this check under the ref-CAS barrier.
+    async fn require_publication_admission_open(&self) -> Result<()> {
+        let coordinator = self
+            .plane
+            .load_mutable(&gc_coordinator_path(&self.options.repository_prefix)?)
+            .await?
+            .map(|stored| decode_canonical::<GcCoordinator>(&stored.bytes))
+            .transpose()?;
+        if coordinator.as_ref().is_some_and(|coordinator| {
+            coordinator.repository != self.format.repository_id
+                || coordinator.active_epoch.is_some()
+                || coordinator.admission_closed
+        }) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "repository publication admission is closed for maintenance",
+            )
+            .retry(crate::RetryAdvice::After(Duration::from_millis(250))));
+        }
+        Ok(())
     }
 
     /// Start a bounded concurrent collector for immutable repository data.
@@ -6024,6 +6055,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
+        self.require_publication_admission_open().await?;
         let current = self.publisher.load(&cursor.target_branch).await?;
         if current.value.target != cursor.ours {
             return Err(Error::new(

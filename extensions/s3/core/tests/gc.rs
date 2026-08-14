@@ -197,7 +197,7 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
             .bytes,
         b"bravo"
     );
-    repository
+    external_writer
         .put_object(
             "main",
             b"after-gc.txt".to_vec(),

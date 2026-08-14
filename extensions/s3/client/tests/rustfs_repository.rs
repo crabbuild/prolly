@@ -17,8 +17,8 @@ use futures_util::{stream, StreamExt};
 use md5::{Digest as _, Md5};
 use prolly_s3_client::{
     core::{
-        decode_canonical, encode_canonical, BatchId, Error, ErrorCode, LogicalObjectVersionKind,
-        MergeCursor, MergePhase, MergePolicy, ProviderPerKeyVersionLimit,
+        decode_canonical, encode_canonical, BatchId, Error, ErrorCode, GcPhase,
+        LogicalObjectVersionKind, MergeCursor, MergePhase, MergePolicy, ProviderPerKeyVersionLimit,
     },
     BulkWriteOptions, CheckoutRef, Client, HmacAttestationSigner, ProviderIdentity, PutObjectInput,
 };
@@ -1531,6 +1531,82 @@ async fn rustfs_10k_concurrent_commit_regression_gate() {
         started.elapsed().as_millis(),
         metrics.total_calls(),
         metrics.total_calls() as f64 / COMMITS as f64,
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[ignore = "interrupts and resumes a repository-wide GC epoch on live RustFS"]
+async fn rustfs_gc_restart_keeps_independent_writer_fenced() {
+    assert!(
+        rustfs_enabled(),
+        "set PROLLY_S3_RUSTFS=1 to run the GC restart gate"
+    );
+    let (aws, bucket) = rustfs_client().await;
+    let prefix = unique_name("gc-restart-fence");
+    let builder = |aws: aws_sdk_s3::Client| {
+        Client::builder()
+            .aws_client(aws)
+            .bucket(&bucket)
+            .repository_prefix(&prefix)
+            .writer("rustfs-gc-writer")
+            .background_index_maintenance(false)
+            .provider_identity(provider_identity())
+            .attestation_signer(attestation_signer())
+            .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+    };
+    let owner = builder(aws.clone()).initialize().await.unwrap();
+    owner
+        .put_object("live.txt", b"reachable".to_vec())
+        .await
+        .unwrap();
+    let independent = builder(aws.clone()).open().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(2)).await;
+    let gc = owner.start_gc(1).await.unwrap();
+    let expected_epoch = gc.epoch;
+    assert_eq!(
+        independent
+            .put_object("fenced-before-restart.txt", b"blocked".to_vec())
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::PreconditionFailed
+    );
+    drop(owner);
+
+    let resumed_owner = builder(aws).open().await.unwrap();
+    let mut gc = resumed_owner.resume_gc().await.unwrap().unwrap();
+    assert_eq!(gc.epoch, expected_epoch);
+    assert_eq!(
+        independent
+            .put_object("fenced-after-restart.txt", b"blocked".to_vec())
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::PreconditionFailed
+    );
+    for _ in 0..100_000 {
+        gc = match gc.phase {
+            GcPhase::Ready | GcPhase::Sweeping => {
+                resumed_owner.sweep_gc(&gc, 100).await.unwrap().cursor
+            }
+            GcPhase::Complete => break,
+            _ => resumed_owner.advance_gc(&gc, 100).await.unwrap().cursor,
+        };
+    }
+    assert_eq!(gc.phase, GcPhase::Complete);
+    independent.advance_branch_indexes().await.unwrap();
+    independent
+        .put_object("after-gc.txt", b"admission reopened".to_vec())
+        .await
+        .unwrap();
+    assert_eq!(
+        independent
+            .get_object("live.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"reachable"
     );
 }
 
