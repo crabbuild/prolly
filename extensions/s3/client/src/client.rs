@@ -27,6 +27,10 @@ use prolly_s3_core::{
     VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::Instant,
+};
 
 use crate::{
     ensure_attestation_current, load_valid_attestation, qualify_and_store,
@@ -118,6 +122,114 @@ impl Default for BulkWriteOptions {
             concurrency: 32,
             checkpoint_every: 1_000,
         }
+    }
+}
+
+/// Controls an [`OrderedPublicationQueue`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrderedPublicationOptions {
+    /// Maximum unique logical keys published by one atomic commit.
+    pub max_group_size: usize,
+    /// Maximum complete-object uploads prepared concurrently for one group.
+    pub upload_concurrency: usize,
+    /// Maximum time the worker waits for more submissions after receiving the
+    /// first item in a group.
+    pub max_wait: Duration,
+    /// Bounded channel capacity. Producers await capacity and therefore apply
+    /// backpressure rather than growing process memory without limit.
+    pub queue_capacity: usize,
+    /// Maximum successfully staged mutations appended to one durable recovery
+    /// checkpoint window. This is independent of the final publication group.
+    pub checkpoint_every: usize,
+    /// Persist one recovery checkpoint before each grouped publication.
+    pub durable: bool,
+}
+
+impl Default for OrderedPublicationOptions {
+    fn default() -> Self {
+        Self {
+            max_group_size: 1_000,
+            upload_concurrency: 128,
+            max_wait: Duration::from_millis(2),
+            queue_capacity: 10_000,
+            checkpoint_every: 1_000,
+            durable: true,
+        }
+    }
+}
+
+/// Bounded ordered submission queue that coalesces independent callers into
+/// atomic branch publications.
+///
+/// Every user body remains one complete immutable provider object. Only
+/// candidate metadata and the final branch CAS are grouped. Repeated writes to
+/// the same key are split across consecutive commits so logical version order
+/// is preserved.
+#[derive(Clone)]
+pub struct OrderedPublicationQueue {
+    sender: mpsc::Sender<QueuedPut>,
+}
+
+/// Constant-size acknowledgement for one object accepted by an ordered group
+/// commit. The full batch receipt remains an internal publication result so
+/// acknowledging N callers does not clone an N-entry version vector N times.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrderedPublicationReceipt {
+    pub commit: CommitId,
+    pub operation: OperationId,
+    pub group_size: u64,
+}
+
+struct QueuedPut {
+    object: PutObjectInput,
+    response: oneshot::Sender<Result<OrderedPublicationReceipt>>,
+}
+
+impl OrderedPublicationQueue {
+    pub async fn put_object(
+        &self,
+        key: impl Into<String>,
+        bytes: Vec<u8>,
+    ) -> Result<OrderedPublicationReceipt> {
+        self.put_object_with_metadata(key, bytes, ObjectHeaders::default(), BTreeMap::new())
+            .await
+    }
+
+    pub async fn put_object_with_metadata(
+        &self,
+        key: impl Into<String>,
+        bytes: Vec<u8>,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    ) -> Result<OrderedPublicationReceipt> {
+        let (response, receipt) = oneshot::channel();
+        self.sender
+            .send(QueuedPut {
+                object: PutObjectInput {
+                    key: key.into(),
+                    bytes,
+                    headers,
+                    user_metadata,
+                },
+                response,
+            })
+            .await
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::OperationCanceled,
+                    "ordered publication queue is closed",
+                )
+            })?;
+        receipt.await.map_err(|_| {
+            Error::new(
+                ErrorCode::OperationCanceled,
+                "ordered publication worker stopped before acknowledging the object",
+            )
+        })?
+    }
+
+    pub fn remaining_capacity(&self) -> usize {
+        self.sender.capacity()
     }
 }
 
@@ -919,6 +1031,51 @@ impl Client {
             .await
     }
 
+    /// Start a bounded ordered queue that coalesces independent submissions
+    /// into grouped branch commits. The worker lives until every queue handle
+    /// is dropped and drains submissions already accepted by the channel.
+    pub fn ordered_publication_queue(
+        &self,
+        options: OrderedPublicationOptions,
+    ) -> Result<OrderedPublicationQueue> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        let max = self
+            .repository
+            .format()
+            .canonical_limits
+            .max_mutations_per_commit as usize;
+        if options.max_group_size == 0 || options.max_group_size > max {
+            return Err(invalid(
+                "ordered publication group size exceeds the canonical mutation limit",
+            ));
+        }
+        if options.upload_concurrency == 0 || options.upload_concurrency > 1_024 {
+            return Err(invalid(
+                "ordered publication upload concurrency must be 1..=1024",
+            ));
+        }
+        if options.queue_capacity == 0 || options.queue_capacity > 1_000_000 {
+            return Err(invalid(
+                "ordered publication queue capacity must be 1..=1000000",
+            ));
+        }
+        if options.checkpoint_every == 0 || options.checkpoint_every > options.max_group_size {
+            return Err(invalid(
+                "ordered publication checkpoint interval must be within the group size",
+            ));
+        }
+        let runtime = tokio::runtime::Handle::try_current()
+            .map_err(|_| invalid("ordered publication queue requires an active Tokio runtime"))?;
+        let (sender, receiver) = mpsc::channel(options.queue_capacity);
+        runtime.spawn(run_ordered_publication_queue(
+            self.clone(),
+            receiver,
+            options,
+        ));
+        Ok(OrderedPublicationQueue { sender })
+    }
+
     /// Put objects through durable atomic batches. This is the recommended
     /// path for bulk loading because publication and checkpoint costs are
     /// amortized across each batch.
@@ -1580,6 +1737,179 @@ impl Client {
             *maintenance = Some(self.repository.start_shard_authority_maintenance()?);
         }
         Ok(())
+    }
+}
+
+async fn run_ordered_publication_queue(
+    client: Client,
+    mut receiver: mpsc::Receiver<QueuedPut>,
+    options: OrderedPublicationOptions,
+) {
+    let mut pending = None;
+    loop {
+        let first = match pending.take() {
+            Some(first) => first,
+            None => match receiver.recv().await {
+                Some(first) => first,
+                None => return,
+            },
+        };
+        if first.response.is_closed() {
+            continue;
+        }
+
+        let mut keys = BTreeSet::from([first.object.key.clone()]);
+        let mut group = vec![first];
+        let deadline = Instant::now() + options.max_wait;
+        while group.len() < options.max_group_size {
+            let received = if options.max_wait.is_zero() {
+                receiver.try_recv().ok()
+            } else {
+                tokio::time::timeout_at(deadline, receiver.recv())
+                    .await
+                    .ok()
+                    .flatten()
+            };
+            let Some(next) = received else {
+                break;
+            };
+            if next.response.is_closed() {
+                continue;
+            }
+            if !keys.insert(next.object.key.clone()) {
+                pending = Some(next);
+                break;
+            }
+            group.push(next);
+        }
+        publish_ordered_group(&client, group, options).await;
+    }
+}
+
+async fn publish_ordered_group(
+    client: &Client,
+    group: Vec<QueuedPut>,
+    options: OrderedPublicationOptions,
+) {
+    let mut group = group
+        .into_iter()
+        .filter(|queued| !queued.response.is_closed())
+        .collect::<Vec<_>>();
+    if group.is_empty() {
+        return;
+    }
+    group.sort_by(|left, right| left.object.key.cmp(&right.object.key));
+    let group_len = group.len();
+    let mut builder = client
+        .begin_commit()
+        .message("ordered grouped publication")
+        .checkpoint_every(options.checkpoint_every.min(group_len));
+    if !options.durable {
+        builder = builder.ephemeral();
+    }
+    let mut session = match builder.start().await {
+        Ok(session) => session,
+        Err(error) => {
+            acknowledge_group_error(group, error);
+            return;
+        }
+    };
+    let mut pending = VecDeque::from(group);
+    let mut responses = Vec::with_capacity(group_len);
+    while !pending.is_empty() {
+        let mut window_responses = Vec::with_capacity(options.checkpoint_every);
+        let mut objects = Vec::with_capacity(options.checkpoint_every);
+        for _ in 0..options.checkpoint_every {
+            let Some(queued) = pending.pop_front() else {
+                break;
+            };
+            if queued.response.is_closed() {
+                continue;
+            }
+            let PutObjectInput {
+                key,
+                bytes,
+                headers,
+                user_metadata,
+            } = queued.object;
+            window_responses.push(queued.response);
+            objects.push((key.into_bytes(), bytes, headers, user_metadata));
+        }
+        let staged = match client
+            .repository
+            .stage_commit_session_put_batch_results(
+                &session.manifest,
+                objects,
+                options.upload_concurrency,
+            )
+            .await
+        {
+            Ok(staged) => staged,
+            Err(error) => {
+                let _ = session.abort().await;
+                for response in responses
+                    .into_iter()
+                    .chain(window_responses)
+                    .chain(pending.into_iter().map(|queued| queued.response))
+                {
+                    let _ = response.send(Err(error.clone()));
+                }
+                return;
+            }
+        };
+        for (response, result) in window_responses.into_iter().zip(staged) {
+            if response.is_closed() {
+                continue;
+            }
+            match result {
+                Ok(mutation) => {
+                    session.insert_staged(mutation);
+                    responses.push(response);
+                }
+                Err(mut error) => {
+                    error.operation_id = Some(session.id().to_string());
+                    let _ = response.send(Err(error));
+                }
+            }
+        }
+        if options.durable {
+            if let Err(error) = session.checkpoint().await {
+                for response in responses
+                    .into_iter()
+                    .chain(pending.into_iter().map(|queued| queued.response))
+                {
+                    let _ = response.send(Err(error.clone()));
+                }
+                return;
+            }
+        }
+    }
+    if responses.is_empty() {
+        let _ = session.abort().await;
+        return;
+    }
+    match session.publish().await {
+        Ok(receipt) => {
+            let acknowledgement = OrderedPublicationReceipt {
+                commit: receipt.id,
+                operation: receipt.operation,
+                group_size: receipt.changed_keys,
+            };
+            for response in responses {
+                let _ = response.send(Ok(acknowledgement));
+            }
+        }
+        Err(error) => {
+            for response in responses {
+                let _ = response.send(Err(error.clone()));
+            }
+        }
+    }
+}
+
+fn acknowledge_group_error(group: Vec<QueuedPut>, error: Error) {
+    for queued in group {
+        let _ = queued.response.send(Err(error.clone()));
     }
 }
 

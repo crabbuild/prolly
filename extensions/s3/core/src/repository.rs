@@ -1786,6 +1786,38 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(staged)
     }
 
+    /// Stage one bounded group after validating its session once, while
+    /// preserving an independent result for every input. This is used by
+    /// ordered publication queues so one failed object does not discard
+    /// successfully prepared whole-object candidates.
+    pub async fn stage_commit_session_put_batch_results(
+        &self,
+        session: &CommitSessionManifest,
+        objects: Vec<CommitSessionPutInput>,
+        concurrency: usize,
+    ) -> Result<Vec<std::result::Result<StagedMutation, Error>>> {
+        self.validate_commit_session(session).await?;
+        if concurrency == 0 || concurrency > 1_024 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "payload staging concurrency is outside 1..=1024",
+            ));
+        }
+        let mut staged = stream::iter(objects.into_iter().enumerate())
+            .map(|(index, (key, bytes, headers, user_metadata))| async move {
+                (
+                    index,
+                    self.stage_commit_session_put_validated(key, bytes, headers, user_metadata)
+                        .await,
+                )
+            })
+            .buffer_unordered(concurrency)
+            .collect::<Vec<_>>()
+            .await;
+        staged.sort_by_key(|(index, _)| *index);
+        Ok(staged.into_iter().map(|(_, result)| result).collect())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub async fn stage_commit_session_file(
         &self,

@@ -45,6 +45,11 @@ dirty-root sequence were process-local.
    provider boundary. The repository supplies source identity, destination,
    size, and whole-object checksum only; transfer-part state is never part of
    repository state.
+8. Independent same-branch submissions may enter a bounded ordered publication
+   queue. The queue coalesces unique keys, prepares whole objects concurrently,
+   appends bounded recovery windows, and performs one ref CAS per group.
+   Duplicate-key submissions are separated by a commit boundary, and callers
+   are acknowledged only after their group publishes.
 
 ## Consequences
 

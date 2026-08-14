@@ -561,6 +561,11 @@ bytes, and admission rejections.
   object bodies and are not a payload storage or transfer format.
 - Same-branch writers contend on one ref CAS; different branches publish
   independently.
+- Concurrent independent callers can use `ordered_publication_queue` to apply
+  bounded backpressure, prepare complete objects concurrently, and coalesce
+  unique keys into one deterministic commit. Duplicate-key submissions cross a
+  commit boundary to preserve version order. Acknowledgements are constant-size
+  and are delivered only after the grouped ref CAS succeeds.
 
 Measure with `s3_operation_metrics` on the provider and workload you will run.
 The repository enforces configured request-shape limits, but no universal

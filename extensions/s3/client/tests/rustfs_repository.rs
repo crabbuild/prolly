@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -20,7 +21,8 @@ use prolly_s3_client::{
         decode_canonical, encode_canonical, BatchId, Error, ErrorCode, GcPhase,
         LogicalObjectVersionKind, MergeCursor, MergePhase, MergePolicy, ProviderPerKeyVersionLimit,
     },
-    BulkWriteOptions, CheckoutRef, Client, HmacAttestationSigner, ProviderIdentity, PutObjectInput,
+    BulkWriteOptions, CheckoutRef, Client, HmacAttestationSigner, OrderedPublicationOptions,
+    ProviderIdentity, PutObjectInput,
 };
 use sha2::Sha256;
 
@@ -1016,6 +1018,104 @@ async fn rustfs_streaming_bulk_write_is_bounded_batched_and_ordered() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn rustfs_ordered_publication_queue_groups_unique_keys_and_orders_duplicates() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+    let (aws, bucket) = rustfs_client().await;
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("ordered-publication-queue"))
+        .writer("rustfs-ordered-publication-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    let queue = client
+        .ordered_publication_queue(OrderedPublicationOptions {
+            max_group_size: 128,
+            upload_concurrency: 32,
+            max_wait: Duration::from_millis(25),
+            queue_capacity: 512,
+            checkpoint_every: 32,
+            durable: true,
+        })
+        .unwrap();
+
+    let receipts = stream::iter(0..257)
+        .map(|index| {
+            let queue = queue.clone();
+            async move {
+                queue
+                    .put_object(
+                        format!("queue/{index:04}.txt"),
+                        format!("value-{index}").into_bytes(),
+                    )
+                    .await
+            }
+        })
+        .buffer_unordered(257)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap();
+    let commits = receipts
+        .iter()
+        .map(|receipt| receipt.commit)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(commits.len(), 3);
+    assert_eq!(
+        commits
+            .iter()
+            .map(|commit| receipts
+                .iter()
+                .find(|receipt| receipt.commit == *commit)
+                .unwrap())
+            .map(|receipt| receipt.group_size)
+            .sum::<u64>(),
+        257
+    );
+
+    let (valid, invalid) = tokio::join!(
+        queue.put_object("queue/valid-after-error.txt", b"valid".to_vec()),
+        queue.put_object("", b"invalid".to_vec()),
+    );
+    assert_eq!(invalid.unwrap_err().code, ErrorCode::InvalidKey);
+    assert_eq!(valid.unwrap().group_size, 1);
+    assert_eq!(
+        client
+            .get_object("queue/valid-after-error.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"valid"
+    );
+
+    let (first, second) = tokio::join!(
+        queue.put_object("queue/repeated.txt", b"first".to_vec()),
+        queue.put_object("queue/repeated.txt", b"second".to_vec()),
+    );
+    let first = first.unwrap();
+    let second = second.unwrap();
+    assert_ne!(first.commit, second.commit);
+    assert_eq!(
+        client
+            .get_object("queue/repeated.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"second"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn rustfs_streaming_bulk_failure_preserves_completed_checkpoint() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
@@ -1468,6 +1568,101 @@ async fn rustfs_20k_branch_diff_merge_meets_amplification_slos() {
 }
 
 /// Reproducible release gate for the same-branch publication lane.
+///
+/// Independent callers enqueue 10K whole-object candidates. The queue prepares
+/// payloads concurrently and acknowledges each caller after its ordered group
+/// commit publishes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 16)]
+#[ignore = "10K ordered group-commit RustFS release gate"]
+async fn rustfs_10k_ordered_publication_queue_gate() {
+    assert!(
+        rustfs_enabled(),
+        "set PROLLY_S3_RUSTFS=1 to run the ordered publication gate"
+    );
+    const FILES: usize = 10_000;
+    let upload_concurrency = std::env::var("PROLLY_S3_ORDERED_CONCURRENCY")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(128);
+    assert!((1..=1_024).contains(&upload_concurrency));
+    let (aws, bucket) = rustfs_client().await;
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(unique_name("10k-ordered-publication"))
+        .writer("rustfs-10k-ordered-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    let queue = client
+        .ordered_publication_queue(OrderedPublicationOptions {
+            max_group_size: 10_000,
+            upload_concurrency,
+            max_wait: Duration::from_millis(50),
+            queue_capacity: 10_000,
+            checkpoint_every: 1_000,
+            durable: true,
+        })
+        .unwrap();
+
+    client.reset_s3_operation_metrics();
+    let started = std::time::Instant::now();
+    let results = stream::iter(0..FILES)
+        .map(|index| {
+            let queue = queue.clone();
+            async move {
+                let operation_started = std::time::Instant::now();
+                queue
+                    .put_object(
+                        format!("ordered/{index:05}.bin"),
+                        index.to_be_bytes().to_vec(),
+                    )
+                    .await
+                    .map(|receipt| (receipt, operation_started.elapsed()))
+            }
+        })
+        .buffer_unordered(FILES)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .unwrap();
+    let elapsed = started.elapsed();
+    let throughput = FILES as f64 / elapsed.as_secs_f64();
+    let mut latencies = results
+        .iter()
+        .map(|(_, latency)| *latency)
+        .collect::<Vec<_>>();
+    latencies.sort_unstable();
+    let commits = results
+        .iter()
+        .map(|(receipt, _)| receipt.commit)
+        .collect::<BTreeSet<_>>();
+    let p50 = percentile(&latencies, 50);
+    let p95 = percentile(&latencies, 95);
+    let p99 = percentile(&latencies, 99);
+    let metrics = client.reset_s3_operation_metrics();
+    eprintln!(
+        "RUSTFS_10K_ORDERED files={FILES} commits={} upload_concurrency={upload_concurrency} wall_ms={} files_per_second={throughput:.2} p50_ms={:.2} p95_ms={:.2} p99_ms={:.2} s3_calls={} calls_per_file={:.3}",
+        commits.len(),
+        elapsed.as_millis(),
+        p50.as_secs_f64() * 1_000.0,
+        p95.as_secs_f64() * 1_000.0,
+        p99.as_secs_f64() * 1_000.0,
+        metrics.total_calls(),
+        metrics.total_calls() as f64 / FILES as f64,
+    );
+    assert_eq!(commits.len(), 1);
+    assert!(
+        throughput >= 500.0,
+        "ordered publication achieved {throughput:.2} files/s"
+    );
+}
+
+/// Reproducible release gate for deliberately distinct same-branch commits.
 ///
 /// This is intentionally ignored because it creates exactly 10,000 commits
 /// and is meant for an isolated RustFS qualification run. Client clones issue

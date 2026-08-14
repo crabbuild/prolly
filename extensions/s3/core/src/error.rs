@@ -59,7 +59,7 @@ pub enum RetryAdvice {
     ReconcileOperation,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 #[error("{code:?}: {message}")]
 pub struct Error {
     pub code: ErrorCode,

@@ -40,6 +40,20 @@ first-parent commits. Indexed merge-base selection completed in 1.578 ms using
 27 object-plane calls and zero fallback commit visits, confirming that graph
 skip pointers avoid linear history traversal in this case.
 
+An ordered publication queue now coalesces independently submitted unique keys
+into one commit, splits repeated keys across commits, returns per-object staging
+errors, and uses constant-size acknowledgements. The first implementation
+revalidated the session per object and copied the full batch receipt to every
+caller; those defects produced 2.057 calls/file and O(N²) acknowledgement work.
+After correction, a fresh-bucket release run published 10K submissions as one
+commit with ten durable checkpoint windows, 10,083 S3 calls (1.008/file), and a
+24.84-second p99. Best throughput was 402.6 files/s at concurrency 512; 256 and
+1,024 reached 376.6 and 335.4 files/s. The unchanged 500 files/s gate therefore
+still fails. The p99 is cohort latency: every caller is acknowledged after the
+single grouped ref CAS. A same-host bulk run reached 342.0 files/s, showing the
+queue is now near the provider's current whole-object PUT envelope rather than
+limited by publication or acknowledgement copying.
+
 ## Results
 
 | Workload | Result |

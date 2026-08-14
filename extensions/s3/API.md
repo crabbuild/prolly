@@ -119,6 +119,16 @@ since the preceding sequence; resume validates and folds the windows by key.
 Completed windows remain resumable after cancellation or a source/object
 failure without rewriting earlier payload bindings.
 
+`ordered_publication_queue` is the concurrent-caller group-commit path.
+`OrderedPublicationOptions` independently bounds channel capacity, unique keys
+per publication, whole-object upload concurrency, coalescing wait, and durable
+checkpoint-window size. Producers await channel capacity. Unique keys are
+prepared concurrently and published in canonical order; repeated submissions
+for one key are split across consecutive commits so version order is retained.
+One failed object returns its own error without discarding valid objects in the
+same group. Successful callers receive a constant-size
+`OrderedPublicationReceipt` only after the grouped ref CAS succeeds.
+
 Every distinct payload is stored as one complete immutable provider object.
 Built-in streaming uses one bounded disk spool followed by one conditional
 `PutObject`, so it is limited by the provider single-PUT maximum. For larger or

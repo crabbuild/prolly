@@ -1122,6 +1122,66 @@ async fn repository_batch_stages_independent_whole_objects_with_whole_object_ded
 }
 
 #[tokio::test]
+async fn repository_batch_results_isolates_invalid_objects_after_one_session_validation() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: ".tests/repository-batch-results".to_string(),
+            writer: "batch-results-writer".to_string(),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let session = repository
+        .begin_commit_session("main", "per-object batch results", 60_000)
+        .await
+        .unwrap();
+    plane.reset_request_counts();
+    let results = repository
+        .stage_commit_session_put_batch_results(
+            &session,
+            vec![
+                (
+                    b"batch-results/a".to_vec(),
+                    b"first".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+                (
+                    Vec::new(),
+                    b"invalid".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+                (
+                    b"batch-results/b".to_vec(),
+                    b"second".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+            ],
+            3,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 3);
+    assert_eq!(
+        results[1].as_ref().unwrap_err().code,
+        prolly_s3_core::ErrorCode::InvalidKey
+    );
+    assert_eq!(plane.request_snapshot().immutable_put, 2);
+    let staged = results.into_iter().filter_map(Result::ok).collect();
+    let receipt = repository
+        .publish_commit_session(session, staged)
+        .await
+        .unwrap();
+    assert_eq!(receipt.changed_keys, 2);
+}
+
+#[tokio::test]
 async fn large_commit_delta_is_external_and_survives_toc_only_reopen() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let options = RepositoryOptions {
