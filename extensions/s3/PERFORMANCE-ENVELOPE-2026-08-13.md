@@ -25,6 +25,21 @@ The 64-way and 256-way probes reached 461.8 and 477.1 files/s respectively, so
 500 files/s release gate. Remaining amplification is complete logical/version
 metadata plus bounded checkpoint windows, not payload chunks or packs.
 
+The revised 10K same-branch gate now records per-commit p50/p95/p99 as well as
+throughput. A debug-build diagnostic at concurrency 32 was deliberately stopped
+after 1,000 commits took 247.35 seconds (4.04 commits/s); completing 10K would
+have consumed roughly 41 minutes before allowing for history growth. This is a
+failed scalability signal, not a completed release measurement. It confirms
+that independent one-object commits must not be the bulk-ingestion model:
+ordered group commit or multiple ingestion branches followed by structural
+merge is required. The earlier 13.44 commits/s result remains historical and
+must not be used as evidence for the current whole-object build.
+
+The metadata-only deep-history gate was rerun in release mode with 4,096
+first-parent commits. Indexed merge-base selection completed in 1.578 ms using
+27 object-plane calls and zero fallback commit visits, confirming that graph
+skip pointers avoid linear history traversal in this case.
+
 ## Results
 
 | Workload | Result |

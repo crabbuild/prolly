@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 use prolly_s3_core::{
     decode_canonical, encode_canonical, FixedClock, LogicalObjectVersionKind, MemoryObjectPlane,
@@ -492,7 +492,9 @@ async fn repository_merge_base_skips_deep_first_parent_history() {
         operation_index_max_unindexed_events: 8_192,
         ..options(clock.clone())
     };
-    let repository = Repository::initialize(plane, options).await.unwrap();
+    let repository = Repository::initialize(plane.clone(), options)
+        .await
+        .unwrap();
     put(&repository, "main", "counter.txt", "0").await;
     let base = repository.head("main").await.unwrap();
     repository.create_branch("stale", base).await.unwrap();
@@ -500,6 +502,8 @@ async fn repository_merge_base_skips_deep_first_parent_history() {
         put(&repository, "main", "counter.txt", &generation.to_string()).await;
     }
     repository.advance_branch_indexes("main").await.unwrap();
+    plane.reset_request_counts();
+    let started = Instant::now();
     let cursor = repository
         .start_merge(
             "stale",
@@ -510,7 +514,21 @@ async fn repository_merge_base_skips_deep_first_parent_history() {
         )
         .await
         .unwrap();
+    let elapsed = started.elapsed();
+    let requests = plane.request_snapshot();
+    eprintln!(
+        "DEEP_HISTORY_MERGE_BASE commits=4096 wall_us={} object_plane_calls={} get={} head={} list={}",
+        elapsed.as_micros(),
+        requests.total(),
+        requests.get,
+        requests.head,
+        requests.list,
+    );
     assert_eq!(cursor.phase, MergePhase::Planning);
     assert_eq!(cursor.selected_base, Some(base));
     assert_eq!(cursor.visited_commits, 0);
+    assert!(
+        requests.total() < 64,
+        "skip-pointer merge-base lookup used too many object-plane calls: {requests:?}"
+    );
 }

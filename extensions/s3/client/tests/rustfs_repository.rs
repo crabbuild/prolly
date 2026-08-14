@@ -36,6 +36,10 @@ fn unique_name(label: &str) -> String {
     format!("integration/{label}/{nanos}")
 }
 
+fn percentile(sorted: &[Duration], percentile: usize) -> Duration {
+    sorted[(sorted.len() * percentile).div_ceil(100) - 1]
+}
+
 fn provider_identity() -> ProviderIdentity {
     ProviderIdentity::s3_compatible(
         std::env::var("PROLLY_RUSTFS_ENDPOINT")
@@ -1505,7 +1509,8 @@ async fn rustfs_10k_concurrent_commit_regression_gate() {
             let client = client.clone();
             let completed = completed.clone();
             async move {
-                let receipt = client
+                let operation_started = std::time::Instant::now();
+                client
                     .put_object(
                         format!("concurrent/{index:05}.bin"),
                         index.to_be_bytes().to_vec(),
@@ -1518,15 +1523,14 @@ async fn rustfs_10k_concurrent_commit_regression_gate() {
                         started.elapsed().as_millis()
                     );
                 }
-                Ok::<_, Error>(receipt)
+                Ok::<_, Error>(operation_started.elapsed())
             }
         })
         .buffer_unordered(concurrency)
         .collect::<Vec<_>>()
         .await;
-    for result in results {
-        result.unwrap();
-    }
+    let mut latencies = results.into_iter().collect::<Result<Vec<_>, _>>().unwrap();
+    latencies.sort_unstable();
 
     let mut after = None;
     let mut files = 0_usize;
@@ -1545,10 +1549,18 @@ async fn rustfs_10k_concurrent_commit_regression_gate() {
     }
     assert_eq!(files, COMMITS);
 
+    let elapsed = started.elapsed();
+    let throughput = COMMITS as f64 / elapsed.as_secs_f64();
+    let p50 = percentile(&latencies, 50);
+    let p95 = percentile(&latencies, 95);
+    let p99 = percentile(&latencies, 99);
     let metrics = client.reset_s3_operation_metrics();
     eprintln!(
-        "RUSTFS_10K_COMMITS commits={COMMITS} concurrency={concurrency} wall_ms={} s3_calls={} calls_per_commit={:.2}",
-        started.elapsed().as_millis(),
+        "RUSTFS_10K_COMMITS commits={COMMITS} concurrency={concurrency} wall_ms={} commits_per_second={throughput:.2} p50_ms={:.2} p95_ms={:.2} p99_ms={:.2} s3_calls={} calls_per_commit={:.2}",
+        elapsed.as_millis(),
+        p50.as_secs_f64() * 1_000.0,
+        p95.as_secs_f64() * 1_000.0,
+        p99.as_secs_f64() * 1_000.0,
         metrics.total_calls(),
         metrics.total_calls() as f64 / COMMITS as f64,
     );
