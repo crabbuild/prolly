@@ -16,7 +16,10 @@ use aws_sdk_s3::{
 };
 use futures_util::{stream, StreamExt};
 use prolly_s3_client::{
-    core::{MergePhase, MergePolicy, NodeCacheSnapshot, ObjectHeaders, ProviderPerKeyVersionLimit},
+    core::{
+        GcPhase, MergePhase, MergePolicy, NodeCacheSnapshot, ObjectHeaders,
+        ProviderPerKeyVersionLimit,
+    },
     BulkWriteOptions, CheckoutRef, Client, HmacAttestationSigner, ProviderIdentity, PutObjectInput,
     S3OperationMetrics, S3WireAttemptInterceptor, S3WireAttemptMetrics,
 };
@@ -192,6 +195,10 @@ async fn main() -> BenchResult {
     let node_cache_mib = env("PROLLY_RUSTFS_PERF_NODE_CACHE_MIB", "64").parse::<usize>()?;
     let rebuild_index = env("PROLLY_RUSTFS_PERF_REBUILD_INDEX", "false").parse::<bool>()?;
     let run_pack_stats = env("PROLLY_RUSTFS_PERF_PACK_STATS", "false").parse::<bool>()?;
+    let run_gc = env("PROLLY_RUSTFS_PERF_GC", "false").parse::<bool>()?;
+    let abandon_incomplete_gc =
+        env("PROLLY_RUSTFS_PERF_GC_ABANDON_INCOMPLETE", "false").parse::<bool>()?;
+    let gc_grace_millis = env("PROLLY_RUSTFS_PERF_GC_GRACE_MILLIS", "1").parse::<u64>()?;
     let run_foreground = env("PROLLY_RUSTFS_PERF_FOREGROUND", "true").parse::<bool>()?;
     let fsck_mode = env("PROLLY_RUSTFS_PERF_FSCK", "none");
     if !matches!(fsck_mode.as_str(), "none" | "shallow" | "deep") {
@@ -284,7 +291,7 @@ async fn main() -> BenchResult {
     let client = builder.initialize().await?;
 
     println!(
-        "CONFIG endpoint={endpoint} bucket={bucket} prefix={prefix} writer={writer} stages={stages:?} existing_files={existing_files} branch_changes={branch_changes} list_passes={list_passes} read_passes={read_passes} node_cache_mib={node_cache_mib} foyer={} rebuild_index={rebuild_index} foreground={run_foreground} pack_stats={run_pack_stats} fsck={fsck_mode} object_bytes={} mutations_per_commit={MUTATIONS_PER_COMMIT} write_concurrency={write_concurrency} read_samples={read_sample_size} read_concurrency={read_concurrency}",
+        "CONFIG endpoint={endpoint} bucket={bucket} prefix={prefix} writer={writer} stages={stages:?} existing_files={existing_files} branch_changes={branch_changes} list_passes={list_passes} read_passes={read_passes} node_cache_mib={node_cache_mib} foyer={} rebuild_index={rebuild_index} foreground={run_foreground} pack_stats={run_pack_stats} fsck={fsck_mode} gc={run_gc} gc_grace_millis={gc_grace_millis} object_bytes={} mutations_per_commit={MUTATIONS_PER_COMMIT} write_concurrency={write_concurrency} read_samples={read_sample_size} read_concurrency={read_concurrency}",
         if cfg!(feature = "foyer-cache")
             && std::env::var_os("PROLLY_RUSTFS_PERF_FOYER_DIR").is_some()
         {
@@ -660,6 +667,65 @@ async fn main() -> BenchResult {
         print_provider_metrics("fsck", client.reset_s3_operation_metrics());
         print_wire_metrics("fsck", wire.reset());
         print_cache_metrics("fsck", cache_before, client.node_cache_snapshot());
+    }
+    if run_gc {
+        let cache_before = client.node_cache_snapshot();
+        client.reset_s3_operation_metrics();
+        wire.reset();
+        let started = Instant::now();
+        if abandon_incomplete_gc {
+            match client.abandon_incomplete_gc().await {
+                Ok(epoch) => println!("GC_ABANDONED_INCOMPLETE epoch={epoch}"),
+                Err(error)
+                    if error.code == prolly_s3_client::core::ErrorCode::PreconditionFailed => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+        let mut cursor = match client.resume_gc().await? {
+            Some(cursor) => cursor,
+            None => client.start_gc(gc_grace_millis).await?,
+        };
+        let mut pages = 0usize;
+        loop {
+            let page = match cursor.phase {
+                GcPhase::Ready | GcPhase::Sweeping => client.sweep_gc(&cursor, 1_000).await?,
+                GcPhase::Complete => break,
+                GcPhase::MarkNodes => client.advance_gc(&cursor, 100).await?,
+                GcPhase::ScanCandidates => client.advance_gc(&cursor, 100).await?,
+                _ => client.advance_gc(&cursor, 100).await?,
+            };
+            pages += 1;
+            cursor = page.cursor;
+            if pages % 100 == 0 {
+                println!(
+                    "GC_PROGRESS pages={pages} phase={:?} commits={} nodes={} logical_versions={} candidates={} deleted_versions={}",
+                    cursor.phase,
+                    cursor.report.commits,
+                    cursor.report.nodes,
+                    cursor.report.logical_versions,
+                    cursor.report.candidates,
+                    cursor.report.deleted_versions,
+                );
+            }
+        }
+        println!(
+            "GC wall_ms={:.3} pages={pages} roots={} commits={} nodes={} logical_versions={} candidates={} candidate_bytes={} dirty_roots={} deleted_versions={} deleted_bytes={} already_missing={} skipped_reachable={}",
+            millis(started.elapsed()),
+            cursor.report.roots,
+            cursor.report.commits,
+            cursor.report.nodes,
+            cursor.report.logical_versions,
+            cursor.report.candidates,
+            cursor.report.candidate_bytes,
+            cursor.report.dirty_roots,
+            cursor.report.deleted_versions,
+            cursor.report.deleted_bytes,
+            cursor.report.already_missing,
+            cursor.report.skipped_reachable,
+        );
+        print_provider_metrics("gc", client.reset_s3_operation_metrics());
+        print_wire_metrics("gc", wire.reset());
+        print_cache_metrics("gc", cache_before, client.node_cache_snapshot());
     }
     drop(client);
     #[cfg(feature = "foyer-cache")]

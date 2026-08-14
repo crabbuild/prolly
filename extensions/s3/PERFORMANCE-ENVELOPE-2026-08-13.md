@@ -41,6 +41,7 @@ this machine, not AWS SLO evidence.
 | 1M branch / 100-key direct diff / merge | 87.7 ms / 8.24 ms / 582 ms |
 | 1.01M-object exact payload-pack inventory | 298.4 s, 1,011 restartable pages, 1,004 physical packs, 99.99% utilization |
 | 1.01M current / 1.02M version deep fsck | 38.79 s, 2.03M logical references, 1,004 physical packs, 39.36 MB downloaded, 23.25 MB uploaded, 245 MiB RSS |
+| 1M resumed pack-aware GC, final scan/sweep segment | 126.1 s, 1.047M reachable logical versions, 16,542 nodes, 91.2K provider versions scanned, 186 exact versions / 4.05 MB deleted, 44 MiB RSS |
 | 65 MiB streamed multipart object | 3.78 s; multipart upload and historical range read passed |
 
 The original 500K list failure used the compatibility API that rebuilt a
@@ -90,6 +91,19 @@ download was 39,355,355 bytes. The process ended at 250,752 KiB RSS. An earlier
 prototype that durably rewrote every extent summary uploaded 3.53 GB and grew
 to 1.1 GB RSS; it was rejected and replaced by the compact manifest design.
 
+GC now checkpoints its cursor under the repository-wide maintenance epoch at
+start and after every returned page. A new process resumed the measured 1M run
+after two forced terminations; an explicit recovery operation can abandon only
+legacy/crashed epochs that never published a cursor. Node marking dequeues a
+bounded wave, batch-checks marks, fetches nodes with concurrency 32, deduplicates
+physical pack marks within version leaves, and publishes one work-tree mutation
+per wave. Candidate scanning batch-probes reachability and publishes candidates
+once per provider page. The resumed final segment completed in 126.1 seconds,
+deleted 186 exact unreachable versions totaling 4,046,261 bytes, downloaded
+888 KB, uploaded 437 KB, and ended at 44,000 KiB RSS. This proves restart and
+pack-safe sweep locally; a clean uninterrupted end-to-end timing and deliberate
+mid-sweep restart remain release gates.
+
 The 500K grouped ingest uploaded 2.56 GB for 17.5 MB of logical content, about
 146x byte amplification. Direct-child diff now pages the exact commit delta
 rather than allowing tree boundary shifts to trigger a collected structural
@@ -105,7 +119,7 @@ version trees.
   not yet a 500K production SLO: cache-cold reads and listings remain sensitive
   to host contention and transfer hundreds of megabytes.
 - Do not claim 1M production support until the remaining cold-cache, interrupted
-  fsck resume, GC, lifecycle/fencing, and real-provider cost/throttling matrix
+  fsck resume, clean full-GC timing, lifecycle/fencing, and real-provider cost/throttling matrix
   passes. Warm/persistent traversal, sparse direct-child history operations,
   rebuild, bounded RSS, pack inventory, and deep fsck now have local 1M evidence.
 - One-file-per-commit history is reliable through 10K and repeated authority

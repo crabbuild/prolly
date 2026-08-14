@@ -3542,7 +3542,7 @@ impl<P: ObjectPlane> Repository<P> {
             return Err(error);
         }
         let work = self.gc_work_engine(epoch)?.create();
-        Ok(GcCursor {
+        let cursor = GcCursor {
             repository: self.format.repository_id,
             epoch,
             cutoff_millis,
@@ -3555,7 +3555,88 @@ impl<P: ObjectPlane> Repository<P> {
             publication_barrier_drained: false,
             sweep_after: None,
             report: crate::GcReport::default(),
-        })
+        };
+        self.persist_gc_cursor(&cursor).await?;
+        Ok(cursor)
+    }
+
+    /// Resume the active repository-wide GC epoch after a worker restart.
+    pub async fn resume_gc(&self) -> Result<Option<GcCursor>> {
+        let Some(stored) = self
+            .plane
+            .load_mutable(&gc_coordinator_path(&self.options.repository_prefix)?)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let coordinator: GcCoordinator = decode_canonical(&stored.bytes)?;
+        let Some(epoch) = coordinator.active_epoch else {
+            return Ok(None);
+        };
+        let stored = self
+            .plane
+            .load_mutable(&gc_cursor_path(&self.options.repository_prefix, epoch)?)
+            .await?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "active GC epoch has no durable cursor checkpoint",
+                )
+            })?;
+        let cursor: GcCursor = decode_canonical(&stored.bytes)?;
+        self.validate_gc_cursor(&cursor)?;
+        Ok(Some(cursor))
+    }
+
+    /// Explicitly release a known active epoch when its durable checkpoint is
+    /// irrecoverably missing. The expected epoch prevents abandoning another
+    /// maintenance worker's run.
+    pub async fn abandon_gc(&self, expected_epoch: OperationId) -> Result<()> {
+        let active = *self
+            .active_gc_epoch
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?;
+        if active != Some(expected_epoch) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "active GC epoch does not match the requested abandonment",
+            ));
+        }
+        self.publish_gc_coordinator(None, self.options.clock.now_millis()?)
+            .await?;
+        *self
+            .active_gc_epoch
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))? =
+            None;
+        Ok(())
+    }
+
+    /// Release an active legacy/crashed epoch only when no durable cursor was
+    /// ever published for it. A resumable epoch must use `resume_gc` instead.
+    pub async fn abandon_incomplete_gc(&self) -> Result<OperationId> {
+        let stored = self
+            .plane
+            .load_mutable(&gc_coordinator_path(&self.options.repository_prefix)?)
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::InvalidRevision, "GC coordinator is missing"))?;
+        let coordinator: GcCoordinator = decode_canonical(&stored.bytes)?;
+        let epoch = coordinator
+            .active_epoch
+            .ok_or_else(|| Error::new(ErrorCode::PreconditionFailed, "no GC epoch is active"))?;
+        if self
+            .plane
+            .load_mutable(&gc_cursor_path(&self.options.repository_prefix, epoch)?)
+            .await?
+            .is_some()
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "active GC epoch has a durable cursor and must be resumed",
+            ));
+        }
+        self.abandon_gc(epoch).await?;
+        Ok(epoch)
     }
 
     /// Advance root discovery, reachability marking, candidate discovery, or
@@ -3591,12 +3672,14 @@ impl<P: ObjectPlane> Repository<P> {
                 .await?;
             next.continuation = continuation;
             next.publication_barrier_drained = drained;
-            return Ok(GcPage {
+            let page = GcPage {
                 complete: false,
                 cursor: next,
                 processed,
                 restarted_for_new_roots: false,
-            });
+            };
+            self.persist_gc_cursor(&page.cursor).await?;
+            return Ok(page);
         }
         let processed = match next.phase {
             GcPhase::DiscoverBranches => self.gc_discover_refs(&mut next, false, max_steps).await?,
@@ -3610,12 +3693,14 @@ impl<P: ObjectPlane> Repository<P> {
             GcPhase::Cleanup => self.gc_cleanup(&mut next, max_steps).await?,
             GcPhase::Ready | GcPhase::Sweeping | GcPhase::Complete => 0,
         };
-        Ok(GcPage {
+        let page = GcPage {
             complete: next.phase == GcPhase::Complete,
             cursor: next,
             processed,
             restarted_for_new_roots: false,
-        })
+        };
+        self.persist_gc_cursor(&page.cursor).await?;
+        Ok(page)
     }
 
     /// Delete at most `max_candidates` exact immutable physical versions.
@@ -3641,12 +3726,14 @@ impl<P: ObjectPlane> Repository<P> {
             next.phase = GcPhase::CatchUpDirtyRoots;
             next.dirty_target_sequence = dirty_target;
             next.continuation = None;
-            return Ok(GcPage {
+            let page = GcPage {
                 cursor: next,
                 processed: 0,
                 complete: false,
                 restarted_for_new_roots: true,
-            });
+            };
+            self.persist_gc_cursor(&page.cursor).await?;
+            return Ok(page);
         }
         let engine = self.gc_work_engine(cursor.epoch)?;
         let tree = self.tree_from_root(&cursor.work)?;
@@ -3738,12 +3825,14 @@ impl<P: ObjectPlane> Repository<P> {
             next.phase = GcPhase::Cleanup;
             next.continuation = None;
         }
-        Ok(GcPage {
+        let page = GcPage {
             complete: false,
             cursor: next,
             processed,
             restarted_for_new_roots: false,
-        })
+        };
+        self.persist_gc_cursor(&page.cursor).await?;
+        Ok(page)
     }
 
     /// Start a restartable integrity check for one stable branch snapshot.
@@ -6688,12 +6777,15 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC epoch ID is nil",
             ));
         }
-        Ok(self.engine(ProllyObjectStore::new(
+        Ok(self.engine(ProllyObjectStore::new_cached_direct(
             self.plane.clone(),
             format!(
                 "{}/administration/gc/{epoch}/tree",
                 self.options.repository_prefix
             ),
+            self.format.repository_id,
+            tree_format_digest(&self.format.state_tree_format)?,
+            self.node_cache.clone(),
         )))
     }
 
@@ -6883,84 +6975,106 @@ impl<P: ObjectPlane> Repository<P> {
     async fn gc_mark_nodes(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
         let engine = self.gc_work_engine(cursor.epoch)?;
         let mut tree = self.tree_from_root(&cursor.work)?;
-        let mut processed = 0usize;
-        while processed < max_steps {
-            let mut queue = engine.prefix(&tree, b"nq/").await?;
+        let mut queue = engine.prefix(&tree, b"nq/").await?;
+        let mut records = Vec::with_capacity(max_steps);
+        while records.len() < max_steps {
             let Some(entry) = queue.next().await else {
-                cursor.phase = if cursor.initial_scan_complete {
-                    GcPhase::CatchUpDirtyRoots
-                } else {
-                    GcPhase::ScanCandidates
-                };
                 break;
             };
             let (queue_key, encoded) = entry?;
-            drop(queue);
             let work: GcNodeWork = decode_canonical(&encoded)?;
-            let mark_key = gc_node_mark_key(&work.cid, work.scan_versions);
-            let mut mutations = vec![Mutation::Delete { key: queue_key }];
-            if engine.get(&tree, &mark_key).await?.is_none() {
-                mutations.push(Mutation::Upsert {
-                    key: mark_key,
-                    val: Vec::new(),
-                });
-                mutations.push(Mutation::Upsert {
-                    key: gc_path_mark_key(&self.node_store.direct_node_path(&work.cid)?),
-                    val: Vec::new(),
-                });
-                let bytes = self
-                    .node_store
-                    .get(work.cid.as_bytes())
-                    .await?
-                    .ok_or_else(|| {
-                        Error::new(ErrorCode::MissingClosure, "reachable node is missing")
-                    })?;
-                let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
-                    .map_err(|error| {
-                        Error::new(
-                            ErrorCode::CorruptNode,
-                            format!("reachable node could not be decoded: {error}"),
-                        )
-                    })?;
-                if node.leaf {
-                    if work.scan_versions {
-                        for encoded in node.vals {
-                            let version: ObjectVersion = decode_canonical(&encoded)?;
-                            version.validate()?;
-                            if let Some(binding) = version.binding {
-                                mutations.push(Mutation::Upsert {
-                                    key: binding.provider_version_id.as_ref().map_or_else(
-                                        || gc_path_mark_key(&binding.path),
-                                        |version| gc_physical_mark_key(&binding.path, version),
-                                    ),
-                                    val: Vec::new(),
-                                });
-                            }
-                            cursor.report.logical_versions =
-                                cursor.report.logical_versions.saturating_add(1);
-                        }
-                    }
-                } else {
-                    for child in node.vals {
-                        let cid = prolly::Cid(child.try_into().map_err(|_| {
-                            Error::new(ErrorCode::CorruptNode, "internal node child CID is invalid")
-                        })?);
-                        mutations.push(Mutation::Upsert {
-                            key: gc_node_queue_key(&cid, work.scan_versions),
-                            val: encode_canonical(&GcNodeWork {
-                                cid,
-                                scan_versions: work.scan_versions,
-                            })?,
-                        });
-                    }
-                }
-                cursor.report.nodes = cursor.report.nodes.saturating_add(1);
-            }
-            tree = engine.batch(&tree, mutations).await?;
-            processed += 1;
+            records.push((queue_key, work));
         }
+        drop(queue);
+        if records.is_empty() {
+            cursor.phase = if cursor.initial_scan_complete {
+                GcPhase::CatchUpDirtyRoots
+            } else {
+                GcPhase::ScanCandidates
+            };
+            return Ok(0);
+        }
+        let mark_keys = records
+            .iter()
+            .map(|(_, work)| gc_node_mark_key(&work.cid, work.scan_versions))
+            .collect::<Vec<_>>();
+        let marked = engine.get_many(&tree, &mark_keys).await?;
+        let pending = records
+            .iter()
+            .zip(marked)
+            .filter_map(|((_, work), marked)| marked.is_none().then_some(work.clone()))
+            .collect::<Vec<_>>();
+        let loaded = stream::iter(pending.into_iter().map(|work| async move {
+            let bytes = self
+                .node_store
+                .get(work.cid.as_bytes())
+                .await?
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "reachable node is missing")
+                })?;
+            let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                .map_err(|error| {
+                    Error::new(
+                        ErrorCode::CorruptNode,
+                        format!("reachable node could not be decoded: {error}"),
+                    )
+                })?;
+            Ok::<_, Error>((work, node))
+        }))
+        .buffered(32)
+        .collect::<Vec<_>>()
+        .await;
+        let mut mutations = records
+            .into_iter()
+            .map(|(key, _)| Mutation::Delete { key })
+            .collect::<Vec<_>>();
+        for loaded in loaded {
+            let (work, node) = loaded?;
+            mutations.push(Mutation::Upsert {
+                key: gc_node_mark_key(&work.cid, work.scan_versions),
+                val: Vec::new(),
+            });
+            mutations.push(Mutation::Upsert {
+                key: gc_path_mark_key(&self.node_store.direct_node_path(&work.cid)?),
+                val: Vec::new(),
+            });
+            if node.leaf && work.scan_versions {
+                let mut physical_marks = BTreeSet::new();
+                for encoded in node.vals {
+                    let version: ObjectVersion = decode_canonical(&encoded)?;
+                    version.validate()?;
+                    if let Some(binding) = version.binding {
+                        physical_marks.insert(binding.provider_version_id.as_ref().map_or_else(
+                            || gc_path_mark_key(&binding.path),
+                            |version| gc_physical_mark_key(&binding.path, version),
+                        ));
+                    }
+                    cursor.report.logical_versions =
+                        cursor.report.logical_versions.saturating_add(1);
+                }
+                mutations.extend(physical_marks.into_iter().map(|key| Mutation::Upsert {
+                    key,
+                    val: Vec::new(),
+                }));
+            } else if !node.leaf {
+                for child in node.vals {
+                    let cid = prolly::Cid(child.try_into().map_err(|_| {
+                        Error::new(ErrorCode::CorruptNode, "internal node child CID is invalid")
+                    })?);
+                    mutations.push(Mutation::Upsert {
+                        key: gc_node_queue_key(&cid, work.scan_versions),
+                        val: encode_canonical(&GcNodeWork {
+                            cid,
+                            scan_versions: work.scan_versions,
+                        })?,
+                    });
+                }
+            }
+            cursor.report.nodes = cursor.report.nodes.saturating_add(1);
+        }
+        tree = engine.batch(&tree, mutations).await?;
         cursor.work = RootManifest::from_tree(&tree)?;
-        Ok(processed)
+        Ok(mark_keys.len())
     }
 
     async fn gc_scan_candidates(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
@@ -6975,26 +7089,40 @@ impl<P: ObjectPlane> Repository<P> {
             .await?;
         let engine = self.gc_work_engine(cursor.epoch)?;
         let mut tree = self.tree_from_root(&cursor.work)?;
-        for entry in &page.entries {
-            let Some(kind) = gc_managed_kind(&self.options.repository_prefix, &entry.path) else {
-                continue;
-            };
-            if entry.metadata.last_modified_millis > cursor.cutoff_millis {
-                continue;
-            }
-            let path_retained = engine
-                .get(&tree, &gc_path_mark_key(&entry.path))
-                .await?
-                .is_some();
-            let physical_retained = match entry.metadata.token.version_id.as_deref() {
-                Some(version) => engine
-                    .get(&tree, &gc_physical_mark_key(&entry.path, version))
-                    .await?
-                    .is_some(),
-                None => false,
-            };
-            let retained = path_retained || physical_retained;
-            if retained {
+        let eligible = page
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                let kind = gc_managed_kind(&self.options.repository_prefix, &entry.path)?;
+                (entry.metadata.last_modified_millis <= cursor.cutoff_millis)
+                    .then_some((entry, kind))
+            })
+            .collect::<Vec<_>>();
+        let path_keys = eligible
+            .iter()
+            .map(|(entry, _)| gc_path_mark_key(&entry.path))
+            .collect::<Vec<_>>();
+        let physical_keys = eligible
+            .iter()
+            .map(|(entry, _)| {
+                entry
+                    .metadata
+                    .token
+                    .version_id
+                    .as_deref()
+                    .map(|version| gc_physical_mark_key(&entry.path, version))
+                    .unwrap_or_else(|| gc_path_mark_key(&entry.path))
+            })
+            .collect::<Vec<_>>();
+        let (path_marks, physical_marks) = futures_util::try_join!(
+            engine.get_many(&tree, &path_keys),
+            engine.get_many(&tree, &physical_keys),
+        )?;
+        let mut mutations = Vec::new();
+        for (((entry, kind), path_mark), physical_mark) in
+            eligible.into_iter().zip(path_marks).zip(physical_marks)
+        {
+            if path_mark.is_some() || physical_mark.is_some() {
                 continue;
             }
             let physical_version = entry
@@ -7014,19 +7142,21 @@ impl<P: ObjectPlane> Repository<P> {
                 kind: kind.to_string(),
             };
             let key = gc_candidate_key(&candidate)?;
-            if engine.get(&tree, &key).await?.is_none() {
-                tree = engine
-                    .put(&tree, key, encode_canonical(&candidate)?)
-                    .await?;
-                cursor.report.candidates = cursor.report.candidates.saturating_add(1);
-                cursor.report.candidate_bytes =
-                    cursor.report.candidate_bytes.saturating_add(candidate.len);
-                *cursor
-                    .report
-                    .candidates_by_kind
-                    .entry(kind.to_string())
-                    .or_default() += 1;
-            }
+            mutations.push(Mutation::Upsert {
+                key,
+                val: encode_canonical(&candidate)?,
+            });
+            cursor.report.candidates = cursor.report.candidates.saturating_add(1);
+            cursor.report.candidate_bytes =
+                cursor.report.candidate_bytes.saturating_add(candidate.len);
+            *cursor
+                .report
+                .candidates_by_kind
+                .entry(kind.to_string())
+                .or_default() += 1;
+        }
+        if !mutations.is_empty() {
+            tree = engine.batch(&tree, mutations).await?;
         }
         cursor.work = RootManifest::from_tree(&tree)?;
         cursor.continuation = page.continuation;
@@ -7219,6 +7349,40 @@ impl<P: ObjectPlane> Repository<P> {
             CompareExchangeOutcome::Conflict(_) => Err(Error::new(
                 ErrorCode::RefConflict,
                 "GC coordinator changed concurrently",
+            )),
+        }
+    }
+
+    async fn persist_gc_cursor(&self, cursor: &GcCursor) -> Result<()> {
+        let path = gc_cursor_path(&self.options.repository_prefix, cursor.epoch)?;
+        let current = self.plane.load_mutable(&path).await?;
+        if let Some(stored) = current.as_ref() {
+            let previous: GcCursor = decode_canonical(&stored.bytes)?;
+            if previous.repository != cursor.repository || previous.epoch != cursor.epoch {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "durable GC cursor belongs to another epoch",
+                ));
+            }
+        }
+        let expected = current.map(|stored| stored.metadata.token);
+        let controls = MutableControlStore::new(
+            self.plane.clone(),
+            self.options.repository_prefix.clone(),
+            self.options.mutable_control_versions_to_retain,
+        )?;
+        match controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected,
+                bytes: encode_canonical(cursor)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(()),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "durable GC cursor changed concurrently",
             )),
         }
     }
@@ -9729,6 +9893,10 @@ fn format_path(prefix: &str) -> Result<ObjectPath> {
 
 fn gc_coordinator_path(prefix: &str) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/gc/coordinator.cbor"))
+}
+
+fn gc_cursor_path(prefix: &str, epoch: OperationId) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/gc/epochs/{epoch}/cursor.cbor"))
 }
 
 fn gc_publication_ticket_prefix(prefix: &str, repository: crate::RepositoryId) -> String {

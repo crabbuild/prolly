@@ -67,6 +67,11 @@ fn every_mutable_control_family_has_one_canonical_classification() {
             "journal-index/heads/6d61696e.cbor",
             MutableControlKind::JournalDerivedIndexHead,
         ),
+        ("gc/coordinator.cbor", MutableControlKind::GcCoordinator),
+        (
+            "gc/epochs/00000000-0000-0000-0000-000000000001/cursor.cbor",
+            MutableControlKind::GcCursor,
+        ),
     ];
     for (relative, expected) in cases {
         let path = ObjectPath::new(format!("{prefix}/{relative}")).unwrap();

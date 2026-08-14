@@ -27,6 +27,7 @@ pub enum MutableControlKind {
     OperationIndexHead,
     JournalDerivedIndexHead,
     GcCoordinator,
+    GcCursor,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -386,6 +387,7 @@ pub fn classify_mutable_control_path(
         ["operation-index", "heads", _] => Some(MutableControlKind::OperationIndexHead),
         ["journal-index", "heads", _] => Some(MutableControlKind::JournalDerivedIndexHead),
         ["gc", "coordinator.cbor"] => Some(MutableControlKind::GcCoordinator),
+        ["gc", "epochs", _, "cursor.cbor"] => Some(MutableControlKind::GcCursor),
         _ => None,
     }
 }

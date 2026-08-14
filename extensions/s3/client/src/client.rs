@@ -624,6 +624,24 @@ impl Client {
         self.repository.start_gc(grace_millis).await
     }
 
+    pub async fn resume_gc(&self) -> Result<Option<GcCursor>> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.resume_gc().await
+    }
+
+    pub async fn abandon_gc(&self, expected_epoch: prolly_s3_core::OperationId) -> Result<()> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.abandon_gc(expected_epoch).await
+    }
+
+    pub async fn abandon_incomplete_gc(&self) -> Result<prolly_s3_core::OperationId> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.abandon_incomplete_gc().await
+    }
+
     pub async fn advance_gc(&self, cursor: &GcCursor, max_steps: usize) -> Result<GcPage> {
         self.ensure_provider_qualified()?;
         self.attached_branch()?;

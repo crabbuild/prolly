@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use prolly_s3_core::{
-    decode_canonical, encode_canonical, GcCursor, GcPhase, ImmutablePut, MemoryObjectPlane,
-    ObjectHeaders, ObjectPath, ObjectPlane, Repository, RepositoryOptions,
+    GcPhase, ImmutablePut, MemoryObjectPlane, ObjectHeaders, ObjectPath, ObjectPlane, Repository,
+    RepositoryOptions,
 };
 use sha2::{Digest, Sha256};
 
@@ -17,6 +17,44 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
     let repository = Repository::initialize(plane.clone(), options.clone())
         .await
         .unwrap();
+    let session = repository
+        .begin_commit_session("main", "shared live pack", 60_000)
+        .await
+        .unwrap();
+    let staged = repository
+        .stage_commit_session_put_batch(
+            &session,
+            vec![
+                (
+                    b"packed/a".to_vec(),
+                    b"alpha".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+                (
+                    b"packed/b".to_vec(),
+                    b"bravo".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+            ],
+            2,
+        )
+        .await
+        .unwrap();
+    let packed_commit = repository
+        .publish_commit_session(session, staged)
+        .await
+        .unwrap();
+    let live_pack = repository
+        .head_object_at("main", packed_commit.id, b"packed/a")
+        .await
+        .unwrap()
+        .unwrap()
+        .version
+        .binding
+        .unwrap()
+        .path;
     let initial = repository.head("main").await.unwrap();
     repository.create_branch("scratch", initial).await.unwrap();
     let pinned = repository
@@ -47,6 +85,20 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
             path: orphan_path.clone(),
             expected_sha256: Sha256::digest(&orphan).into(),
             bytes: orphan,
+        })
+        .await
+        .unwrap();
+    let orphan_pack_path = ObjectPath::new(format!(
+        ".tests/gc/payload-packs/sha256/ee/ee/{}",
+        "ee".repeat(32)
+    ))
+    .unwrap();
+    let orphan_pack = b"unreachable immutable pack".to_vec();
+    plane
+        .put_immutable(ImmutablePut {
+            path: orphan_pack_path.clone(),
+            expected_sha256: Sha256::digest(&orphan_pack).into(),
+            bytes: orphan_pack,
         })
         .await
         .unwrap();
@@ -94,10 +146,9 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
         before_sweep.code,
         prolly_s3_core::ErrorCode::PreconditionFailed
     );
-    let persisted = encode_canonical(&gc).unwrap();
     drop(repository);
     let repository = Repository::open(plane.clone(), options).await.unwrap();
-    gc = decode_canonical::<GcCursor>(&persisted).unwrap();
+    gc = repository.resume_gc().await.unwrap().unwrap();
 
     for _ in 0..10_000 {
         gc = match gc.phase {
@@ -109,6 +160,17 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
     assert_eq!(gc.phase, GcPhase::Complete);
     assert!(gc.report.deleted_versions >= 1);
     assert!(plane.head(&orphan_path).await.unwrap().is_none());
+    assert!(plane.head(&orphan_pack_path).await.unwrap().is_none());
+    assert!(plane.head(&live_pack).await.unwrap().is_some());
+    assert_eq!(
+        repository
+            .get_object("main", b"packed/b")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"bravo"
+    );
     repository
         .put_object(
             "main",
