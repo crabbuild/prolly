@@ -249,6 +249,13 @@ pub struct ProviderCapabilities {
     pub physical_versioning: PhysicalVersioning,
     pub conflicting_lifecycle_rule: bool,
     pub default_object_lock_retention: bool,
+    /// Whether qualification could inspect the bucket replication policy.
+    #[serde(default)]
+    pub replication_configuration_readable: bool,
+    /// Replication is operationally relevant but does not mutate the source
+    /// repository, so it is reported rather than rejected.
+    #[serde(default)]
+    pub replication_enabled: bool,
     pub max_object_bytes: u64,
     pub max_single_put_bytes: u64,
 }

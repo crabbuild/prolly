@@ -1718,6 +1718,10 @@ impl Client {
         self.repository.plane().reset_metrics()
     }
 
+    pub fn provider_capabilities(&self) -> &prolly_s3_core::ProviderCapabilities {
+        &self.provider_attestation.body.capabilities
+    }
+
     pub fn fenced_branches(&self) -> Result<Vec<String>> {
         self.repository.fenced_branches()
     }
@@ -1761,8 +1765,9 @@ impl CommitSessionBuilder {
         self
     }
 
-    /// Disable remote checkpoints for the minimum N + 3 S3 PUT shape. The
-    /// session cannot then be resumed after process loss.
+    /// Disable remote checkpoints for the minimum N + 4 S3 PUT shape: N
+    /// payloads, commit/event/ref publication, and one short-lived durable GC
+    /// admission ticket. The session cannot then be resumed after process loss.
     pub fn ephemeral(mut self) -> Self {
         self.durable = false;
         self

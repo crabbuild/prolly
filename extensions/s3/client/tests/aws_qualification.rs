@@ -89,6 +89,12 @@ async fn aws_general_purpose_bucket_qualification_matrix() {
         .initialize()
         .await
         .unwrap();
+    assert!(
+        client
+            .provider_capabilities()
+            .replication_configuration_readable,
+        "AWS qualification must inspect the bucket replication policy"
+    );
 
     let first = client
         .put_object("matrix/history.bin", b"first".to_vec())

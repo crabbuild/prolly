@@ -480,7 +480,7 @@ async fn rustfs_detached_paged_and_streamed_lists_stay_on_the_selected_commit() 
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn rustfs_commit_session_preserves_n_plus_three_puts() {
+async fn rustfs_commit_session_accounts_for_publication_ticket() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
         return;
@@ -520,8 +520,12 @@ async fn rustfs_commit_session_preserves_n_plus_three_puts() {
     assert_eq!(receipt.changed_keys, 3);
     let calls = client.reset_s3_operation_metrics();
     assert_eq!(
-        calls.put_object, 5,
-        "two immutable payload PUTs plus commit/event/ref publication must preserve N + 3: {calls:?}"
+        calls.put_object, 6,
+        "two payloads, commit/event/ref publication, and one GC admission ticket require N + 4 PUTs: {calls:?}"
+    );
+    assert_eq!(
+        calls.delete_object, 1,
+        "successful publication must exact-delete its admission ticket: {calls:?}"
     );
     assert_eq!(
         calls.head_object, 0,

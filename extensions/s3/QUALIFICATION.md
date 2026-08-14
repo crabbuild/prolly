@@ -131,6 +131,12 @@ Do not promote on RustFS results alone. AWS qualification must cover:
 - cache-loss cold start;
 - lifecycle and replication interactions.
 
+The signed provider capability profile records whether replication
+configuration was readable and whether replication was enabled. Replication is
+reported rather than rejected because it does not mutate source objects, but
+its destination lifecycle, replica ownership, KMS grants, latency, and request
+cost must be included in the deployment runbook.
+
 ## Promotion criteria
 
 Promote only when:
