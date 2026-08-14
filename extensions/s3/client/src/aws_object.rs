@@ -43,6 +43,7 @@ pub struct S3OperationMetrics {
     pub upload_part: u64,
     pub complete_multipart_upload: u64,
     pub abort_multipart_upload: u64,
+    pub list_parts: u64,
     pub list_objects_v2: u64,
     pub list_object_versions: u64,
     pub delete_object: u64,
@@ -60,6 +61,7 @@ impl S3OperationMetrics {
             + self.upload_part
             + self.complete_multipart_upload
             + self.abort_multipart_upload
+            + self.list_parts
             + self.list_objects_v2
             + self.list_object_versions
             + self.delete_object
@@ -76,6 +78,7 @@ struct AtomicS3OperationMetrics {
     upload_part: AtomicU64,
     complete_multipart_upload: AtomicU64,
     abort_multipart_upload: AtomicU64,
+    list_parts: AtomicU64,
     list_objects_v2: AtomicU64,
     list_object_versions: AtomicU64,
     delete_object: AtomicU64,
@@ -134,6 +137,7 @@ impl AtomicS3OperationMetrics {
             upload_part: self.upload_part.load(Ordering::Relaxed),
             complete_multipart_upload: self.complete_multipart_upload.load(Ordering::Relaxed),
             abort_multipart_upload: self.abort_multipart_upload.load(Ordering::Relaxed),
+            list_parts: self.list_parts.load(Ordering::Relaxed),
             list_objects_v2: self.list_objects_v2.load(Ordering::Relaxed),
             list_object_versions: self.list_object_versions.load(Ordering::Relaxed),
             delete_object: self.delete_object.load(Ordering::Relaxed),
@@ -152,6 +156,7 @@ impl AtomicS3OperationMetrics {
             upload_part: self.upload_part.swap(0, Ordering::Relaxed),
             complete_multipart_upload: self.complete_multipart_upload.swap(0, Ordering::Relaxed),
             abort_multipart_upload: self.abort_multipart_upload.swap(0, Ordering::Relaxed),
+            list_parts: self.list_parts.swap(0, Ordering::Relaxed),
             list_objects_v2: self.list_objects_v2.swap(0, Ordering::Relaxed),
             list_object_versions: self.list_object_versions.swap(0, Ordering::Relaxed),
             delete_object: self.delete_object.swap(0, Ordering::Relaxed),
@@ -193,6 +198,187 @@ impl AwsS3ObjectPlane {
     /// Resets all object-plane counters and returns their previous values.
     pub fn reset_metrics(&self) -> S3OperationMetrics {
         self.metrics.reset()
+    }
+
+    pub(crate) async fn begin_native_multipart(
+        &self,
+        path: &ObjectPath,
+        expected_sha256: [u8; 32],
+    ) -> Result<String> {
+        self.metrics
+            .create_multipart_upload
+            .fetch_add(1, Ordering::Relaxed);
+        let created = self
+            .client
+            .create_multipart_upload()
+            .bucket(&self.bucket)
+            .key(path.as_str())
+            .metadata("prolly-sha256", hex::encode(expected_sha256))
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("CreateMultipartUpload resumable", error))?;
+        created.upload_id().map(ToString::to_string).ok_or_else(|| {
+            Error::new(
+                ErrorCode::OutcomeUnknown,
+                "multipart create succeeded without an upload ID",
+            )
+        })
+    }
+
+    pub(crate) async fn upload_native_part(
+        &self,
+        path: &ObjectPath,
+        upload_id: &str,
+        part_number: i32,
+        bytes: Vec<u8>,
+    ) -> Result<String> {
+        self.metrics.upload_part.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .uploaded_body_bytes
+            .fetch_add(bytes.len() as u64, Ordering::Relaxed);
+        let uploaded = self
+            .client
+            .upload_part()
+            .bucket(&self.bucket)
+            .key(path.as_str())
+            .upload_id(upload_id)
+            .part_number(part_number)
+            .body(ByteStream::from(bytes))
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("UploadPart resumable", error))?;
+        uploaded.e_tag().map(ToString::to_string).ok_or_else(|| {
+            Error::new(
+                ErrorCode::OutcomeUnknown,
+                "multipart part succeeded without an ETag",
+            )
+        })
+    }
+
+    pub(crate) async fn list_native_parts(
+        &self,
+        path: &ObjectPath,
+        upload_id: &str,
+    ) -> Result<BTreeMap<i32, (String, u64)>> {
+        let mut marker = None;
+        let mut parts = BTreeMap::new();
+        loop {
+            self.metrics.list_parts.fetch_add(1, Ordering::Relaxed);
+            let page = self
+                .client
+                .list_parts()
+                .bucket(&self.bucket)
+                .key(path.as_str())
+                .upload_id(upload_id)
+                .set_part_number_marker(marker)
+                .send()
+                .await
+                .map_err(|error| map_sdk_error("ListParts resumable", error))?;
+            for part in page.parts() {
+                let number = part.part_number().ok_or_else(|| {
+                    Error::new(ErrorCode::CorruptContent, "provider part has no number")
+                })?;
+                let etag = part.e_tag().ok_or_else(|| {
+                    Error::new(ErrorCode::CorruptContent, "provider part has no ETag")
+                })?;
+                let size = u64::try_from(part.size().unwrap_or_default()).map_err(|_| {
+                    Error::new(
+                        ErrorCode::CorruptContent,
+                        "provider part has an invalid size",
+                    )
+                })?;
+                parts.insert(number, (etag.to_string(), size));
+            }
+            if !page.is_truncated().unwrap_or(false) {
+                break;
+            }
+            marker = page.next_part_number_marker().map(ToString::to_string);
+        }
+        Ok(parts)
+    }
+
+    pub(crate) async fn complete_native_multipart(
+        &self,
+        path: &ObjectPath,
+        upload_id: &str,
+        parts: &BTreeMap<i32, String>,
+        size: u64,
+        expected_sha256: [u8; 32],
+    ) -> Result<StoredMetadata> {
+        let completed = CompletedMultipartUpload::builder()
+            .set_parts(Some(
+                parts
+                    .iter()
+                    .map(|(number, etag)| {
+                        CompletedPart::builder()
+                            .part_number(*number)
+                            .e_tag(etag)
+                            .build()
+                    })
+                    .collect(),
+            ))
+            .build();
+        self.metrics
+            .complete_multipart_upload
+            .fetch_add(1, Ordering::Relaxed);
+        let output = self
+            .client
+            .complete_multipart_upload()
+            .bucket(&self.bucket)
+            .key(path.as_str())
+            .upload_id(upload_id)
+            .multipart_upload(completed)
+            .send()
+            .await;
+        let output = match output {
+            Ok(output) => output,
+            Err(error) => {
+                let mapped = map_sdk_error("CompleteMultipartUpload resumable", error);
+                if let Some(existing) = self.head(path).await? {
+                    if existing.len == size && existing.sha256 == expected_sha256 {
+                        return Ok(existing);
+                    }
+                }
+                return Err(mapped);
+            }
+        };
+        Ok(StoredMetadata {
+            token: StorageToken {
+                etag: output.e_tag().unwrap_or_default().to_string(),
+                version_id: output.version_id().map(ToString::to_string),
+            },
+            len: size,
+            sha256: expected_sha256,
+            last_modified_millis: 0,
+            delete_marker: false,
+            user_metadata: BTreeMap::from([(
+                "prolly-sha256".to_string(),
+                hex::encode(expected_sha256),
+            )]),
+        })
+    }
+
+    pub(crate) async fn abort_native_multipart(
+        &self,
+        path: &ObjectPath,
+        upload_id: &str,
+    ) -> Result<()> {
+        self.metrics
+            .abort_multipart_upload
+            .fetch_add(1, Ordering::Relaxed);
+        self.client
+            .abort_multipart_upload()
+            .bucket(&self.bucket)
+            .key(path.as_str())
+            .upload_id(upload_id)
+            .send()
+            .await
+            .map_err(|error| map_sdk_error("AbortMultipartUpload resumable", error))?;
+        Ok(())
+    }
+
+    pub(crate) fn native_multipart_part_size(size: u64) -> Result<u64> {
+        multipart_part_size(size)
     }
 
     async fn get_current(&self, path: &ObjectPath) -> Result<Option<StoredObject>> {

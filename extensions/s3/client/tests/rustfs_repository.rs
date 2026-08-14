@@ -14,6 +14,7 @@ use aws_sdk_s3::{
     types::{BucketVersioningStatus, VersioningConfiguration},
 };
 use futures_util::{stream, StreamExt};
+use md5::{Digest as _, Md5};
 use prolly_s3_client::{
     core::{
         decode_canonical, encode_canonical, BatchId, Error, ErrorCode, LogicalObjectVersionKind,
@@ -21,6 +22,7 @@ use prolly_s3_client::{
     },
     BulkWriteOptions, CheckoutRef, Client, HmacAttestationSigner, ProviderIdentity, PutObjectInput,
 };
+use sha2::Sha256;
 
 fn rustfs_enabled() -> bool {
     std::env::var("PROLLY_S3_RUSTFS").as_deref() == Ok("1")
@@ -1579,4 +1581,104 @@ async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
         .unwrap()
         .unwrap();
     assert_eq!(tail.bytes, vec![0x5a; 32]);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[ignore = "uploads and resumes a 33 MiB provider-native multipart object"]
+async fn rustfs_native_multipart_resumes_after_restart_as_one_object() {
+    assert!(
+        rustfs_enabled(),
+        "set PROLLY_S3_RUSTFS=1 to run the resumable multipart gate"
+    );
+    const MIB: usize = 1_024 * 1_024;
+    let (aws, bucket) = rustfs_client().await;
+    let prefix = unique_name("native-multipart-resume");
+    let builder = |aws: aws_sdk_s3::Client| {
+        Client::builder()
+            .aws_client(aws)
+            .bucket(&bucket)
+            .repository_prefix(&prefix)
+            .writer("rustfs-native-multipart-writer")
+            .provider_identity(provider_identity())
+            .attestation_signer(attestation_signer())
+            .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+    };
+    let client = builder(aws.clone()).initialize().await.unwrap();
+    let mut body = vec![0x11; 16 * MIB];
+    body.extend(vec![0x22; 16 * MIB]);
+    body.extend(vec![0x33; MIB]);
+    let session = client
+        .begin_commit()
+        .message("native multipart resume")
+        .start()
+        .await
+        .unwrap();
+    let batch = session.id();
+    let mut upload = session
+        .begin_multipart_upload(
+            "large/resumable.bin",
+            body.len() as u64,
+            Sha256::digest(&body).into(),
+            Md5::digest(&body).into(),
+        )
+        .await
+        .unwrap();
+    let first_size = upload.expected_part_size(1).unwrap() as usize;
+    let mut tampered = upload.clone();
+    tampered.part_size += 1;
+    assert_eq!(
+        session
+            .upload_multipart_part(&mut tampered, 1, Vec::new())
+            .await
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidRequest
+    );
+    session
+        .upload_multipart_part(&mut upload, 1, body[..first_size].to_vec())
+        .await
+        .unwrap();
+    let persisted = serde_json::to_vec(&upload).unwrap();
+    drop(session);
+    drop(client);
+
+    let reopened = builder(aws).open().await.unwrap();
+    reopened.reset_s3_operation_metrics();
+    let mut session = reopened.resume_commit(batch).await.unwrap();
+    let mut upload = serde_json::from_slice(&persisted).unwrap();
+    session
+        .reconcile_multipart_upload(&mut upload)
+        .await
+        .unwrap();
+    assert_eq!(upload.completed_parts.len(), 1);
+    let mut offset = first_size;
+    for number in 2..=upload.part_count().unwrap() {
+        let len = upload.expected_part_size(number).unwrap() as usize;
+        session
+            .upload_multipart_part(&mut upload, number, body[offset..offset + len].to_vec())
+            .await
+            .unwrap();
+        offset += len;
+    }
+    session
+        .complete_multipart_upload(&mut upload, Default::default(), Default::default())
+        .await
+        .unwrap();
+    session.publish().await.unwrap();
+    let metrics = reopened.reset_s3_operation_metrics();
+    assert_eq!(metrics.create_multipart_upload, 0);
+    assert_eq!(metrics.upload_part, 2);
+    assert_eq!(metrics.complete_multipart_upload, 1);
+    assert!(metrics.list_parts >= 2);
+    assert_eq!(metrics.abort_multipart_upload, 0);
+    assert!(metrics.uploaded_body_bytes < body.len() as u64 - 8 * MIB as u64);
+    assert_eq!(
+        reopened
+            .get_object("large/resumable.bin")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        body
+    );
 }

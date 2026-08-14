@@ -551,6 +551,11 @@ bytes, and admission rejections.
   descriptors and only the node ranges on their traversal frontier.
 - Large commit deltas are external Prolly trees, keeping commit descriptors and
   restart metadata bounded independently of batch size.
+- Callers that know a large object's complete size, SHA-256, and MD5 can use
+  `begin_multipart_upload`, persist `MultipartUploadCheckpoint` after each
+  `upload_multipart_part`, reopen the commit session, reconcile with native S3
+  `ListParts`, and call `complete_multipart_upload`. Provider completion creates
+  one physical object; native parts never enter the Prolly tree or GC domain.
 - Same-branch writers contend on one ref CAS; different branches publish
   independently.
 
@@ -564,6 +569,10 @@ latency or cost claim substitutes for AWS qualification.
 - One file must fit the repository and provider single-object size limits.
 - Prolly does not define a chunked file representation. Large spooled uploads
   use provider-native multipart and complete as one physical S3 object.
+- The convenience `put_stream` path uses a bounded disk spool because it learns
+  content identity at end-of-stream. The advanced resumable multipart API
+  avoids the spool but requires the complete size and checksums up front; its
+  checkpoint must be durably stored by the application.
 - Concurrent writes to one branch can conflict; batch related changes.
 - Concurrent GC closes publication admission through the durable repository
   coordinator, fences writer handles in other processes, checkpoints its epoch,

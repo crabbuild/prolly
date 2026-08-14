@@ -18,13 +18,14 @@ use prolly_s3_core::{
     ListObjectsPage, LogicalObjectVersionKind, MergeAdvancePage, MergeBaseCursor, MergeBasePage,
     MergeChangeCursor, MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor,
     MergeConflictPage, MergeCursor, MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData,
-    ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary,
-    ObjectVersion, OperationId, OperationIndexRebuildCursor, OperationIndexRebuildStep,
-    PayloadPackStatsCursor, PayloadPackStatsPage, ProviderAttestation, ProviderPerKeyVersionLimit,
-    ProviderProfileId, PublicationJournalCursor, PublicationJournalPage, RefCatalogCursor,
-    RefCatalogRepairPage, RefKind, RefMoveReceipt, RepairCursor, RepairPage, Repository,
-    RepositoryOptions, RestoreCursor, RestorePage, Result, RetentionPin, RetentionPinPage,
-    StagedMutation, Tag, TagCatalogPage, TraversalBudget, VersionSummary,
+    ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectHeaders, ObjectPath, ObjectRangeData,
+    ObjectSummary, ObjectVersion, OperationId, OperationIndexRebuildCursor,
+    OperationIndexRebuildStep, PayloadPackStatsCursor, PayloadPackStatsPage, ProviderAttestation,
+    ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
+    PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
+    RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
+    RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
+    VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -41,6 +42,7 @@ use crate::{
 #[derive(Clone)]
 pub struct Client {
     repository: Arc<Repository<AwsS3ObjectPlane>>,
+    plane: Arc<AwsS3ObjectPlane>,
     bucket: String,
     /// Branch used to resolve branch-local packed-node indexes. For a detached
     /// checkout this remains the branch from which checkout was requested.
@@ -49,6 +51,28 @@ pub struct Client {
     provider_attestation: ProviderAttestation,
     shard_authority_maintenance: Arc<Mutex<Option<prolly_s3_core::ShardAuthorityMaintenance>>>,
     _branch_index_maintenance: Arc<Mutex<Option<prolly_s3_core::BranchIndexMaintenance>>>,
+}
+
+/// Durable application checkpoint for one provider-native multipart upload.
+/// It contains only S3 upload state; successful completion creates one physical
+/// object and no Prolly chunk objects or chunk manifest.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MultipartUploadCheckpoint {
+    pub batch: BatchId,
+    pub key: Vec<u8>,
+    pub path: ObjectPath,
+    pub upload_id: String,
+    pub size: u64,
+    pub checksum_sha256: [u8; 32],
+    pub checksum_md5: [u8; 16],
+    pub part_size: u64,
+    pub completed_parts: BTreeMap<i32, MultipartCompletedPart>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MultipartCompletedPart {
+    pub etag: String,
+    pub size: u64,
 }
 
 #[derive(Default)]
@@ -1931,6 +1955,181 @@ impl CommitSession {
         Ok(())
     }
 
+    /// Start a crash-resumable provider-native multipart upload when the
+    /// complete size and checksums are known. Persist the returned checkpoint
+    /// after every uploaded part. Completion stages exactly one S3 object.
+    pub async fn begin_multipart_upload(
+        &self,
+        key: impl Into<String>,
+        size: u64,
+        checksum_sha256: [u8; 32],
+        checksum_md5: [u8; 16],
+    ) -> Result<MultipartUploadCheckpoint> {
+        self.client.ensure_provider_qualified()?;
+        let key = key.into().into_bytes();
+        let path = self
+            .client
+            .repository
+            .commit_session_payload_path(&self.manifest, &key, size, checksum_sha256)
+            .await?;
+        let part_size = AwsS3ObjectPlane::native_multipart_part_size(size)?;
+        let upload_id = self
+            .client
+            .plane
+            .begin_native_multipart(&path, checksum_sha256)
+            .await?;
+        Ok(MultipartUploadCheckpoint {
+            batch: self.id(),
+            key,
+            path,
+            upload_id,
+            size,
+            checksum_sha256,
+            checksum_md5,
+            part_size,
+            completed_parts: BTreeMap::new(),
+        })
+    }
+
+    /// Upload or replace one native provider part. This state is not a Prolly
+    /// object; S3 discards the parts after complete/abort.
+    pub async fn upload_multipart_part(
+        &self,
+        checkpoint: &mut MultipartUploadCheckpoint,
+        part_number: i32,
+        bytes: Vec<u8>,
+    ) -> Result<()> {
+        self.validate_multipart_checkpoint(checkpoint).await?;
+        let expected = checkpoint.expected_part_size(part_number)?;
+        if bytes.len() as u64 != expected {
+            return Err(invalid(format!(
+                "multipart part {part_number} has {} bytes, expected {expected}",
+                bytes.len()
+            )));
+        }
+        let etag = self
+            .client
+            .plane
+            .upload_native_part(&checkpoint.path, &checkpoint.upload_id, part_number, bytes)
+            .await?;
+        checkpoint.completed_parts.insert(
+            part_number,
+            MultipartCompletedPart {
+                etag,
+                size: expected,
+            },
+        );
+        Ok(())
+    }
+
+    /// Reconcile a persisted checkpoint with provider truth after restart or
+    /// an ambiguous part response. Provider-listed parts replace local state.
+    pub async fn reconcile_multipart_upload(
+        &self,
+        checkpoint: &mut MultipartUploadCheckpoint,
+    ) -> Result<()> {
+        self.validate_multipart_checkpoint(checkpoint).await?;
+        let provider = self
+            .client
+            .plane
+            .list_native_parts(&checkpoint.path, &checkpoint.upload_id)
+            .await?;
+        let mut reconciled = BTreeMap::new();
+        for (number, (etag, size)) in provider {
+            let expected = checkpoint.expected_part_size(number)?;
+            if size != expected {
+                return Err(Error::new(
+                    ErrorCode::ChecksumMismatch,
+                    format!(
+                        "provider multipart part {number} has {size} bytes, expected {expected}"
+                    ),
+                ));
+            }
+            reconciled.insert(number, MultipartCompletedPart { etag, size });
+        }
+        checkpoint.completed_parts = reconciled;
+        Ok(())
+    }
+
+    /// Complete the provider upload and stage its resulting single physical
+    /// object in this commit session.
+    pub async fn complete_multipart_upload(
+        &mut self,
+        checkpoint: &mut MultipartUploadCheckpoint,
+        headers: ObjectHeaders,
+        metadata: BTreeMap<String, String>,
+    ) -> Result<()> {
+        self.reconcile_multipart_upload(checkpoint).await?;
+        checkpoint.require_complete()?;
+        let parts = checkpoint
+            .completed_parts
+            .iter()
+            .map(|(number, part)| (*number, part.etag.clone()))
+            .collect();
+        let stored = self
+            .client
+            .plane
+            .complete_native_multipart(
+                &checkpoint.path,
+                &checkpoint.upload_id,
+                &parts,
+                checkpoint.size,
+                checkpoint.checksum_sha256,
+            )
+            .await?;
+        let staged = self
+            .client
+            .repository
+            .stage_commit_session_completed_multipart(
+                &self.manifest,
+                checkpoint.key.clone(),
+                checkpoint.size,
+                checkpoint.checksum_sha256,
+                checkpoint.checksum_md5,
+                stored,
+                headers,
+                metadata,
+            )
+            .await?;
+        self.insert_staged(staged);
+        self.mark_staged_and_checkpoint_if_due().await
+    }
+
+    pub async fn abort_multipart_upload(
+        &self,
+        checkpoint: &MultipartUploadCheckpoint,
+    ) -> Result<()> {
+        self.validate_multipart_checkpoint(checkpoint).await?;
+        self.client
+            .plane
+            .abort_native_multipart(&checkpoint.path, &checkpoint.upload_id)
+            .await
+    }
+
+    async fn validate_multipart_checkpoint(
+        &self,
+        checkpoint: &MultipartUploadCheckpoint,
+    ) -> Result<()> {
+        checkpoint.validate_for(self)?;
+        let expected_path = self
+            .client
+            .repository
+            .commit_session_payload_path(
+                &self.manifest,
+                &checkpoint.key,
+                checkpoint.size,
+                checkpoint.checksum_sha256,
+            )
+            .await?;
+        let expected_part_size = AwsS3ObjectPlane::native_multipart_part_size(checkpoint.size)?;
+        if checkpoint.path != expected_path || checkpoint.part_size != expected_part_size {
+            return Err(invalid(
+                "multipart checkpoint path or part geometry was modified",
+            ));
+        }
+        Ok(())
+    }
+
     pub fn delete_object(&mut self, key: impl Into<String>) -> Result<()> {
         let key = key.into().into_bytes();
         if key.is_empty() {
@@ -1992,6 +2191,56 @@ impl CommitSession {
     async fn mark_staged_and_checkpoint_if_due(&mut self) -> Result<()> {
         if self.durable && self.dirty_mutations >= self.checkpoint_every {
             self.checkpoint().await?;
+        }
+        Ok(())
+    }
+}
+
+impl MultipartUploadCheckpoint {
+    fn validate_for(&self, session: &CommitSession) -> Result<()> {
+        if self.batch != session.id()
+            || self.upload_id.is_empty()
+            || self.key.is_empty()
+            || self.size == 0
+            || self.checksum_sha256 == [0; 32]
+            || self.part_size == 0
+        {
+            return Err(invalid(
+                "multipart checkpoint is malformed or belongs to another session",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn part_count(&self) -> Result<i32> {
+        let count = self.size.div_ceil(self.part_size);
+        i32::try_from(count).map_err(|_| invalid("multipart part count exceeds i32"))
+    }
+
+    pub fn expected_part_size(&self, part_number: i32) -> Result<u64> {
+        let count = self.part_count()?;
+        if part_number < 1 || part_number > count {
+            return Err(invalid("multipart part number is outside the upload"));
+        }
+        let offset = u64::try_from(part_number - 1)
+            .ok()
+            .and_then(|index| index.checked_mul(self.part_size))
+            .ok_or_else(|| invalid("multipart part offset overflow"))?;
+        Ok(self.part_size.min(self.size - offset))
+    }
+
+    fn require_complete(&self) -> Result<()> {
+        let count = self.part_count()?;
+        for number in 1..=count {
+            let Some(part) = self.completed_parts.get(&number) else {
+                return Err(invalid(format!("multipart part {number} is missing")));
+            };
+            if part.size != self.expected_part_size(number)? || part.etag.is_empty() {
+                return Err(invalid(format!("multipart part {number} is malformed")));
+            }
+        }
+        if self.completed_parts.len() != count as usize {
+            return Err(invalid("multipart checkpoint contains unexpected parts"));
         }
         Ok(())
     }
@@ -2227,9 +2476,9 @@ impl ClientBuilder {
         options.node_cache = self.node_cache;
         let branch = options.default_branch.clone();
         let repository = if initialize {
-            Repository::initialize(plane, options).await?
+            Repository::initialize(plane.clone(), options).await?
         } else {
-            Repository::open(plane, options).await?
+            Repository::open(plane.clone(), options).await?
         };
         let repository = Arc::new(repository);
         let shard_authority_maintenance = if self.read_only {
@@ -2244,6 +2493,7 @@ impl ClientBuilder {
         };
         let client = Client {
             repository,
+            plane,
             bucket,
             branch: branch.clone(),
             checked_out: CheckedOutRef::Branch(branch),

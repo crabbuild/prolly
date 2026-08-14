@@ -104,6 +104,14 @@ deleted 186 exact unreachable versions totaling 4,046,261 bytes, downloaded
 pack-safe sweep locally; a clean uninterrupted end-to-end timing and deliberate
 mid-sweep restart remain release gates.
 
+A fresh native RustFS restart gate uploaded a 33 MiB object in three native
+multipart parts, stopped after the first part, serialized the provider upload
+checkpoint, reopened the repository, reconciled with `ListParts`, uploaded only
+the remaining two parts, and completed in 4.21 seconds. The resulting Prolly
+binding references one physical S3 object. The resumed phase issued zero create
+calls, two part uploads, one completion, at least two `ListParts` calls, and no
+abort; it did not replay the first 16 MiB.
+
 The 500K grouped ingest uploaded 2.56 GB for 17.5 MB of logical content, about
 146x byte amplification. Direct-child diff now pages the exact commit delta
 rather than allowing tree boundary shifts to trigger a collected structural

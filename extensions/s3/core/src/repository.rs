@@ -1936,6 +1936,99 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
+    /// Resolve the immutable destination for a provider-native multipart
+    /// upload. The provider may hold native parts while the upload is open,
+    /// but completion must create exactly this one physical object.
+    pub async fn commit_session_payload_path(
+        &self,
+        session: &CommitSessionManifest,
+        key: &[u8],
+        size: u64,
+        checksum_sha256: [u8; 32],
+    ) -> Result<ObjectPath> {
+        self.validate_commit_session(session).await?;
+        self.validate_key(key)?;
+        if size == 0 || size > self.format.canonical_limits.max_object_bytes {
+            return Err(Error::new(
+                ErrorCode::EntityTooLarge,
+                "multipart object size is outside repository limits",
+            ));
+        }
+        if checksum_sha256 == [0; 32] {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "multipart object requires its complete SHA-256",
+            ));
+        }
+        self.payloads.path(checksum_sha256)
+    }
+
+    /// Stage a provider-completed, single-object multipart upload. This does
+    /// not accept provider part objects or a repository-level chunk manifest.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn stage_commit_session_completed_multipart(
+        &self,
+        session: &CommitSessionManifest,
+        key: Vec<u8>,
+        size: u64,
+        checksum_sha256: [u8; 32],
+        checksum_md5: [u8; 16],
+        metadata: crate::StoredMetadata,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    ) -> Result<StagedMutation> {
+        let path = self
+            .commit_session_payload_path(session, &key, size, checksum_sha256)
+            .await?;
+        if metadata.len != size || metadata.sha256 != checksum_sha256 {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "completed multipart object metadata does not match its logical object",
+            ));
+        }
+        let current = self.plane.head(&path).await?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::MissingClosure,
+                "completed multipart object is not readable",
+            )
+        })?;
+        if current.len != metadata.len
+            || current.sha256 != metadata.sha256
+            || current.token != metadata.token
+            || current.delete_marker
+        {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "completed multipart object changed before staging",
+            ));
+        }
+        let binding = crate::PayloadBinding {
+            path,
+            provider_version_id: metadata.token.version_id,
+            provider_etag: metadata.token.etag,
+            checksum_sha256,
+            pack_checksum_sha256: None,
+            pack_range: None,
+        };
+        binding.validate()?;
+        Ok(StagedMutation {
+            body: StagedMutationBody::Put(Box::new(StagedPut {
+                key,
+                size,
+                logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
+                checksums: Checksums {
+                    md5: Some(checksum_md5),
+                    sha256: Some(checksum_sha256),
+                    algorithm_values: BTreeMap::new(),
+                },
+                headers,
+                user_metadata,
+                tags: BTreeMap::new(),
+                binding,
+            })),
+        })
+    }
+
     pub async fn publish_commit_session(
         &self,
         session: CommitSessionManifest,
