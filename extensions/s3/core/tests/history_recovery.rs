@@ -1,9 +1,112 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use prolly_s3_core::{
-    FixedClock, MemoryObjectPlane, ObjectHeaders, ProviderPerKeyVersionLimit, Repository,
-    RepositoryOptions, SequenceIdSource, TraversalBudget,
+    ErrorCode, FixedClock, FsckPhase, ListRequest, MemoryObjectPlane, ObjectHeaders, ObjectPlane,
+    ProviderPerKeyVersionLimit, Repository, RepositoryOptions, SequenceIdSource, TraversalBudget,
 };
+
+#[tokio::test]
+async fn fsck_checkpoint_resumes_across_processes_and_fences_stale_workers() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let options = RepositoryOptions {
+        repository_prefix: ".tests/fsck-durable-resume".to_string(),
+        writer: "fsck-writer".to_string(),
+        mutable_control_versions_to_retain: 4,
+        provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    for (key, body) in [
+        (b"a".to_vec(), b"alpha".to_vec()),
+        (b"b".to_vec(), b"bravo".to_vec()),
+    ] {
+        repository
+            .put_object("main", key, body, ObjectHeaders::default(), BTreeMap::new())
+            .await
+            .unwrap();
+    }
+
+    let initial = repository.start_fsck("main", true).await.unwrap();
+    assert_eq!(initial.checkpoint_generation, 1);
+    let first = repository.advance_fsck(&initial, 1).await.unwrap().cursor;
+    assert_eq!(first.checkpoint_generation, 2);
+
+    let reopened = Repository::open(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    assert_eq!(
+        reopened.resume_fsck(initial.job).await.unwrap(),
+        Some(first.clone())
+    );
+    assert_eq!(
+        reopened.forget_fsck(initial.job).await.unwrap_err().code,
+        ErrorCode::PreconditionFailed
+    );
+    assert_eq!(
+        repository.advance_fsck(&initial, 1).await.unwrap_err().code,
+        ErrorCode::RefConflict
+    );
+
+    assert_eq!(
+        reopened.advance_fsck(&first, 1).await.unwrap_err().code,
+        ErrorCode::MissingClosure
+    );
+    reopened.advance_branch_indexes("main").await.unwrap();
+    let mut cursor = reopened.advance_fsck(&first, 1).await.unwrap().cursor;
+    drop(repository);
+    drop(reopened);
+    let resumed_process = Repository::open(plane.clone(), options).await.unwrap();
+    assert_eq!(
+        resumed_process.resume_fsck(initial.job).await.unwrap(),
+        Some(cursor.clone())
+    );
+    while cursor.phase != FsckPhase::Complete {
+        cursor = resumed_process
+            .advance_fsck(&cursor, 1)
+            .await
+            .unwrap()
+            .cursor;
+    }
+    assert_eq!(cursor.report.physical_payloads_verified, 2);
+    assert_eq!(cursor.report.deep_physical_bytes_read, 10);
+    assert_eq!(
+        resumed_process.resume_fsck(initial.job).await.unwrap(),
+        Some(cursor)
+    );
+    let checkpoint_prefix = format!(
+        ".tests/fsck-durable-resume/administration/fsck/{}/cursor.cbor",
+        initial.job
+    );
+    let retained = plane
+        .list(ListRequest {
+            prefix: checkpoint_prefix.clone(),
+            continuation: None,
+            limit: 1_000,
+            include_versions: true,
+        })
+        .await
+        .unwrap();
+    assert!(retained.entries.len() <= 4, "{retained:?}");
+    resumed_process.forget_fsck(initial.job).await.unwrap();
+    assert!(resumed_process
+        .resume_fsck(initial.job)
+        .await
+        .unwrap()
+        .is_none());
+    assert!(plane
+        .list(ListRequest {
+            prefix: checkpoint_prefix,
+            continuation: None,
+            limit: 1_000,
+            include_versions: true,
+        })
+        .await
+        .unwrap()
+        .entries
+        .is_empty());
+}
 
 #[tokio::test]
 async fn history_diff_reflog_reset_and_recovery_are_bounded_and_audited() {

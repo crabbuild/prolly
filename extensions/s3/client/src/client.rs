@@ -602,6 +602,18 @@ impl Client {
         self.repository.advance_fsck(cursor, max_steps).await
     }
 
+    pub async fn resume_fsck(&self, job: OperationId) -> Result<Option<FsckCursor>> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.resume_fsck(job).await
+    }
+
+    pub async fn forget_fsck(&self, job: OperationId) -> Result<()> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.forget_fsck(job).await
+    }
+
     pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {
         self.ensure_provider_qualified()?;
         self.attached_branch()?;

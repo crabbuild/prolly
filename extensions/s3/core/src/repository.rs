@@ -340,6 +340,10 @@ pub struct FsckCursor {
     pub snapshot_objects: RootManifest,
     pub snapshot_versions: RootManifest,
     pub job: OperationId,
+    /// Monotonic generation of the durable checkpoint. This fences stale
+    /// workers after another process resumes and advances the same job.
+    #[serde(default)]
+    pub checkpoint_generation: u64,
     pub payloads: RootManifest,
     pub closure: CommitClosureCursor,
     pub phase: FsckPhase,
@@ -797,6 +801,7 @@ pub struct Repository<P: ObjectPlane> {
     ref_catalog: Arc<ShardedRefCatalog<P>>,
     operation_index: SegmentedOperationIndex<P>,
     journal_indexes: Arc<JournalDerivedIndexes<P>>,
+    maintenance_controls: MutableControlStore<P>,
     locator: Arc<JournalNodeLocator<P>>,
     permits: RwLock<BTreeMap<AuthorityScope, AuthorityPermit>>,
     fenced_scopes: RwLock<BTreeSet<AuthorityScope>>,
@@ -1077,6 +1082,11 @@ impl<P: ObjectPlane> Repository<P> {
             options.journal_index_max_unindexed_events,
             options.mutable_control_versions_to_retain,
         )?);
+        let maintenance_controls = MutableControlStore::new(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            options.mutable_control_versions_to_retain,
+        )?;
         let locator = Arc::new(JournalNodeLocator {
             indexes: journal_indexes.clone(),
             branches: RwLock::new(BTreeSet::new()),
@@ -1098,6 +1108,7 @@ impl<P: ObjectPlane> Repository<P> {
             ref_catalog,
             operation_index,
             journal_indexes,
+            maintenance_controls,
             locator,
             permits: RwLock::new(BTreeMap::new()),
             fenced_scopes: RwLock::new(BTreeSet::new()),
@@ -3957,20 +3968,102 @@ impl<P: ObjectPlane> Repository<P> {
         let snapshot_commit = self.load_commit_object(snapshot).await?.commit;
         let job = self.options.ids.operation();
         let payloads = self.fsck_payload_engine(job)?.create();
-        Ok(FsckCursor {
+        let cursor = FsckCursor {
             repository: self.format.repository_id,
             branch: branch.to_string(),
             snapshot,
             snapshot_objects: snapshot_commit.state.objects,
             snapshot_versions: snapshot_commit.state.versions,
             job,
+            checkpoint_generation: 1,
             payloads: RootManifest::from_tree(&payloads)?,
             closure: self.start_commit_closure(&[snapshot]).await?,
             phase: FsckPhase::DiscoverCommits,
             after: None,
             deep,
             report: FsckReport::default(),
-        })
+        };
+        self.persist_fsck_cursor(&cursor).await?;
+        Ok(cursor)
+    }
+
+    /// Resume one integrity-check job from its authoritative durable
+    /// checkpoint. Completed jobs remain resumable until explicitly forgotten.
+    pub async fn resume_fsck(&self, job: OperationId) -> Result<Option<FsckCursor>> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck job identifier is nil",
+            ));
+        }
+        let Some(stored) = self
+            .plane
+            .load_mutable(&fsck_cursor_path(&self.options.repository_prefix, job)?)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let cursor: FsckCursor = decode_canonical(&stored.bytes)?;
+        self.validate_fsck_cursor(&cursor)?;
+        if cursor.job != job {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "durable fsck cursor belongs to another job",
+            ));
+        }
+        Ok(Some(cursor))
+    }
+
+    /// Remove every retained provider version of a completed fsck checkpoint.
+    /// In-progress jobs must be resumed rather than discarded implicitly.
+    pub async fn forget_fsck(&self, job: OperationId) -> Result<()> {
+        let Some(cursor) = self.resume_fsck(job).await? else {
+            return Ok(());
+        };
+        if cursor.phase != FsckPhase::Complete {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "in-progress fsck checkpoint cannot be forgotten",
+            ));
+        }
+        let path = fsck_cursor_path(&self.options.repository_prefix, job)?;
+        loop {
+            let page = self
+                .plane
+                .list(ListRequest {
+                    prefix: path.as_str().to_string(),
+                    continuation: None,
+                    limit: 1_000,
+                    include_versions: true,
+                })
+                .await?;
+            let targets = page
+                .entries
+                .into_iter()
+                .filter(|entry| entry.path == path)
+                .map(|entry| {
+                    let token = entry.metadata.token;
+                    let physical = token
+                        .version_id
+                        .clone()
+                        .map(|version_id| PhysicalVersion::Versioned { version_id })
+                        .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+                    (entry.path, physical)
+                })
+                .collect::<Vec<_>>();
+            if targets.is_empty() {
+                break;
+            }
+            for outcome in self.plane.delete_exact_batch(targets).await? {
+                if outcome == DeleteOutcome::TokenMismatch {
+                    return Err(Error::new(
+                        ErrorCode::RefConflict,
+                        "fsck checkpoint changed while it was being forgotten",
+                    ));
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Advance an integrity check by at most `max_steps` commit-work records,
@@ -3983,27 +4076,17 @@ impl<P: ObjectPlane> Repository<P> {
                 "fsck page size must be between 1 and 10,000",
             ));
         }
-        if cursor.repository != self.format.repository_id {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "fsck cursor belongs to another repository",
-            ));
+        self.validate_fsck_cursor(cursor)?;
+        self.require_current_fsck_cursor(cursor).await?;
+        if cursor.phase == FsckPhase::Complete {
+            return Ok(FsckPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                complete: true,
+            });
         }
-        if cursor.job.is_nil()
-            || cursor.payloads.format_digest != tree_format_digest(&self.format.state_tree_format)?
-            || cursor.snapshot_objects.format_digest
-                != tree_format_digest(&self.format.state_tree_format)?
-            || cursor.snapshot_versions.format_digest
-                != tree_format_digest(&self.format.state_tree_format)?
-        {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "fsck payload cursor is malformed",
-            ));
-        }
-        validate_branch(&cursor.branch)?;
-        self.validate_commit_closure_cursor(&cursor.closure)?;
         self.locator.register(&cursor.branch)?;
+        self.require_branch_indexes_ready(&cursor.branch).await?;
         let mut next = cursor.clone();
         let mut processed = 0usize;
         match next.phase {
@@ -4143,6 +4226,11 @@ impl<P: ObjectPlane> Repository<P> {
             }
             FsckPhase::Complete => {}
         }
+        next.checkpoint_generation = next
+            .checkpoint_generation
+            .checked_add(1)
+            .ok_or_else(|| Error::new(ErrorCode::InternalInvariant, "fsck checkpoint overflow"))?;
+        self.persist_fsck_cursor(&next).await?;
         Ok(FsckPage {
             complete: next.phase == FsckPhase::Complete,
             cursor: next,
@@ -6686,6 +6774,98 @@ impl<P: ObjectPlane> Repository<P> {
         )))
     }
 
+    fn validate_fsck_cursor(&self, cursor: &FsckCursor) -> Result<()> {
+        let format_digest = tree_format_digest(&self.format.state_tree_format)?;
+        if cursor.repository != self.format.repository_id
+            || cursor.job.is_nil()
+            || cursor.checkpoint_generation == 0
+            || cursor.payloads.format_digest != format_digest
+            || cursor.snapshot_objects.format_digest != format_digest
+            || cursor.snapshot_versions.format_digest != format_digest
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck cursor is malformed or belongs to another repository",
+            ));
+        }
+        validate_branch(&cursor.branch)?;
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        self.tree_from_root(&cursor.payloads)?;
+        self.tree_from_root(&cursor.snapshot_objects)?;
+        self.tree_from_root(&cursor.snapshot_versions)?;
+        Ok(())
+    }
+
+    async fn require_current_fsck_cursor(&self, cursor: &FsckCursor) -> Result<()> {
+        let path = fsck_cursor_path(&self.options.repository_prefix, cursor.job)?;
+        let stored = self.plane.load_mutable(&path).await?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "durable fsck checkpoint is missing",
+            )
+        })?;
+        let durable: FsckCursor = decode_canonical(&stored.bytes)?;
+        self.validate_fsck_cursor(&durable)?;
+        if durable != *cursor {
+            return Err(Error::new(
+                ErrorCode::RefConflict,
+                "fsck cursor is stale; resume its durable checkpoint",
+            ));
+        }
+        Ok(())
+    }
+
+    async fn persist_fsck_cursor(&self, cursor: &FsckCursor) -> Result<()> {
+        self.validate_fsck_cursor(cursor)?;
+        let path = fsck_cursor_path(&self.options.repository_prefix, cursor.job)?;
+        let current = self.plane.load_mutable(&path).await?;
+        if let Some(stored) = current.as_ref() {
+            let previous: FsckCursor = decode_canonical(&stored.bytes)?;
+            self.validate_fsck_cursor(&previous)?;
+            if previous.job != cursor.job {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "durable fsck cursor belongs to another job",
+                ));
+            }
+            if previous == *cursor {
+                return Ok(());
+            }
+            if previous
+                .checkpoint_generation
+                .checked_add(1)
+                .filter(|generation| *generation == cursor.checkpoint_generation)
+                .is_none()
+            {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "durable fsck checkpoint generation changed concurrently",
+                ));
+            }
+        } else if cursor.checkpoint_generation != 1 {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "durable fsck checkpoint is missing",
+            ));
+        }
+        let expected = current.map(|stored| stored.metadata.token);
+        match self
+            .maintenance_controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected,
+                bytes: encode_canonical(cursor)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(()),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "durable fsck cursor changed concurrently",
+            )),
+        }
+    }
+
     fn validate_gc_cursor(&self, cursor: &GcCursor) -> Result<()> {
         if cursor.repository != self.format.repository_id
             || cursor.epoch.is_nil()
@@ -7191,12 +7371,8 @@ impl<P: ObjectPlane> Repository<P> {
             admission_closed: active_epoch.is_some(),
             updated_at_millis: now_millis,
         };
-        let controls = MutableControlStore::new(
-            self.plane.clone(),
-            self.options.repository_prefix.clone(),
-            self.options.mutable_control_versions_to_retain,
-        )?;
-        match controls
+        match self
+            .maintenance_controls
             .compare_exchange(CompareExchange {
                 path,
                 expected,
@@ -7225,12 +7401,8 @@ impl<P: ObjectPlane> Repository<P> {
             }
         }
         let expected = current.map(|stored| stored.metadata.token);
-        let controls = MutableControlStore::new(
-            self.plane.clone(),
-            self.options.repository_prefix.clone(),
-            self.options.mutable_control_versions_to_retain,
-        )?;
-        match controls
+        match self
+            .maintenance_controls
             .compare_exchange(CompareExchange {
                 path,
                 expected,
@@ -9689,6 +9861,10 @@ fn gc_coordinator_path(prefix: &str) -> Result<ObjectPath> {
 
 fn gc_cursor_path(prefix: &str, epoch: OperationId) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/gc/epochs/{epoch}/cursor.cbor"))
+}
+
+fn fsck_cursor_path(prefix: &str, job: OperationId) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/administration/fsck/{job}/cursor.cbor"))
 }
 
 fn gc_publication_ticket_prefix(prefix: &str, repository: crate::RepositoryId) -> String {

@@ -250,11 +250,14 @@ metrics. The clean rerun found zero lag in 15.3 ms, then listed 1M entries with
 2,027 GETs and zero PUTs. Peak observed RSS was 213 MiB during the read/branch
 phases of that reopened 128 MiB-memory Foyer process.
 
-Deep fsck now binds the snapshot's object/version roots into its durable cursor,
-uses range-readable commit metadata during DAG discovery, checkpoints every
-10K logical records, and deduplicates checks by complete physical-object
-identity. The former packed-payload numbers are not evidence for this revised
-whole-object fsck path; the 100K, 500K, and 1M gates must be rerun.
+Deep fsck now binds the snapshot's object/version roots into a repository-owned
+durable cursor, uses range-readable commit metadata during DAG discovery, and
+deduplicates checks by complete physical-object identity. Every returned page
+is CAS-checkpointed with a monotonic generation; a cross-process test resumes
+the work, fences a stale worker, bounds retained checkpoint versions, and
+removes all versions after completion. The former packed-payload numbers are
+not evidence for this revised whole-object fsck path; the 100K, 500K, and 1M
+performance gates must be rerun.
 
 GC now checkpoints its cursor under the repository-wide maintenance epoch at
 start and after every returned page. A new process resumed the measured 1M run

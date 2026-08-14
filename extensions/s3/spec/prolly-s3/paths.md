@@ -23,7 +23,12 @@ repository format.
 | ref-catalog tree | `P/ref-catalog/tree/...` |
 | index-rebuild chunk | `P/administration/index-rebuild/N/E/chunks/sha256/...` |
 | merge plan | `P/administration/merge/E/plan/...` |
+| commit-closure work tree | `P/administration/closure/E/tree/nodes/sha256/...` |
+| fsck cursor | `P/administration/fsck/E/cursor.cbor` |
+| fsck distinct-payload work tree | `P/administration/fsck/E/payloads/nodes/sha256/...` |
 | GC coordinator | `P/gc/coordinator.cbor` |
+| GC epoch cursor | `P/gc/epochs/E/cursor.cbor` |
+| GC reachability work tree | `P/administration/gc/E/tree/nodes/sha256/...` |
 | publication admission ticket | `P/gc/publications/R/E/H` |
 
 `R` is the repository identity. `N` is the canonical encoded ref name. `S` is
@@ -45,6 +50,9 @@ byte pairs. `SS` is a two-digit ref-catalog shard.
 - Ordinary reads and index maintenance must not discover nodes by namespace
   listing.
 - Mutable control records retain a bounded number of provider versions.
+- Every fsck page advances a CAS-protected checkpoint generation. Only the
+  durable generation may advance; completed checkpoints are explicitly
+  forgotten by exact physical-version deletion.
 - Branch/tag publication tickets are immutable, instance-scoped, and removed
   by exact version after the ref CAS resolves. GC may remove expired tickets.
 - There are no alternative versioned path families and no format migration

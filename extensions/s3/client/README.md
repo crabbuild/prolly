@@ -377,11 +377,17 @@ payload metadata. Deep mode also downloads and hashes payload bytes:
 
 ```rust
 let mut fsck = client.start_fsck(true).await?;
+let fsck_job = fsck.job;
 while fsck.phase != prolly_s3_client::core::FsckPhase::Complete {
     fsck = client.advance_fsck(&fsck, 1_000).await?.cursor;
 }
 println!("verified {} commits", fsck.report.commits);
+client.forget_fsck(fsck_job).await?;
 ```
+
+Every page is checkpointed in the repository. A new process resumes with
+`client.resume_fsck(fsck_job)`; checkpoint generations reject stale workers.
+An in-progress checkpoint cannot be forgotten.
 
 Cross-provider repair is logical. It does not copy provider version IDs. It
 downloads verified source payloads, rebinds them at the destination, preserves

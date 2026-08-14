@@ -62,6 +62,19 @@ hit ratio, bytes, eviction, validation failures, and provider range reads.
 Prewarm current branch roots and upper levels after deployment or failover when
 tail latency matters.
 
+## Integrity checks
+
+`start_fsck` creates a snapshot-bound durable job. Every `advance_fsck` page
+updates its repository checkpoint with a monotonic generation. After process
+loss, reopen the repository, catch up the source branch index if necessary,
+then call `resume_fsck(job)`. Never continue a locally saved cursor after
+another worker has advanced the job; stale generations fail with `RefConflict`.
+
+Keep the completed report for audit, then call `forget_fsck(job)` to remove all
+retained checkpoint versions. In-progress jobs cannot be forgotten. Metadata
+mode verifies bindings and provider metadata; deep mode downloads and hashes
+each distinct complete payload object.
+
 ## Backups
 
 Provider bucket replication or object backup must preserve all repository
@@ -73,9 +86,10 @@ backup verification before declaring a backup usable.
 ## Storage retention
 
 Use bounded `start_gc`, `advance_gc`, and `sweep_gc` jobs to reclaim unreachable
-immutable commit, direct-node, and payload versions. Persist the cursor after
-every page. Set the grace period longer than the maximum duration of any
-unpublished commit, merge, repair, or transfer. Retention pins are GC roots.
+immutable commit, direct-node, and payload versions. The repository durably
+checkpoints every returned page. Set the grace period longer than the maximum
+duration of any unpublished commit, merge, repair, or transfer. Retention pins
+are GC roots.
 
 GC closes a durable repository-wide publication-admission epoch. Every branch
 or tag CAS owns an expiring publication ticket, including writers in separate
