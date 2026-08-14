@@ -1942,6 +1942,64 @@ impl CommitSession {
         Ok(())
     }
 
+    /// Upload one independently content-addressed chunk for a resumable
+    /// object. Persist the returned descriptor before advancing the source
+    /// offset; uploading the same bytes again is safe and deduplicated.
+    ///
+    /// Once every chunk is durable, call [`Self::put_uploaded_chunks`] with
+    /// the descriptors in logical byte order and checksums for the complete
+    /// plaintext object. Chunk descriptors are independent of this process,
+    /// so a resumed commit session may finalize chunks uploaded before a
+    /// restart.
+    pub async fn upload_resumable_chunk(
+        &self,
+        bytes: Vec<u8>,
+    ) -> Result<prolly_s3_core::PayloadChunk> {
+        self.client.ensure_provider_qualified()?;
+        self.client
+            .repository
+            .upload_commit_session_chunk(&self.manifest, bytes)
+            .await
+    }
+
+    /// Stage an object from previously uploaded chunks without replaying its
+    /// input bytes. `chunks` must be in logical byte order and their sizes
+    /// must sum to `size`.
+    ///
+    /// The complete-object SHA-256 and MD5 values are intentionally supplied
+    /// by the caller: they bind the chunk sequence to one logical object and
+    /// preserve the same ETag/checksum semantics as [`Self::put_stream`].
+    #[allow(clippy::too_many_arguments)]
+    pub async fn put_uploaded_chunks(
+        &mut self,
+        key: impl Into<String>,
+        chunks: Vec<prolly_s3_core::PayloadChunk>,
+        size: u64,
+        checksum_sha256: [u8; 32],
+        checksum_md5: [u8; 16],
+        headers: ObjectHeaders,
+        metadata: BTreeMap<String, String>,
+    ) -> Result<()> {
+        self.client.ensure_provider_qualified()?;
+        let staged = self
+            .client
+            .repository
+            .stage_commit_session_chunk_manifest(
+                &self.manifest,
+                key.into().into_bytes(),
+                chunks,
+                size,
+                checksum_sha256,
+                checksum_md5,
+                headers,
+                metadata,
+            )
+            .await?;
+        self.insert_staged(staged);
+        self.mark_staged_and_checkpoint_if_due().await?;
+        Ok(())
+    }
+
     async fn upload_chunk_window(
         &self,
         window: Vec<Vec<u8>>,

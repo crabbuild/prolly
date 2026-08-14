@@ -567,9 +567,16 @@ latency or cost claim substitutes for AWS qualification.
 - One logical file must fit the repository object-size limit; individual
   streamed chunks are 8 MiB and no longer require a whole-file disk spool.
 - Retrying a streamed upload deduplicates completed chunks by content identity,
-  but the input source must currently be replayed from byte zero. Durable
-  source-offset checkpoints and client-side chunk encryption are not yet
-  implemented.
+  but the convenience `put_stream` path replays the input source from byte
+  zero. Advanced callers can persist each descriptor returned by
+  `CommitSession::upload_resumable_chunk`, reopen the durable session, continue
+  at the next source offset, and finish with `put_uploaded_chunks` without
+  reuploading completed chunks. The caller is responsible for durably pairing
+  descriptors with source offsets and whole-object SHA-256/MD5 state.
+- Client-side chunk encryption is not yet implemented. Use qualified provider
+  encryption-at-rest controls until an explicit client-side encryption policy
+  is configured; convergent encryption must not be inferred from content
+  addressing because it leaks equality.
 - Concurrent writes to one branch can conflict; batch related changes.
 - GC closes publication admission through the repository-wide durable
   coordinator, checkpoints its epoch cursor, and resumes after process restart.

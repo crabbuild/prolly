@@ -64,6 +64,28 @@ async fn repository_chunk_manifest_streams_and_reads_cross_chunk_ranges() {
         .unwrap()
         .unwrap();
     assert_eq!(range.bytes, b"cdef");
+    repository.advance_branch_indexes("main").await.unwrap();
+    let mut stats = repository.start_payload_pack_stats("main").await.unwrap();
+    while !stats.complete {
+        stats = repository
+            .advance_payload_pack_stats(&stats, 1)
+            .await
+            .unwrap()
+            .cursor;
+    }
+    assert_eq!(stats.report.current_objects, 1);
+    assert_eq!(stats.report.direct_objects, 0);
+    assert_eq!(stats.report.packed_objects, 0);
+    assert_eq!(stats.report.chunked_objects, 1);
+    assert_eq!(stats.report.chunked_logical_bytes, body.len() as u64);
+    assert_eq!(stats.report.unique_chunk_manifests, 1);
+    assert_eq!(stats.report.unique_chunks, 2);
+    assert_eq!(stats.report.unique_chunk_bytes, body.len() as u64);
+    assert_eq!(stats.report.unique_physical_objects, 3);
+    assert_eq!(
+        stats.report.unique_physical_bytes,
+        stats.report.unique_chunk_manifest_bytes + body.len() as u64
+    );
 }
 
 #[tokio::test]

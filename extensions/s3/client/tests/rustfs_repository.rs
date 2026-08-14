@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -14,6 +15,7 @@ use aws_sdk_s3::{
     types::{BucketVersioningStatus, VersioningConfiguration},
 };
 use futures_util::{stream, StreamExt};
+use md5::{Digest as _, Md5};
 use prolly_s3_client::{
     core::{
         decode_canonical, encode_canonical, BatchId, Error, ErrorCode, LogicalObjectVersionKind,
@@ -21,6 +23,7 @@ use prolly_s3_client::{
     },
     BulkWriteOptions, CheckoutRef, Client, HmacAttestationSigner, ProviderIdentity, PutObjectInput,
 };
+use sha2::Sha256;
 
 fn rustfs_enabled() -> bool {
     std::env::var("PROLLY_S3_RUSTFS").as_deref() == Ok("1")
@@ -1599,4 +1602,84 @@ async fn rustfs_streamed_large_object_uses_bounded_chunks() {
         .unwrap()
         .unwrap();
     assert!(summary.version.binding.unwrap().is_chunked());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[ignore = "uploads a resumable 17 MiB chunk-manifest payload to live RustFS"]
+async fn rustfs_uploaded_chunks_resume_after_client_restart() {
+    assert!(
+        rustfs_enabled(),
+        "set PROLLY_S3_RUSTFS=1 to run the resumable-chunk RustFS gate"
+    );
+    const CHUNK: usize = 8 * 1_024 * 1_024;
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("resumable-chunks");
+    let open = |aws: aws_sdk_s3::Client| {
+        Client::builder()
+            .aws_client(aws)
+            .bucket(&bucket)
+            .repository_prefix(&repository_prefix)
+            .writer("rustfs-resumable-chunk-writer")
+            .provider_identity(provider_identity())
+            .attestation_signer(attestation_signer())
+            .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+    };
+    let client = open(aws.clone()).initialize().await.unwrap();
+    let mut body = vec![0x11; CHUNK];
+    body.extend(vec![0x22; CHUNK]);
+    body.extend(vec![0x33; 1_024 * 1_024]);
+    let session = client
+        .begin_commit()
+        .message("resumable chunks")
+        .start()
+        .await
+        .unwrap();
+    let batch = session.id();
+    let first = session
+        .upload_resumable_chunk(body[..CHUNK].to_vec())
+        .await
+        .unwrap();
+
+    // `first` represents an application-persisted descriptor. Neither the
+    // commit checkpoint nor the reopened client needs the first body again.
+    drop(session);
+    drop(client);
+    let reopened = open(aws).open().await.unwrap();
+    reopened.reset_s3_operation_metrics();
+    let mut resumed = reopened.resume_commit(batch).await.unwrap();
+    let second = resumed
+        .upload_resumable_chunk(body[CHUNK..CHUNK * 2].to_vec())
+        .await
+        .unwrap();
+    let third = resumed
+        .upload_resumable_chunk(body[CHUNK * 2..].to_vec())
+        .await
+        .unwrap();
+    resumed
+        .put_uploaded_chunks(
+            "large/resumable.bin",
+            vec![first, second, third],
+            body.len() as u64,
+            Sha256::digest(&body).into(),
+            Md5::digest(&body).into(),
+            Default::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    resumed.publish().await.unwrap();
+    let metrics = reopened.reset_s3_operation_metrics();
+    assert!(
+        metrics.uploaded_body_bytes < (body.len() - CHUNK + 1024 * 1024) as u64,
+        "the restarted upload must not replay its first 8 MiB chunk: {metrics:?}"
+    );
+    assert_eq!(
+        reopened
+            .get_object("large/resumable.bin")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        body
+    );
 }

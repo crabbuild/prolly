@@ -393,12 +393,24 @@ pub struct PayloadPackStats {
     pub direct_objects: u64,
     pub packed_objects: u64,
     pub packed_logical_bytes: u64,
+    #[serde(default)]
+    pub chunked_objects: u64,
+    #[serde(default)]
+    pub chunked_logical_bytes: u64,
     pub unique_physical_objects: u64,
     pub unique_physical_bytes: u64,
     pub unique_pack_objects: u64,
     pub unique_pack_bytes: u64,
     pub unique_packed_extents: u64,
     pub unique_packed_extent_bytes: u64,
+    #[serde(default)]
+    pub unique_chunk_manifests: u64,
+    #[serde(default)]
+    pub unique_chunk_manifest_bytes: u64,
+    #[serde(default)]
+    pub unique_chunks: u64,
+    #[serde(default)]
+    pub unique_chunk_bytes: u64,
 }
 
 impl PayloadPackStats {
@@ -4207,7 +4219,15 @@ impl<P: ObjectPlane> Repository<P> {
                 checked_pack_add(next.report.current_objects, 1, "current object")?;
             next.report.logical_bytes =
                 checked_pack_add(next.report.logical_bytes, *size, "logical byte")?;
-            if binding.is_packed() {
+            if binding.is_chunked() {
+                next.report.chunked_objects =
+                    checked_pack_add(next.report.chunked_objects, 1, "chunked object")?;
+                next.report.chunked_logical_bytes = checked_pack_add(
+                    next.report.chunked_logical_bytes,
+                    *size,
+                    "chunked logical byte",
+                )?;
+            } else if binding.is_packed() {
                 next.report.packed_objects =
                     checked_pack_add(next.report.packed_objects, 1, "packed object")?;
                 next.report.packed_logical_bytes = checked_pack_add(
@@ -4255,14 +4275,21 @@ impl<P: ObjectPlane> Repository<P> {
                 let metadata = self.plane.head(&binding.path).await?.ok_or_else(|| {
                     Error::new(ErrorCode::MissingClosure, "payload-pack object is missing")
                 })?;
-                Ok::<_, Error>((key, binding, metadata))
+                let manifest = if binding.is_chunked() {
+                    Some(self.payloads.load_chunk_manifest(&binding).await?)
+                } else {
+                    None
+                };
+                Ok::<_, Error>((key, binding, metadata, manifest))
             },
         ))
         .buffered(32)
         .collect::<Vec<_>>()
         .await;
+        let mut pending_chunks = BTreeMap::new();
+        let mut page_physical_keys = BTreeSet::new();
         for loaded in loaded_physical {
-            let (key, binding, metadata) = loaded?;
+            let (key, binding, metadata, manifest) = loaded?;
             if metadata.sha256 != binding.physical_checksum_sha256()
                 || metadata.token.etag != binding.provider_etag
                 || metadata.token.version_id != binding.provider_version_id
@@ -4282,7 +4309,24 @@ impl<P: ObjectPlane> Repository<P> {
                 metadata.len,
                 "unique physical byte",
             )?;
-            if binding.is_packed() {
+            page_physical_keys.insert(key.clone());
+            if binding.is_chunked() {
+                next.report.unique_chunk_manifests = checked_pack_add(
+                    next.report.unique_chunk_manifests,
+                    1,
+                    "unique chunk manifest",
+                )?;
+                next.report.unique_chunk_manifest_bytes = checked_pack_add(
+                    next.report.unique_chunk_manifest_bytes,
+                    metadata.len,
+                    "unique chunk manifest byte",
+                )?;
+                for chunk in manifest.expect("chunked binding loaded a manifest").chunks {
+                    pending_chunks
+                        .entry(payload_chunk_physical_key(&chunk))
+                        .or_insert(chunk);
+                }
+            } else if binding.is_packed() {
                 next.report.unique_pack_objects =
                     checked_pack_add(next.report.unique_pack_objects, 1, "unique pack object")?;
                 next.report.unique_pack_bytes = checked_pack_add(
@@ -4295,6 +4339,82 @@ impl<P: ObjectPlane> Repository<P> {
                 key,
                 val: metadata.len.to_be_bytes().to_vec(),
             });
+        }
+        let chunk_physical_keys = pending_chunks.keys().cloned().collect::<Vec<_>>();
+        let chunk_role_keys = pending_chunks
+            .keys()
+            .map(|key| payload_chunk_summary_key(key))
+            .collect::<Vec<_>>();
+        let (chunk_physical_seen, chunk_role_seen) = futures_util::try_join!(
+            stats_engine.get_many(&seen, &chunk_physical_keys),
+            stats_engine.get_many(&seen, &chunk_role_keys),
+        )?;
+        let chunks_to_load = pending_chunks
+            .into_iter()
+            .zip(chunk_physical_seen)
+            .zip(chunk_role_seen)
+            .filter_map(|(((key, chunk), physical_seen), role_seen)| {
+                let physical_seen = physical_seen.is_some() || page_physical_keys.contains(&key);
+                (!physical_seen || role_seen.is_none()).then_some((
+                    key,
+                    chunk,
+                    physical_seen,
+                    role_seen.is_some(),
+                ))
+            })
+            .collect::<Vec<_>>();
+        let loaded_chunks = stream::iter(chunks_to_load.into_iter().map(
+            |(key, chunk, physical_seen, role_seen)| async move {
+                let metadata = self.plane.head(&chunk.path).await?.ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "payload chunk is missing")
+                })?;
+                if metadata.len != chunk.size
+                    || metadata.sha256 != chunk.checksum_sha256
+                    || metadata.token.etag != chunk.provider_etag
+                    || metadata.token.version_id != chunk.provider_version_id
+                {
+                    return Err(Error::new(
+                        ErrorCode::ChecksumMismatch,
+                        "payload chunk metadata does not match its manifest",
+                    ));
+                }
+                Ok::<_, Error>((key, metadata, physical_seen, role_seen))
+            },
+        ))
+        .buffered(32)
+        .collect::<Vec<_>>()
+        .await;
+        for loaded in loaded_chunks {
+            let (key, metadata, physical_seen, role_seen) = loaded?;
+            if !physical_seen {
+                next.report.unique_physical_objects = checked_pack_add(
+                    next.report.unique_physical_objects,
+                    1,
+                    "unique physical object",
+                )?;
+                next.report.unique_physical_bytes = checked_pack_add(
+                    next.report.unique_physical_bytes,
+                    metadata.len,
+                    "unique physical byte",
+                )?;
+                mutations.push(Mutation::Upsert {
+                    key: key.clone(),
+                    val: metadata.len.to_be_bytes().to_vec(),
+                });
+            }
+            if !role_seen {
+                next.report.unique_chunks =
+                    checked_pack_add(next.report.unique_chunks, 1, "unique chunk")?;
+                next.report.unique_chunk_bytes = checked_pack_add(
+                    next.report.unique_chunk_bytes,
+                    metadata.len,
+                    "unique chunk byte",
+                )?;
+                mutations.push(Mutation::Upsert {
+                    key: payload_chunk_summary_key(&key),
+                    val: metadata.len.to_be_bytes().to_vec(),
+                });
+            }
         }
         for ((key, extents), seen) in pending_extents.into_iter().zip(extent_seen) {
             let mut accumulated = seen
@@ -9681,15 +9801,41 @@ fn checked_pack_add(current: u64, add: u64, counter: &str) -> Result<u64> {
 }
 
 fn payload_pack_physical_key(binding: &crate::PayloadBinding) -> Vec<u8> {
-    let mut identity = binding.path.as_str().as_bytes().to_vec();
+    payload_physical_key(
+        &binding.path,
+        binding.provider_version_id.as_deref(),
+        &binding.provider_etag,
+    )
+}
+
+fn payload_chunk_physical_key(chunk: &crate::PayloadChunk) -> Vec<u8> {
+    payload_physical_key(
+        &chunk.path,
+        chunk.provider_version_id.as_deref(),
+        &chunk.provider_etag,
+    )
+}
+
+fn payload_physical_key(
+    path: &ObjectPath,
+    provider_version_id: Option<&str>,
+    provider_etag: &str,
+) -> Vec<u8> {
+    let mut identity = path.as_str().as_bytes().to_vec();
     identity.push(0);
-    if let Some(version) = binding.provider_version_id.as_deref() {
+    if let Some(version) = provider_version_id {
         identity.extend_from_slice(version.as_bytes());
     } else {
-        identity.extend_from_slice(binding.provider_etag.as_bytes());
+        identity.extend_from_slice(provider_etag.as_bytes());
     }
     let mut key = b"p/".to_vec();
     key.extend_from_slice(&crate::codec::sha256(&identity));
+    key
+}
+
+fn payload_chunk_summary_key(physical_key: &[u8]) -> Vec<u8> {
+    let mut key = b"c/".to_vec();
+    key.extend_from_slice(&crate::codec::sha256(physical_key));
     key
 }
 
