@@ -1570,6 +1570,7 @@ impl<P: ObjectPlane> Repository<P> {
         let checkpoint = CommitSessionCheckpoint {
             session,
             sequence: 0,
+            total_mutations: 0,
             mutations: Vec::new(),
             state: CommitSessionState::Open,
         };
@@ -1581,12 +1582,19 @@ impl<P: ObjectPlane> Repository<P> {
         &self,
         session: &CommitSessionManifest,
         mutations: Vec<StagedMutation>,
+        total_mutations: usize,
         sequence: u64,
     ) -> Result<CommitSessionCheckpoint> {
         self.validate_commit_session(session).await?;
         let checkpoint = CommitSessionCheckpoint {
             session: session.clone(),
             sequence,
+            total_mutations: u64::try_from(total_mutations).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "checkpoint mutation count exceeds u64",
+                )
+            })?,
             mutations: self.canonical_session_mutations(mutations, true)?,
             state: CommitSessionState::Open,
         };
@@ -1641,7 +1649,9 @@ impl<P: ObjectPlane> Repository<P> {
                 Error::new(ErrorCode::InvalidLimit, "checkpoint sequence overflow")
             })?;
             checkpoint.session.identity.authority = permit.stamp();
-            self.commit_sessions.save(&checkpoint).await?;
+            let mut adoption = checkpoint.clone();
+            adoption.mutations.clear();
+            self.commit_sessions.save(&adoption).await?;
         }
         Ok(checkpoint)
     }
@@ -1650,12 +1660,19 @@ impl<P: ObjectPlane> Repository<P> {
         &self,
         session: CommitSessionManifest,
         mutations: Vec<StagedMutation>,
+        total_mutations: usize,
         sequence: u64,
     ) -> Result<()> {
         self.validate_commit_session(&session).await?;
         let checkpoint = CommitSessionCheckpoint {
             session,
             sequence,
+            total_mutations: u64::try_from(total_mutations).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "checkpoint mutation count exceeds u64",
+                )
+            })?,
             mutations: self.canonical_session_mutations(mutations, true)?,
             state: CommitSessionState::Aborted,
         };
@@ -4380,6 +4397,7 @@ impl<P: ObjectPlane> Repository<P> {
         let limit = max_steps.min(remaining);
         let mut next = cursor.clone();
         let mut mutations = checkpoint.mutations;
+        let checkpointed_mutations = mutations.len();
         let processed;
         match cursor.phase {
             RepairPhase::CopySource => {
@@ -4510,7 +4528,12 @@ impl<P: ObjectPlane> Repository<P> {
                 )
             })?;
             let saved = self
-                .checkpoint_commit_session(&checkpoint.session, mutations, sequence)
+                .checkpoint_commit_session(
+                    &checkpoint.session,
+                    mutations[checkpointed_mutations..].to_vec(),
+                    mutations.len(),
+                    sequence,
+                )
                 .await?;
             next.checkpoint_sequence = saved.sequence;
             return Ok(RepairPage {
@@ -4521,7 +4544,13 @@ impl<P: ObjectPlane> Repository<P> {
             });
         }
         if mutations.is_empty() {
-            self.abort_commit_session(checkpoint.session, mutations, checkpoint.sequence)
+            let sequence = checkpoint.sequence.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "repair abort checkpoint sequence overflow",
+                )
+            })?;
+            self.abort_commit_session(checkpoint.session, Vec::new(), 0, sequence)
                 .await?;
             return Ok(RepairPage {
                 cursor: next,
@@ -5053,6 +5082,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await?;
         let processed = page.changes.len();
         let mut mutations = checkpoint.mutations;
+        let checkpointed_mutations = mutations.len();
         for change in page.changes {
             if change.to.is_none() {
                 mutations.push(StagedMutation::delete(change.key));
@@ -5119,7 +5149,12 @@ impl<P: ObjectPlane> Repository<P> {
                 )
             })?;
             let checkpoint = self
-                .checkpoint_commit_session(&checkpoint.session, mutations, sequence)
+                .checkpoint_commit_session(
+                    &checkpoint.session,
+                    mutations[checkpointed_mutations..].to_vec(),
+                    mutations.len(),
+                    sequence,
+                )
                 .await?;
             next.checkpoint_sequence = checkpoint.sequence;
             return Ok(RestorePage {
@@ -5130,7 +5165,13 @@ impl<P: ObjectPlane> Repository<P> {
             });
         }
         if mutations.is_empty() {
-            self.abort_commit_session(checkpoint.session, mutations, checkpoint.sequence)
+            let sequence = checkpoint.sequence.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "restore abort checkpoint sequence overflow",
+                )
+            })?;
+            self.abort_commit_session(checkpoint.session, Vec::new(), 0, sequence)
                 .await?;
             next.complete = true;
             return Ok(RestorePage {

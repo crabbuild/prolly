@@ -1804,6 +1804,12 @@ pub enum CommitSessionState {
 pub struct CommitSessionCheckpoint {
     pub session: CommitSessionManifest,
     pub sequence: u64,
+    /// Number of unique logical mutations represented after applying this
+    /// checkpoint window and every preceding window in sequence order.
+    pub total_mutations: u64,
+    /// Canonically ordered mutations changed since the preceding checkpoint.
+    /// Resume folds these bounded windows by key; earlier windows are never
+    /// serialized again.
     pub mutations: Vec<StagedMutation>,
     pub state: CommitSessionState,
 }
@@ -1811,10 +1817,19 @@ pub struct CommitSessionCheckpoint {
 impl CommitSessionCheckpoint {
     pub fn validate(&self, repository: RepositoryId, max_mutations: usize) -> Result<()> {
         self.session.validate(repository)?;
-        if self.mutations.len() > max_mutations {
+        if self.total_mutations > max_mutations as u64
+            || self.mutations.len() > max_mutations
+            || self.mutations.len() as u64 > self.total_mutations
+        {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
                 "commit-session checkpoint exceeds the mutation limit",
+            ));
+        }
+        if self.sequence == 0 && (self.total_mutations != 0 || !self.mutations.is_empty()) {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "initial commit-session checkpoint must be empty",
             ));
         }
         let mut previous = None;

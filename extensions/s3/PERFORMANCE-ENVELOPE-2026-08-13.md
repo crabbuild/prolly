@@ -16,13 +16,14 @@ this machine, not AWS SLO evidence.
 
 After removing payload packs and Prolly-owned multipart state, the 10K
 tiny-file RustFS gate stored every distinct 16-byte body as one complete
-provider object. With 128 bounded uploads it completed in 35.19 seconds at
-284 files/s, issued 10,097 S3 operations, and uploaded 44.1 MB. Eliminating a
-redundant authority read per staged object reduced calls from 20,097 to 10,097
-but did not materially change throughput; raising concurrency from 32 to 128
-also did not clear the 500 files/s release target. The remaining uploaded-byte
-amplification is dominated by cumulative durable-checkpoint metadata and is an
-open optimization, not a reason to reintroduce payload packing.
+provider object. Eliminating a redundant authority read per staged object and
+replacing cumulative checkpoints with append-only mutation windows reduced the
+run from 35.19 seconds, 10,097 calls, and 44.1 MB uploaded to 20.64 seconds,
+10,079 calls, and 19.43 MB. With 128 bounded uploads it reached 484.6 files/s.
+The 64-way and 256-way probes reached 461.8 and 477.1 files/s respectively, so
+128 is the measured local configuration. It remains just below the unchanged
+500 files/s release gate. Remaining amplification is complete logical/version
+metadata plus bounded checkpoint windows, not payload chunks or packs.
 
 ## Results
 

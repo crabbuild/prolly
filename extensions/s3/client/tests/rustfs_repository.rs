@@ -1091,7 +1091,13 @@ async fn rustfs_streaming_bulk_exceeds_500_files_per_second() {
     client.reset_s3_operation_metrics();
     let started = std::time::Instant::now();
     let receipts = client
-        .put_object_stream(objects, BulkWriteOptions::default())
+        .put_object_stream(
+            objects,
+            BulkWriteOptions {
+                concurrency: 128,
+                ..BulkWriteOptions::default()
+            },
+        )
         .await
         .unwrap();
     let elapsed = started.elapsed();

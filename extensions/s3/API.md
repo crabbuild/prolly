@@ -114,8 +114,10 @@ When an object listing is truncated, pass the last returned logical key as
 values into durable atomic batches, uploads each checkpoint window with bounded
 concurrency, and returns one receipt per published batch. `put_object_stream`
 accepts a fallible `Stream` plus `BulkWriteOptions` for bounded-memory ingestion
-from an unbounded source. Completed checkpoint windows remain resumable after
-cancellation or a source/object failure.
+from an unbounded source. Durable checkpoints append only mutations changed
+since the preceding sequence; resume validates and folds the windows by key.
+Completed windows remain resumable after cancellation or a source/object
+failure without rewriting earlier payload bindings.
 
 Every distinct payload is stored as one complete immutable provider object.
 Built-in streaming uses one bounded disk spool followed by one conditional

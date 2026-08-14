@@ -543,8 +543,9 @@ bytes, and admission rejections.
 - Every distinct logical payload is one complete immutable provider object.
   Exact duplicate bodies may reuse that complete object by content hash.
 - Tiny-file batches upload those whole objects with bounded concurrency. Tree,
-  checkpoint, and publication requests are amortized across the batch; Prolly
-  never combines file bodies or records payload extents.
+  append-only checkpoint, and publication requests are amortized across the
+  batch; Prolly never combines file bodies or records payload extents. Each
+  checkpoint window contains only keys changed since its predecessor.
 - A current or historical read resolves a ref/commit/tree path and one payload.
 - Warm immutable-node caches remove most repeated metadata reads.
 - Branch creation inherits immutable derived-index roots from its source and is

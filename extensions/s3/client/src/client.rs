@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     io::Write as _,
     str::FromStr as _,
     sync::{Arc, Mutex},
@@ -1175,6 +1175,7 @@ impl Client {
             checkpoint_every: 256,
             checkpoint_sequence: checkpoint.sequence,
             dirty_mutations: 0,
+            dirty_keys: BTreeSet::new(),
         })
     }
 
@@ -1648,6 +1649,7 @@ impl CommitSessionBuilder {
             checkpoint_every: self.checkpoint_every,
             checkpoint_sequence,
             dirty_mutations: 0,
+            dirty_keys: BTreeSet::new(),
         })
     }
 }
@@ -1660,6 +1662,7 @@ pub struct CommitSession {
     checkpoint_every: usize,
     checkpoint_sequence: u64,
     dirty_mutations: usize,
+    dirty_keys: BTreeSet<Vec<u8>>,
 }
 
 impl CommitSession {
@@ -1684,7 +1687,9 @@ impl CommitSession {
     }
 
     fn insert_staged(&mut self, staged: StagedMutation) {
-        self.staged.insert(staged.key().to_vec(), staged);
+        let key = staged.key().to_vec();
+        self.staged.insert(key.clone(), staged);
+        self.dirty_keys.insert(key);
         self.dirty_mutations = self.dirty_mutations.saturating_add(1);
     }
 
@@ -1865,8 +1870,7 @@ impl CommitSession {
         if key.is_empty() {
             return Err(invalid("commit-session delete key is empty"));
         }
-        self.staged.insert(key.clone(), StagedMutation::delete(key));
-        self.dirty_mutations = self.dirty_mutations.saturating_add(1);
+        self.insert_staged(StagedMutation::delete(key));
         Ok(())
     }
 
@@ -1878,18 +1882,25 @@ impl CommitSession {
             .checkpoint_sequence
             .checked_add(1)
             .ok_or_else(|| invalid("commit-session checkpoint sequence overflow"))?;
+        let delta = self
+            .dirty_keys
+            .iter()
+            .map(|key| {
+                self.staged
+                    .get(key)
+                    .cloned()
+                    .expect("dirty commit-session key is staged")
+            })
+            .collect();
         let checkpoint = self
             .client
             .repository
-            .checkpoint_commit_session(
-                &self.manifest,
-                self.staged.values().cloned().collect(),
-                sequence,
-            )
+            .checkpoint_commit_session(&self.manifest, delta, self.staged.len(), sequence)
             .await?;
         self.manifest = checkpoint.session;
         self.checkpoint_sequence = checkpoint.sequence;
         self.dirty_mutations = 0;
+        self.dirty_keys.clear();
         Ok(())
     }
 
@@ -1904,17 +1915,18 @@ impl CommitSession {
 
     /// Mark a durable session aborted. Immutable payload candidates remain
     /// deduplicated and bounded staging cleanup removes expired checkpoints.
-    pub async fn abort(self) -> Result<()> {
+    pub async fn abort(mut self) -> Result<()> {
         if !self.durable {
             return Ok(());
         }
+        self.checkpoint().await?;
         let sequence = self
             .checkpoint_sequence
             .checked_add(1)
             .ok_or_else(|| invalid("commit-session checkpoint sequence overflow"))?;
         self.client
             .repository
-            .abort_commit_session(self.manifest, self.staged.into_values().collect(), sequence)
+            .abort_commit_session(self.manifest, Vec::new(), self.staged.len(), sequence)
             .await
     }
 

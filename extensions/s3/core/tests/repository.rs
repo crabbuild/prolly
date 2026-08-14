@@ -647,11 +647,12 @@ async fn durable_commit_session_survives_repeated_authority_renewal_and_restart(
             )
             .await
             .unwrap();
-        staged.push(mutation);
+        staged.push(mutation.clone());
         repository
             .checkpoint_commit_session(
                 &checkpoint.session,
-                staged.clone(),
+                vec![mutation],
+                staged.len(),
                 u64::try_from(index + 1).unwrap(),
             )
             .await
@@ -673,6 +674,127 @@ async fn durable_commit_session_survives_repeated_authority_renewal_and_restart(
         .await
         .unwrap();
     assert_eq!(receipt.changed_keys, 3);
+}
+
+#[tokio::test]
+async fn durable_checkpoint_windows_are_append_only_and_resume_last_write_per_key() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: ".tests/checkpoint-windows".to_string(),
+            writer: "checkpoint-window-writer".to_string(),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let checkpoint = repository
+        .begin_durable_commit_session("main", "append-only checkpoints", 60_000)
+        .await
+        .unwrap();
+    let first = repository
+        .stage_commit_session_put(
+            &checkpoint.session,
+            b"a".to_vec(),
+            b"first".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    repository
+        .checkpoint_commit_session(&checkpoint.session, vec![first], 1, 1)
+        .await
+        .unwrap();
+    let second = repository
+        .stage_commit_session_put(
+            &checkpoint.session,
+            b"b".to_vec(),
+            b"second".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    repository
+        .checkpoint_commit_session(&checkpoint.session, vec![second], 2, 2)
+        .await
+        .unwrap();
+    let replacement = repository
+        .stage_commit_session_put(
+            &checkpoint.session,
+            b"a".to_vec(),
+            b"replacement".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    repository
+        .checkpoint_commit_session(&checkpoint.session, vec![replacement], 2, 3)
+        .await
+        .unwrap();
+
+    let page = plane
+        .list(ListRequest {
+            prefix: ".tests/checkpoint-windows/staging/".to_string(),
+            continuation: None,
+            limit: 100,
+            include_versions: false,
+        })
+        .await
+        .unwrap();
+    let mut windows = Vec::new();
+    for entry in page.entries {
+        let stored = plane
+            .get(GetRequest {
+                path: entry.path,
+                range: None,
+                physical_version: None,
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        windows.push(
+            decode_canonical::<prolly_s3_core::CommitSessionCheckpoint>(&stored.bytes).unwrap(),
+        );
+    }
+    windows.sort_by_key(|window| window.sequence);
+    assert_eq!(windows.len(), 4);
+    assert_eq!(
+        windows
+            .iter()
+            .map(|window| (
+                window.sequence,
+                window.total_mutations,
+                window.mutations.len()
+            ))
+            .collect::<Vec<_>>(),
+        vec![(0, 0, 0), (1, 1, 1), (2, 2, 1), (3, 2, 1)]
+    );
+
+    let resumed = repository
+        .resume_commit_session(checkpoint.session.id)
+        .await
+        .unwrap();
+    assert_eq!(resumed.sequence, 3);
+    assert_eq!(resumed.total_mutations, 2);
+    assert_eq!(resumed.mutations.len(), 2);
+    repository
+        .publish_commit_session(resumed.session, resumed.mutations)
+        .await
+        .unwrap();
+    assert_eq!(
+        repository
+            .get_object("main", b"a")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"replacement"
+    );
 }
 
 #[tokio::test]
@@ -762,7 +884,7 @@ async fn real_takeover_fences_an_open_commit_session() {
         )
         .await
         .unwrap();
-    old.checkpoint_commit_session(&checkpoint.session, vec![staged.clone()], 1)
+    old.checkpoint_commit_session(&checkpoint.session, vec![staged.clone()], 1, 1)
         .await
         .unwrap();
 
@@ -1113,7 +1235,7 @@ async fn repository_durable_session_resumes_after_process_authority_reacquisitio
         .await
         .unwrap();
     original
-        .checkpoint_commit_session(&checkpoint.session, vec![staged], 1)
+        .checkpoint_commit_session(&checkpoint.session, vec![staged], 1, 1)
         .await
         .unwrap();
     let payload_puts = plane.request_snapshot().immutable_put;
