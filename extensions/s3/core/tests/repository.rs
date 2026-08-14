@@ -9,6 +9,64 @@ use prolly_s3_core::{
 use sha2::Sha256;
 
 #[tokio::test]
+async fn repository_chunk_manifest_streams_and_reads_cross_chunk_ranges() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let repository = Repository::initialize(
+        plane,
+        RepositoryOptions {
+            repository_prefix: ".tests/chunk-manifest".to_string(),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let session = repository
+        .begin_commit_session("main", "chunked", 60_000)
+        .await
+        .unwrap();
+    let body = b"abcdefgh";
+    let first = repository
+        .upload_commit_session_chunk(&session, body[..4].to_vec())
+        .await
+        .unwrap();
+    let second = repository
+        .upload_commit_session_chunk(&session, body[4..].to_vec())
+        .await
+        .unwrap();
+    let staged = repository
+        .stage_commit_session_chunk_manifest(
+            &session,
+            b"large.bin".to_vec(),
+            vec![first, second],
+            body.len() as u64,
+            Sha256::digest(body).into(),
+            Md5::digest(body).into(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    let receipt = repository
+        .publish_commit_session(session, vec![staged])
+        .await
+        .unwrap();
+    let object = repository
+        .get_object("main", b"large.bin")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(object.bytes, body);
+    assert!(object.version.binding.as_ref().unwrap().is_chunked());
+    let range = repository
+        .get_object_range("main", receipt.id, b"large.bin", 2..=5)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(range.bytes, b"cdef");
+}
+
+#[tokio::test]
 async fn repository_cache_snapshot_includes_ref_catalog_reads_after_reopen() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let cache = Arc::new(MemoryNodeCache::new(64 * 1024 * 1024));

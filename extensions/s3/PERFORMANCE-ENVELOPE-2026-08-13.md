@@ -42,7 +42,7 @@ this machine, not AWS SLO evidence.
 | 1.01M-object exact payload-pack inventory | 298.4 s, 1,011 restartable pages, 1,004 physical packs, 99.99% utilization |
 | 1.01M current / 1.02M version deep fsck | 38.79 s, 2.03M logical references, 1,004 physical packs, 39.36 MB downloaded, 23.25 MB uploaded, 245 MiB RSS |
 | 1M resumed pack-aware GC, final scan/sweep segment | 126.1 s, 1.047M reachable logical versions, 16,542 nodes, 91.2K provider versions scanned, 186 exact versions / 4.05 MB deleted, 44 MiB RSS |
-| 65 MiB streamed multipart object | 3.78 s; multipart upload and historical range read passed |
+| 65 MiB streamed chunk-manifest object | 5.74 s test wall time; nine 8 MiB-or-smaller chunks, zero multipart/spool operations, tail and cross-chunk ranges passed |
 
 The original 500K list failure used the compatibility API that rebuilt a
 key-based traversal on every page. The benchmark now uses one immutable,
@@ -103,6 +103,16 @@ deleted 186 exact unreachable versions totaling 4,046,261 bytes, downloaded
 888 KB, uploaded 437 KB, and ended at 44,000 KiB RSS. This proves restart and
 pack-safe sweep locally; a clean uninterrupted end-to-end timing and deliberate
 mid-sweep restart remain release gates.
+
+The 65 MiB streaming gate now uses nine independently content-addressed chunks
+plus one immutable manifest rather than a whole-file disk spool followed by a
+single multipart object. Upload buffers at most eight 8 MiB chunks, chunk puts
+run concurrently, full reads validate every chunk and the final logical hash,
+and range reads fetch only overlapping chunk ranges. The native RustFS gate
+completed in 5.74 seconds and verified both the final 32 bytes and a 32-byte
+range crossing the first chunk boundary. Content-addressed retries deduplicate
+already uploaded chunks, but durable source-offset resume and client-side
+encryption remain open release work.
 
 The 500K grouped ingest uploaded 2.56 GB for 17.5 MB of logical content, about
 146x byte amplification. Direct-child diff now pages the exact commit delta

@@ -1,6 +1,5 @@
 use std::{
     collections::{BTreeMap, VecDeque},
-    io::Write as _,
     str::FromStr as _,
     sync::{Arc, Mutex},
     time::Duration,
@@ -1852,8 +1851,8 @@ impl CommitSession {
         Ok(())
     }
 
-    /// Stage a streamed object through a bounded-memory disk spool. The spool
-    /// is removed after its immutable content-addressed upload completes.
+    /// Stage a streamed object as independently deduplicated 8 MiB chunks and
+    /// one content-addressed manifest. At most eight chunks are buffered.
     pub async fn put_stream(&mut self, key: impl Into<String>, body: ByteStream) -> Result<()> {
         self.put_stream_with_metadata(key, body, ObjectHeaders::default(), BTreeMap::new())
             .await
@@ -1871,16 +1870,15 @@ impl CommitSession {
         if key.is_empty() {
             return Err(invalid("commit-session put key is empty"));
         }
-        let mut spool = tempfile::NamedTempFile::new().map_err(|error| {
-            Error::new(
-                ErrorCode::Transport,
-                format!("could not create upload spool: {error}"),
-            )
-        })?;
+        const CHUNK_BYTES: usize = 8 * 1024 * 1024;
+        const CHUNK_CONCURRENCY: usize = 8;
         let max_object_bytes = self.client.repository.max_object_bytes();
         let mut size = 0_u64;
         let mut sha256 = Sha256::new();
         let mut md5 = Md5::new();
+        let mut current = Vec::with_capacity(CHUNK_BYTES);
+        let mut window = Vec::with_capacity(CHUNK_CONCURRENCY);
+        let mut chunks = Vec::new();
         while let Some(next) = body.next().await {
             let next = next.map_err(|error| {
                 Error::new(
@@ -1897,38 +1895,68 @@ impl CommitSession {
                     "object exceeds the repository object-size limit",
                 ));
             }
-            spool.write_all(&next).map_err(|error| {
-                Error::new(
-                    ErrorCode::Transport,
-                    format!("upload spool write failed: {error}"),
-                )
-            })?;
             sha256.update(&next);
             md5.update(&next);
+            current.extend_from_slice(&next);
+            while current.len() >= CHUNK_BYTES {
+                let remainder = current.split_off(CHUNK_BYTES);
+                window.push(std::mem::replace(&mut current, remainder));
+                if window.len() == CHUNK_CONCURRENCY {
+                    chunks.extend(
+                        self.upload_chunk_window(std::mem::take(&mut window))
+                            .await?,
+                    );
+                }
+            }
         }
-        spool.flush().map_err(|error| {
-            Error::new(
-                ErrorCode::Transport,
-                format!("upload spool flush failed: {error}"),
-            )
-        })?;
-        let staged = self
-            .client
-            .repository
-            .stage_commit_session_file(
-                &self.manifest,
-                key,
-                spool.path().to_path_buf(),
-                size,
-                sha256.finalize().into(),
-                md5.finalize().into(),
-                headers,
-                metadata,
-            )
-            .await?;
+        let checksum_sha256 = sha256.finalize().into();
+        let checksum_md5 = md5.finalize().into();
+        let staged = if chunks.is_empty() && window.is_empty() {
+            self.client
+                .repository
+                .stage_commit_session_put(&self.manifest, key, current, headers, metadata)
+                .await?
+        } else {
+            if !current.is_empty() {
+                window.push(current);
+            }
+            if !window.is_empty() {
+                chunks.extend(self.upload_chunk_window(window).await?);
+            }
+            self.client
+                .repository
+                .stage_commit_session_chunk_manifest(
+                    &self.manifest,
+                    key,
+                    chunks,
+                    size,
+                    checksum_sha256,
+                    checksum_md5,
+                    headers,
+                    metadata,
+                )
+                .await?
+        };
         self.insert_staged(staged);
         self.mark_staged_and_checkpoint_if_due().await?;
         Ok(())
+    }
+
+    async fn upload_chunk_window(
+        &self,
+        window: Vec<Vec<u8>>,
+    ) -> Result<Vec<prolly_s3_core::PayloadChunk>> {
+        stream::iter(window.into_iter().map(|bytes| async move {
+            self.client
+                .repository
+                .upload_commit_session_chunk(&self.manifest, bytes)
+                .await
+        }))
+        .buffered(8)
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect()
     }
 
     pub fn delete_object(&mut self, key: impl Into<String>) -> Result<()> {

@@ -1936,6 +1936,65 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
+    /// Upload one independently content-addressed chunk for a commit session.
+    /// Callers may retry a chunk safely; immutable identity deduplicates it.
+    pub async fn upload_commit_session_chunk(
+        &self,
+        session: &CommitSessionManifest,
+        bytes: Vec<u8>,
+    ) -> Result<crate::PayloadChunk> {
+        self.validate_commit_session(session).await?;
+        if bytes.is_empty() || bytes.len() > 64 * 1024 * 1024 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "payload chunk must contain between 1 byte and 64 MiB",
+            ));
+        }
+        self.payloads.put_chunk(bytes).await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn stage_commit_session_chunk_manifest(
+        &self,
+        session: &CommitSessionManifest,
+        key: Vec<u8>,
+        chunks: Vec<crate::PayloadChunk>,
+        size: u64,
+        checksum_sha256: [u8; 32],
+        checksum_md5: [u8; 16],
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    ) -> Result<StagedMutation> {
+        self.validate_commit_session(session).await?;
+        self.validate_key(&key)?;
+        if size > self.format.canonical_limits.max_object_bytes {
+            return Err(Error::new(
+                ErrorCode::EntityTooLarge,
+                "object exceeds the repository object-size limit",
+            ));
+        }
+        let binding = self
+            .payloads
+            .put_chunk_manifest(size, checksum_sha256, chunks)
+            .await?;
+        Ok(StagedMutation {
+            body: StagedMutationBody::Put(Box::new(StagedPut {
+                key,
+                size,
+                logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
+                checksums: Checksums {
+                    md5: Some(checksum_md5),
+                    sha256: Some(checksum_sha256),
+                    algorithm_values: BTreeMap::new(),
+                },
+                headers,
+                user_metadata,
+                tags: BTreeMap::new(),
+                binding,
+            })),
+        })
+    }
+
     pub async fn publish_commit_session(
         &self,
         session: CommitSessionManifest,
@@ -2616,6 +2675,19 @@ impl<P: ObjectPlane> Repository<P> {
                     version_id: version_id.clone(),
                 });
         let logical_range = *range.start()..=(*range.end()).min(size - 1);
+        if binding.is_chunked() {
+            let bytes = self
+                .payloads
+                .get_chunked_range(binding, logical_range.clone())
+                .await?;
+            return Ok(Some(ObjectRangeData {
+                key: key.to_vec(),
+                version: summary.version,
+                bytes,
+                snapshot,
+                range: logical_range,
+            }));
+        }
         let translated = if let Some((offset, pack_end)) = binding.pack_range {
             let start = offset.checked_add(*logical_range.start()).ok_or_else(|| {
                 Error::new(ErrorCode::InvalidRange, "packed payload range overflow")
@@ -6539,15 +6611,19 @@ impl<P: ObjectPlane> Repository<P> {
                     "payload binding path does not match its content checksum",
                 ));
             }
-            let expected_minimum_len = binding
-                .pack_range
-                .map_or(*size, |(_, end)| end.saturating_add(1));
+            let expected_minimum_len = if binding.is_chunked() {
+                1
+            } else {
+                binding
+                    .pack_range
+                    .map_or(*size, |(_, end)| end.saturating_add(1))
+            };
             let record = pending
                 .entry(payload_pack_physical_key(binding))
                 .or_insert_with(|| FsckPhysicalPayload {
                     binding: binding.clone(),
                     expected_minimum_len,
-                    direct_size: (!binding.is_packed()).then_some(*size),
+                    direct_size: (!binding.is_packed() && !binding.is_chunked()).then_some(*size),
                 });
             validate_same_fsck_physical_binding(&record.binding, binding)?;
             record.expected_minimum_len = record.expected_minimum_len.max(expected_minimum_len);
@@ -6656,6 +6732,11 @@ impl<P: ObjectPlane> Repository<P> {
 
     async fn verify_fsck_page_payload(&self, record: FsckPagePayload) -> Result<u64> {
         let binding = &record.binding;
+        if binding.is_chunked() {
+            let bytes = self.payloads.get(binding).await?;
+            return u64::try_from(bytes.len())
+                .map_err(|_| Error::new(ErrorCode::EntityTooLarge, "chunked payload exceeds u64"));
+        }
         let physical_version =
             binding
                 .provider_version_id
@@ -7040,6 +7121,7 @@ impl<P: ObjectPlane> Repository<P> {
             });
             if node.leaf && work.scan_versions {
                 let mut physical_marks = BTreeSet::new();
+                let mut chunked = BTreeMap::new();
                 for encoded in node.vals {
                     let version: ObjectVersion = decode_canonical(&encoded)?;
                     version.validate()?;
@@ -7048,9 +7130,28 @@ impl<P: ObjectPlane> Repository<P> {
                             || gc_path_mark_key(&binding.path),
                             |version| gc_physical_mark_key(&binding.path, version),
                         ));
+                        if binding.is_chunked() {
+                            chunked
+                                .entry(payload_pack_physical_key(&binding))
+                                .or_insert(binding);
+                        }
                     }
                     cursor.report.logical_versions =
                         cursor.report.logical_versions.saturating_add(1);
+                }
+                let manifests = stream::iter(chunked.into_values().map(|binding| async move {
+                    self.payloads.load_chunk_manifest(&binding).await
+                }))
+                .buffered(16)
+                .collect::<Vec<_>>()
+                .await;
+                for manifest in manifests {
+                    for chunk in manifest?.chunks {
+                        physical_marks.insert(chunk.provider_version_id.as_ref().map_or_else(
+                            || gc_path_mark_key(&chunk.path),
+                            |version| gc_physical_mark_key(&chunk.path, version),
+                        ));
+                    }
                 }
                 mutations.extend(physical_marks.into_iter().map(|key| Mutation::Upsert {
                     key,
@@ -9996,7 +10097,10 @@ fn gc_managed_kind(prefix: &str, path: &ObjectPath) -> Option<&'static str> {
         Some("commits")
     } else if relative.starts_with("nodes/sha256/") {
         Some("nodes")
-    } else if relative.starts_with("payloads/") || relative.starts_with("payload-packs/") {
+    } else if relative.starts_with("payloads/")
+        || relative.starts_with("payload-packs/")
+        || relative.starts_with("payload-manifests/")
+    {
         Some("payloads")
     } else {
         None

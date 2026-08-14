@@ -1529,19 +1529,19 @@ async fn rustfs_10k_concurrent_commit_regression_gate() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 12)]
-#[ignore = "uploads a 65 MiB multipart payload to live RustFS"]
-async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
+#[ignore = "uploads a 65 MiB chunk-manifest payload to live RustFS"]
+async fn rustfs_streamed_large_object_uses_bounded_chunks() {
     assert!(
         rustfs_enabled(),
-        "set PROLLY_S3_RUSTFS=1 to run the multipart RustFS gate"
+        "set PROLLY_S3_RUSTFS=1 to run the chunk-manifest RustFS gate"
     );
     const SIZE: usize = 65 * 1_024 * 1_024;
     let (aws, bucket) = rustfs_client().await;
     let client = Client::builder()
         .aws_client(aws)
         .bucket(&bucket)
-        .repository_prefix(unique_name("multipart-stream"))
-        .writer("rustfs-multipart-writer")
+        .repository_prefix(unique_name("chunked-stream"))
+        .writer("rustfs-chunked-writer")
         .provider_identity(provider_identity())
         .attestation_signer(attestation_signer())
         .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
@@ -1552,7 +1552,7 @@ async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
     client.reset_s3_operation_metrics();
     let mut session = client
         .begin_commit()
-        .message("multipart stream")
+        .message("chunked stream")
         .start()
         .await
         .unwrap();
@@ -1562,10 +1562,14 @@ async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
         .unwrap();
     let receipt = session.publish().await.unwrap();
     let metrics = client.reset_s3_operation_metrics();
-    assert_eq!(metrics.create_multipart_upload, 1);
-    assert!(metrics.upload_part >= 2);
-    assert_eq!(metrics.complete_multipart_upload, 1);
+    assert_eq!(metrics.create_multipart_upload, 0);
+    assert_eq!(metrics.upload_part, 0);
+    assert_eq!(metrics.complete_multipart_upload, 0);
     assert_eq!(metrics.abort_multipart_upload, 0);
+    assert!(
+        metrics.put_object >= 10,
+        "nine chunks, manifest, and metadata"
+    );
     assert!(metrics.uploaded_body_bytes >= SIZE as u64);
     assert!(metrics.uploaded_body_bytes < SIZE as u64 + 1024 * 1024);
 
@@ -1579,4 +1583,20 @@ async fn rustfs_streamed_large_object_uses_bounded_multipart_upload() {
         .unwrap()
         .unwrap();
     assert_eq!(tail.bytes, vec![0x5a; 32]);
+    let boundary = client
+        .get_object_range(
+            receipt.id,
+            "large/payload.bin",
+            (8 * 1_024 * 1_024 - 16)..=(8 * 1_024 * 1_024 + 15),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(boundary.bytes, vec![0x5a; 32]);
+    let (_, summary) = client
+        .head_object("large/payload.bin")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(summary.version.binding.unwrap().is_chunked());
 }

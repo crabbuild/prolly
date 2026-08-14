@@ -551,6 +551,9 @@ bytes, and admission rejections.
   descriptors and only the node ranges on their traversal frontier.
 - Large commit deltas are external Prolly trees, keeping commit descriptors and
   restart metadata bounded independently of batch size.
+- Streamed objects larger than 8 MiB use immutable content-addressed chunks and
+  a content-addressed manifest. Upload and range-read windows are bounded and
+  chunk checksums/tokens are validated independently.
 - Same-branch writers contend on one ref CAS; different branches publish
   independently.
 
@@ -561,13 +564,15 @@ latency or cost claim substitutes for AWS qualification.
 ## Limitations
 
 - The client must be the exclusive authority for its repository prefix.
-- One file must fit the repository and provider single-object PUT limits.
-- There is no chunked or multipart file representation.
+- One logical file must fit the repository object-size limit; individual
+  streamed chunks are 8 MiB and no longer require a whole-file disk spool.
+- Retrying a streamed upload deduplicates completed chunks by content identity,
+  but the input source must currently be replayed from byte zero. Durable
+  source-offset checkpoints and client-side chunk encryption are not yet
+  implemented.
 - Concurrent writes to one branch can conflict; batch related changes.
-- Concurrent GC coordinates all writer handles in the authoritative process.
-  Do not run GC while a separately running process can publish to the same
-  repository prefix; use one authoritative writer process or quiesce external
-  writers first.
+- GC closes publication admission through the repository-wide durable
+  coordinator, checkpoints its epoch cursor, and resumes after process restart.
 - Snapshot clone/fetch/push preserves only the selected logical state. The
   `history_` variants preserve the source commit DAG, but not source commit IDs
   or reflog identity.
