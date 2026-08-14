@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, io::Write as _, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    io::Write as _,
+    sync::Arc,
+};
 
 use md5::{Digest as _, Md5};
 use prolly_s3_core::{
@@ -1114,6 +1118,96 @@ async fn repository_pack_inventory_pages_exact_sparse_candidates() {
     assert_eq!(candidates.packs[0].live_bytes, 4);
     assert_eq!(candidates.packs[0].live_extents, 1);
     assert_eq!(candidates.packs[0].utilization_basis_points(), 3_333);
+}
+
+#[tokio::test]
+async fn repository_pack_sizing_requires_both_age_and_cold_temperature() {
+    use prolly_s3_core::{PayloadPackSizingPolicy, PayloadTemperature};
+
+    const DAY: u64 = 24 * 60 * 60 * 1_000;
+    let clock = Arc::new(FixedClock::new(100 * DAY));
+    let repository = Repository::initialize(
+        Arc::new(MemoryObjectPlane::new(true)),
+        RepositoryOptions {
+            repository_prefix: ".tests/pack-temperature".to_string(),
+            provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+            clock: clock.clone(),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let session = repository
+        .begin_commit_session("main", "age and temperature pack sizing", 60_000)
+        .await
+        .unwrap();
+    let policy = PayloadPackSizingPolicy {
+        hot_pack_bytes: 64 * 1_024,
+        warm_pack_bytes: 128 * 1_024,
+        cold_pack_bytes: 256 * 1_024,
+        warm_after_millis: DAY,
+        cold_after_millis: 30 * DAY,
+    };
+    let inputs = |prefix: &str, byte_offset: u8, created_at_millis: u64| {
+        (0_u8..48)
+            .map(|index| {
+                (
+                    (
+                        format!("{prefix}/{index:02}").into_bytes(),
+                        vec![byte_offset.wrapping_add(index); 4 * 1_024],
+                        ObjectHeaders::default(),
+                        BTreeMap::new(),
+                        BTreeMap::new(),
+                    ),
+                    created_at_millis,
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let mut staged = repository
+        .stage_commit_session_repack_batch_with_policy(
+            &session,
+            inputs("recent", 0, 100 * DAY),
+            8,
+            policy,
+            PayloadTemperature::Cold,
+        )
+        .await
+        .unwrap();
+    staged.extend(
+        repository
+            .stage_commit_session_repack_batch_with_policy(
+                &session,
+                inputs("old", 64, 0),
+                8,
+                policy,
+                PayloadTemperature::Cold,
+            )
+            .await
+            .unwrap(),
+    );
+    let receipt = repository
+        .publish_commit_session(session, staged)
+        .await
+        .unwrap();
+    let mut recent_packs = BTreeSet::new();
+    let mut old_packs = BTreeSet::new();
+    for index in 0_u8..48 {
+        for (prefix, packs) in [("recent", &mut recent_packs), ("old", &mut old_packs)] {
+            let summary = repository
+                .head_object_at(
+                    "main",
+                    receipt.id,
+                    format!("{prefix}/{index:02}").as_bytes(),
+                )
+                .await
+                .unwrap()
+                .unwrap();
+            packs.insert(summary.version.binding.unwrap().path);
+        }
+    }
+    assert_eq!(recent_packs.len(), 3);
+    assert_eq!(old_packs.len(), 1);
 }
 
 #[tokio::test]

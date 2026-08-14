@@ -21,11 +21,12 @@ use prolly_s3_core::{
     ObjectDiff, ObjectDiffCursor, ObjectDiffPage, ObjectHeaders, ObjectPath, ObjectRangeData,
     ObjectSummary, ObjectVersion, OperationId, OperationIndexRebuildCursor,
     OperationIndexRebuildStep, PayloadPackCandidate, PayloadPackCandidatePage,
-    PayloadPackStatsCursor, PayloadPackStatsPage, ProviderAttestation, ProviderPerKeyVersionLimit,
-    ProviderProfileId, PublicationJournalCursor, PublicationJournalPage, RefCatalogCursor,
-    RefCatalogRepairPage, RefKind, RefMoveReceipt, RepairCursor, RepairPage, Repository,
-    RepositoryOptions, RestoreCursor, RestorePage, Result, RetentionPin, RetentionPinPage,
-    StagedMutation, Tag, TagCatalogPage, TraversalBudget, VersionSummary,
+    PayloadPackSizingPolicy, PayloadPackStatsCursor, PayloadPackStatsPage, PayloadTemperature,
+    ProviderAttestation, ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
+    PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
+    RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
+    RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
+    VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -118,6 +119,10 @@ pub struct PayloadRepackOptions {
     pub max_object_bytes: u64,
     pub max_batch_bytes: u64,
     pub concurrency: usize,
+    /// Access temperature observed by the maintenance scheduler for this
+    /// prefix/page. Durable object age still limits promotion to larger packs.
+    pub temperature: PayloadTemperature,
+    pub sizing: PayloadPackSizingPolicy,
 }
 
 impl Default for PayloadRepackOptions {
@@ -127,6 +132,8 @@ impl Default for PayloadRepackOptions {
             max_object_bytes: 4 * 1_024,
             max_batch_bytes: 4 * 1_024 * 1_024,
             concurrency: 32,
+            temperature: PayloadTemperature::Warm,
+            sizing: PayloadPackSizingPolicy::default(),
         }
     }
 }
@@ -550,6 +557,7 @@ impl Client {
         options: PayloadRepackOptions,
     ) -> Result<PayloadRepackPage> {
         self.ensure_provider_qualified()?;
+        options.sizing.validate()?;
         let branch = self.attached_branch()?;
         if !(1..=1_000).contains(&options.page_size)
             || options.max_object_bytes == 0
@@ -589,6 +597,7 @@ impl Client {
         } else {
             let session = self
                 .begin_commit()
+                .ephemeral()
                 .message("payload pack maintenance")
                 .start()
                 .await?;
@@ -620,6 +629,7 @@ impl Client {
         let mut inputs = Vec::with_capacity(loaded.len());
         let mut repacked_bytes = 0_u64;
         for object in loaded {
+            let created_at_millis = object.version.body.created_at_millis;
             let LogicalObjectVersionKind::Live {
                 size,
                 headers,
@@ -633,7 +643,10 @@ impl Client {
             repacked_bytes = repacked_bytes
                 .checked_add(size)
                 .ok_or_else(|| invalid("payload repack byte count overflow"))?;
-            inputs.push((object.key, object.bytes, headers, user_metadata, tags));
+            inputs.push((
+                (object.key, object.bytes, headers, user_metadata, tags),
+                created_at_millis,
+            ));
         }
         let repacked_objects = inputs.len();
         let receipt = if inputs.is_empty() {
@@ -642,7 +655,13 @@ impl Client {
             let mut session = session.expect("nonempty repack input opened a session");
             let staged = self
                 .repository
-                .stage_commit_session_repack_batch(&session.manifest, inputs, options.concurrency)
+                .stage_commit_session_repack_batch_with_policy(
+                    &session.manifest,
+                    inputs,
+                    options.concurrency,
+                    options.sizing,
+                    options.temperature,
+                )
                 .await?;
             for mutation in staged {
                 session.insert_staged(mutation);
@@ -672,6 +691,7 @@ impl Client {
         options: PayloadRepackOptions,
     ) -> Result<PayloadRepackPage> {
         self.ensure_provider_qualified()?;
+        options.sizing.validate()?;
         let branch = self.attached_branch()?;
         if !inventory.complete
             || inventory.branch != branch
@@ -725,6 +745,7 @@ impl Client {
         } else {
             Some(
                 self.begin_commit()
+                    .ephemeral()
                     .message("sparse payload pack compaction")
                     .start()
                     .await?,
@@ -764,6 +785,7 @@ impl Client {
         let mut inputs = Vec::with_capacity(loaded.len());
         let mut repacked_bytes = 0_u64;
         for object in loaded {
+            let created_at_millis = object.version.body.created_at_millis;
             let LogicalObjectVersionKind::Live {
                 size,
                 headers,
@@ -783,7 +805,10 @@ impl Client {
             if repacked_bytes > options.max_batch_bytes {
                 return Err(invalid("sparse repack page exceeds its byte limit"));
             }
-            inputs.push((object.key, object.bytes, headers, user_metadata, tags));
+            inputs.push((
+                (object.key, object.bytes, headers, user_metadata, tags),
+                created_at_millis,
+            ));
         }
         let repacked_objects = inputs.len();
         let receipt = if inputs.is_empty() {
@@ -794,7 +819,13 @@ impl Client {
                 .expect("selected sparse-pack objects opened a commit session");
             let staged = self
                 .repository
-                .stage_commit_session_repack_batch(&session.manifest, inputs, options.concurrency)
+                .stage_commit_session_repack_batch_with_policy(
+                    &session.manifest,
+                    inputs,
+                    options.concurrency,
+                    options.sizing,
+                    options.temperature,
+                )
                 .await?;
             for mutation in staged {
                 session.insert_staged(mutation);

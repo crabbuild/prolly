@@ -549,6 +549,10 @@ bytes, and admission rejections.
   that still reference selected physical versions, uses a snapshot-bound list
   frontier, and skips logically changed keys; immutable historical readers
   keep using the old pack until retention-aware GC can remove it.
+- `PayloadPackSizingPolicy` combines each version's durable age with a
+  scheduler-supplied `PayloadTemperature`. Recent or hot objects remain in
+  small packs; warm and cold targets become eligible only after their age
+  thresholds. Defaults are 256 KiB hot, 1 MiB warm, and 4 MiB cold.
 - A current or historical read resolves a ref/commit/tree path and one payload.
 - Warm immutable-node caches remove most repeated metadata reads.
 - Branch creation inherits immutable derived-index roots from its source and is

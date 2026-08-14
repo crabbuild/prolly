@@ -162,6 +162,78 @@ pub type CommitSessionRepackInput = (
     BTreeMap<String, String>,
     BTreeMap<String, String>,
 );
+pub type CommitSessionAgedRepackInput = (CommitSessionRepackInput, u64);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum PayloadTemperature {
+    Hot,
+    Warm,
+    Cold,
+}
+
+/// Tiny-object pack sizing that combines durable object age with an observed
+/// access-temperature class supplied by the maintenance scheduler.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PayloadPackSizingPolicy {
+    pub hot_pack_bytes: usize,
+    pub warm_pack_bytes: usize,
+    pub cold_pack_bytes: usize,
+    pub warm_after_millis: u64,
+    pub cold_after_millis: u64,
+}
+
+impl Default for PayloadPackSizingPolicy {
+    fn default() -> Self {
+        Self {
+            hot_pack_bytes: 256 * 1_024,
+            warm_pack_bytes: 1_024 * 1_024,
+            cold_pack_bytes: 4 * 1_024 * 1_024,
+            warm_after_millis: 24 * 60 * 60 * 1_000,
+            cold_after_millis: 30 * 24 * 60 * 60 * 1_000,
+        }
+    }
+}
+
+impl PayloadPackSizingPolicy {
+    pub fn validate(self) -> Result<()> {
+        const MIN_PACK_BYTES: usize = 64 * 1_024;
+        const MAX_PACK_BYTES: usize = 4 * 1_024 * 1_024;
+        if !(MIN_PACK_BYTES..=MAX_PACK_BYTES).contains(&self.hot_pack_bytes)
+            || !(self.hot_pack_bytes..=MAX_PACK_BYTES).contains(&self.warm_pack_bytes)
+            || !(self.warm_pack_bytes..=MAX_PACK_BYTES).contains(&self.cold_pack_bytes)
+            || self.warm_after_millis < 60_000
+            || self.cold_after_millis <= self.warm_after_millis
+            || self.cold_after_millis > 365 * 24 * 60 * 60 * 1_000
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "payload pack sizing policy is invalid",
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn target_bytes(
+        self,
+        now_millis: u64,
+        created_at_millis: u64,
+        observed: PayloadTemperature,
+    ) -> usize {
+        let age = now_millis.saturating_sub(created_at_millis);
+        let age_class = if age >= self.cold_after_millis {
+            PayloadTemperature::Cold
+        } else if age >= self.warm_after_millis {
+            PayloadTemperature::Warm
+        } else {
+            PayloadTemperature::Hot
+        };
+        match age_class.min(observed) {
+            PayloadTemperature::Hot => self.hot_pack_bytes,
+            PayloadTemperature::Warm => self.warm_pack_bytes,
+            PayloadTemperature::Cold => self.cold_pack_bytes,
+        }
+    }
+}
 
 struct CommitMetadataCache {
     entries: BTreeMap<CommitId, (Arc<BucketCommit>, usize)>,
@@ -1820,14 +1892,30 @@ impl<P: ObjectPlane> Repository<P> {
     pub async fn stage_commit_session_put_batch(
         &self,
         session: &CommitSessionManifest,
-        mut objects: Vec<CommitSessionPutInput>,
+        objects: Vec<CommitSessionPutInput>,
         concurrency: usize,
     ) -> Result<Vec<StagedMutation>> {
+        self.stage_commit_session_put_batch_with_pack_max(
+            session,
+            objects,
+            concurrency,
+            4 * 1_024 * 1_024,
+        )
+        .await
+    }
+
+    async fn stage_commit_session_put_batch_with_pack_max(
+        &self,
+        session: &CommitSessionManifest,
+        mut objects: Vec<CommitSessionPutInput>,
+        concurrency: usize,
+        pack_max: usize,
+    ) -> Result<Vec<StagedMutation>> {
         self.validate_commit_session(session).await?;
-        if concurrency == 0 {
+        if concurrency == 0 || !(64 * 1_024..=4 * 1_024 * 1_024).contains(&pack_max) {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
-                "payload staging concurrency is zero",
+                "payload staging concurrency or pack target is invalid",
             ));
         }
         objects.sort_by(|left, right| left.0.cmp(&right.0));
@@ -1850,7 +1938,6 @@ impl<P: ObjectPlane> Repository<P> {
         }
 
         const SMALL_OBJECT_MAX: usize = 4 * 1024;
-        const PACK_MAX: usize = 4 * 1024 * 1024;
         let mut packed_groups = Vec::new();
         let mut current = Vec::new();
         let mut current_bytes = 0_usize;
@@ -1860,7 +1947,7 @@ impl<P: ObjectPlane> Repository<P> {
                 direct.push(object);
                 continue;
             }
-            if !current.is_empty() && current_bytes.saturating_add(object.1.len()) > PACK_MAX {
+            if !current.is_empty() && current_bytes.saturating_add(object.1.len()) > pack_max {
                 packed_groups.push(std::mem::take(&mut current));
                 current_bytes = 0;
             }
@@ -1923,6 +2010,53 @@ impl<P: ObjectPlane> Repository<P> {
             };
             put.tags = tags.remove(&put.key).unwrap_or_default();
         }
+        Ok(staged)
+    }
+
+    /// Repack tiny objects using a target derived from both object age and an
+    /// observed access-temperature class. A hot observation always keeps a
+    /// small target; cold targets are used only after the cold age threshold.
+    pub async fn stage_commit_session_repack_batch_with_policy(
+        &self,
+        session: &CommitSessionManifest,
+        objects: Vec<CommitSessionAgedRepackInput>,
+        concurrency: usize,
+        policy: PayloadPackSizingPolicy,
+        temperature: PayloadTemperature,
+    ) -> Result<Vec<StagedMutation>> {
+        policy.validate()?;
+        let now = self.options.clock.now_millis()?;
+        let mut tags = objects
+            .iter()
+            .map(|((key, _, _, _, tags), _)| (key.clone(), tags.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let mut groups = BTreeMap::<usize, Vec<CommitSessionPutInput>>::new();
+        for ((key, bytes, headers, metadata, _), created_at_millis) in objects {
+            let target = policy.target_bytes(now, created_at_millis, temperature);
+            groups
+                .entry(target)
+                .or_default()
+                .push((key, bytes, headers, metadata));
+        }
+        let mut staged = Vec::new();
+        for (target, group) in groups {
+            staged.extend(
+                self.stage_commit_session_put_batch_with_pack_max(
+                    session,
+                    group,
+                    concurrency,
+                    target,
+                )
+                .await?,
+            );
+        }
+        for mutation in &mut staged {
+            let StagedMutationBody::Put(put) = &mut mutation.body else {
+                continue;
+            };
+            put.tags = tags.remove(&put.key).unwrap_or_default();
+        }
+        staged.sort_by(|left, right| left.key().cmp(right.key()));
         Ok(staged)
     }
 
