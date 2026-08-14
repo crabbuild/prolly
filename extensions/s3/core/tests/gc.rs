@@ -149,6 +149,32 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
     drop(repository);
     let repository = Repository::open(plane.clone(), options).await.unwrap();
     gc = repository.resume_gc().await.unwrap().unwrap();
+    let after_restart_writer = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: ".tests/gc".to_string(),
+            provider_per_key_version_limit: prolly_s3_core::ProviderPerKeyVersionLimit::Finite(
+                10_000,
+            ),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let restart_fence = after_restart_writer
+        .put_object(
+            "main",
+            b"restart-race.txt".to_vec(),
+            b"must remain fenced".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        restart_fence.code,
+        prolly_s3_core::ErrorCode::PreconditionFailed
+    );
 
     for _ in 0..10_000 {
         gc = match gc.phase {

@@ -750,6 +750,12 @@ mod tests {
             lifecycle.validate_required().unwrap_err().code,
             ErrorCode::ProviderNotQualified
         );
+        let mut object_lock = capabilities();
+        object_lock.default_object_lock_retention = true;
+        assert_eq!(
+            object_lock.validate_required().unwrap_err().code,
+            ErrorCode::ProviderNotQualified
+        );
     }
 
     #[test]

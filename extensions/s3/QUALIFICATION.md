@@ -58,8 +58,10 @@ Run ignored scale tests explicitly and record:
 - cold, prewarmed, and persistent-cache reads;
 - sparse diff and merge at 10K+ keys;
 - restart during staging, merge, index rebuild, and publication response loss.
-- multipart create/part/complete/abort behavior for streamed objects above
-  64 MiB;
+- chunk-manifest upload/resume across a real process restart, including proof
+  that already durable chunks are not replayed;
+- legacy file-spool multipart create/part/complete/abort behavior where that
+  API remains enabled;
 - cross-process publication fencing throughout a complete GC epoch;
 - payload-pack utilization before and after bounded repack pages.
 
@@ -140,8 +142,10 @@ Promote only when:
 - no test relies on bucket listing for normal node lookup;
 - operation response loss reconciles before fencing;
 - authority renewal survives the intended deployment duration;
-- GC grace periods, external-writer quiescence, and retention policies are
-  tested in the deployment runbook.
+- GC grace periods, durable cross-process admission fencing, crash/resume, and
+  retention policies are tested in the deployment runbook. External writer
+  quiescence is not a correctness requirement for clients using the repository
+  protocol; bypass writers remain unsupported.
 
 Million- or billion-object claims require measurements at representative
 cardinality and traffic. Passing a 10K test is a regression gate, not proof of
