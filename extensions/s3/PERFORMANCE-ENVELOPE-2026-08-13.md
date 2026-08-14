@@ -6,11 +6,12 @@ Provider: local RustFS 1.0.0-beta.10, versioned bucket, Apple Silicon Docker
 Desktop, 32-way client concurrency. These numbers are regression evidence for
 this machine, not AWS SLO evidence.
 
-> Architecture notice: these measurements were collected with an experimental
-> payload-packing and Prolly-owned multipart implementation that has since been
-> removed. They remain useful metadata-tree baselines, but they do not qualify
-> the current whole-object payload architecture. Ingest, point-read, fsck, GC,
-> request-cost, and byte-amplification results must be rerun before release.
+> Architecture notice: the historical results table was collected with an
+> experimental payload-packing and Prolly-owned multipart implementation that
+> has since been removed. It remains useful as a metadata-tree baseline but does
+> not qualify the current architecture. The corrected 10K and 100K measurements
+> in this section use one complete provider object per distinct payload. The
+> 500K and 1M gates still require a whole-object rerun.
 
 ## Corrected whole-object baseline
 
@@ -53,6 +54,51 @@ still fails. The p99 is cohort latency: every caller is acknowledged after the
 single grouped ref CAS. A same-host bulk run reached 342.0 files/s, showing the
 queue is now near the provider's current whole-object PUT envelope rather than
 limited by publication or acknowledgement copying.
+
+### Corrected whole-object 100K gate
+
+A fresh 100K run stored 100K unique 35-byte bodies in ten 10K-mutation commits.
+It completed in 250.117 seconds at 399.8 files/s, issued 101,133 calls including
+100,334 PUTs (1.0113 calls/file), uploaded 199.81 MB, downloaded 124.73 MB, and
+reached 287,328 KiB RSS. The 3.50 MB logical input therefore incurred 57.1x
+upload amplification. This is an honest one-object-per-file result and does not
+meet the unchanged 500 files/s release target.
+
+The same process listed 100K entries in 1.555 seconds at 64.3K entries/s with a
+25.9 ms page p99 and 118 KB downloaded. A fresh process with an empty 64 MiB
+node cache took 6.307 seconds at 15.9K entries/s, 138.1 ms p99, and 60.30 MB;
+its second pass took 1.466 seconds at 68.2K entries/s, 18.0 ms p99, and 121 KB.
+After populating a Foyer cache, another process retained the warm result:
+1.616 seconds, 61.9K entries/s, 19.4 ms p99, and 121 KB downloaded.
+
+A separate fresh process ran point reads before any list traversal. One thousand
+random reads completed at 340.7 reads/s with 224.5 ms p99, 4,104 GETs, and
+58.32 MB downloaded for 35 KB of logical bodies: 4.104 calls/read and about
+1,666x download amplification. This fails the cold-read target. After metadata
+was warm, the same repository reached 1,712 reads/s with 23.5 ms p99 and 1.23
+MB downloaded. A new persistent-Foyer process reached 1,594 reads/s with 49.0
+ms p99 and 1.23 MB downloaded.
+
+Branch creation took 157 ms for the 100-key case and 270 ms for the 10K-key
+case. Direct-child diff took 10.4 ms for 100 keys and 131 ms for 10K keys;
+merge took 469 ms and 1.087 seconds respectively. Preparing the 10K whole-object
+branch delta took 25.45 seconds at 393 files/s. A restartable index rebuild over
+16 publications and 2,627 nodes completed in 462 ms and subsequent catch-up
+reported zero lag.
+
+Deep fsck over the resulting 110K-object snapshot completed correctly but took
+272.9 seconds, 119,251 calls, 142.68 MB downloaded, and 269.01 MB uploaded.
+It verified 110K physical payloads totaling 3.69 MB. The 5,452 administrative
+PUTs show that the cumulative fsck dedup tree needs append-only checkpoint
+segments and bounded merging; payload storage remains whole-object.
+
+Repository-wide GC also completed correctly with zero dirty roots or reachable
+deletions, but took 512.4 seconds and 1,259 pages. It issued 17,409 calls,
+downloaded 247.29 MB, uploaded 30.44 MB, and deleted four unreachable objects
+totaling 77.6 KB. Candidate discovery performs a near-full provider inventory
+even when almost nothing is reclaimable. A durable append-only physical-object
+journal should replace repeated namespace inventory while preserving the
+maintenance barrier and whole-object payload model.
 
 ## Results
 

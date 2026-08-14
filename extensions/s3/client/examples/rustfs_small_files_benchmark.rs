@@ -66,6 +66,35 @@ fn parse_stages() -> BenchResult<Vec<usize>> {
     Ok(stages)
 }
 
+fn parse_positive_sizes(name: &str, default: &str) -> BenchResult<Vec<usize>> {
+    let mut values = env(name, default)
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(str::parse::<usize>)
+        .collect::<Result<Vec<_>, _>>()?;
+    if values.is_empty() || values.contains(&0) {
+        return Err(format!("{name} must contain positive integers").into());
+    }
+    values.sort_unstable();
+    values.dedup();
+    Ok(values)
+}
+
+fn parse_prefixes(name: &str) -> Vec<String> {
+    std::env::var(name)
+        .ok()
+        .into_iter()
+        .flat_map(|raw| {
+            raw.split(',')
+                .map(str::trim)
+                .filter(|prefix| !prefix.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 fn percentile(sorted: &[Duration], percentile: usize) -> Duration {
     sorted[(sorted.len() * percentile).div_ceil(100) - 1]
 }
@@ -99,8 +128,19 @@ fn key(index: usize) -> String {
 }
 
 fn print_provider_metrics(label: &str, metrics: S3OperationMetrics) {
+    let read_requests = metrics.get_object + metrics.head_object;
+    let write_requests = metrics.put_object;
+    let list_requests = metrics.list_objects_v2 + metrics.list_object_versions;
+    let delete_requests = metrics.delete_object + metrics.delete_objects;
+    let estimated_cost = request_price("PROLLY_RUSTFS_PERF_READ_USD_PER_1000")
+        * read_requests as f64
+        / 1_000.0
+        + request_price("PROLLY_RUSTFS_PERF_WRITE_USD_PER_1000") * write_requests as f64 / 1_000.0
+        + request_price("PROLLY_RUSTFS_PERF_LIST_USD_PER_1000") * list_requests as f64 / 1_000.0
+        + request_price("PROLLY_RUSTFS_PERF_DELETE_USD_PER_1000") * delete_requests as f64
+            / 1_000.0;
     println!(
-        "METRICS phase={label} s3_calls={} get={} head={} put={} list={} list_versions={} delete={} delete_batch={} uploaded_bytes={} downloaded_bytes={}",
+        "METRICS phase={label} s3_calls={} get={} head={} put={} list={} list_versions={} delete={} delete_batch={} uploaded_bytes={} downloaded_bytes={} estimated_request_cost_usd={estimated_cost:.8}",
         metrics.total_calls(),
         metrics.get_object,
         metrics.head_object,
@@ -112,6 +152,13 @@ fn print_provider_metrics(label: &str, metrics: S3OperationMetrics) {
         metrics.uploaded_body_bytes,
         metrics.downloaded_body_bytes,
     );
+}
+
+fn request_price(name: &str) -> f64 {
+    std::env::var(name)
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0.0)
 }
 
 fn print_wire_metrics(label: &str, metrics: S3WireAttemptMetrics) {
@@ -185,9 +232,15 @@ async fn main() -> BenchResult {
     let read_concurrency = env("PROLLY_RUSTFS_PERF_READ_CONCURRENCY", "32").parse::<usize>()?;
     let write_concurrency = env("PROLLY_RUSTFS_PERF_WRITE_CONCURRENCY", "32").parse::<usize>()?;
     let existing_files = env("PROLLY_RUSTFS_PERF_EXISTING_FILES", "0").parse::<usize>()?;
-    let branch_changes = env("PROLLY_RUSTFS_PERF_BRANCH_CHANGES", "100").parse::<usize>()?;
+    let branch_changes = parse_positive_sizes("PROLLY_RUSTFS_PERF_BRANCH_CHANGES", "100")?;
+    let list_prefixes = parse_prefixes("PROLLY_RUSTFS_PERF_LIST_PREFIXES");
+    let open_mode = env("PROLLY_RUSTFS_PERF_OPEN_MODE", "initialize");
+    if !matches!(open_mode.as_str(), "initialize" | "open") {
+        return Err("open mode must be initialize or open".into());
+    }
     let list_passes = env("PROLLY_RUSTFS_PERF_LIST_PASSES", "1").parse::<usize>()?;
     let read_passes = env("PROLLY_RUSTFS_PERF_READ_PASSES", "1").parse::<usize>()?;
+    let run_branches = env("PROLLY_RUSTFS_PERF_BRANCH", "true").parse::<bool>()?;
     let node_cache_mib = env("PROLLY_RUSTFS_PERF_NODE_CACHE_MIB", "64").parse::<usize>()?;
     let rebuild_index = env("PROLLY_RUSTFS_PERF_REBUILD_INDEX", "false").parse::<bool>()?;
     let run_gc = env("PROLLY_RUSTFS_PERF_GC", "false").parse::<bool>()?;
@@ -209,10 +262,9 @@ async fn main() -> BenchResult {
     if read_sample_size == 0
         || read_concurrency == 0
         || write_concurrency == 0
-        || branch_changes == 0
-        || branch_changes > MUTATIONS_PER_COMMIT
-        || list_passes == 0
-        || read_passes == 0
+        || branch_changes
+            .iter()
+            .any(|changes| *changes > MUTATIONS_PER_COMMIT)
         || node_cache_mib == 0
     {
         return Err("read sample size and read/write concurrency must be positive".into());
@@ -283,10 +335,14 @@ async fn main() -> BenchResult {
     if let Some(cache) = &foyer_cache {
         builder = builder.node_cache(cache.clone());
     }
-    let client = builder.initialize().await?;
+    let client = match open_mode.as_str() {
+        "initialize" => builder.initialize().await?,
+        "open" => builder.open().await?,
+        _ => unreachable!("open mode validated above"),
+    };
 
     println!(
-        "CONFIG endpoint={endpoint} bucket={bucket} prefix={prefix} writer={writer} stages={stages:?} existing_files={existing_files} branch_changes={branch_changes} list_passes={list_passes} read_passes={read_passes} node_cache_mib={node_cache_mib} foyer={} rebuild_index={rebuild_index} foreground={run_foreground} fsck={fsck_mode} gc={run_gc} gc_grace_millis={gc_grace_millis} object_bytes={} mutations_per_commit={MUTATIONS_PER_COMMIT} write_concurrency={write_concurrency} read_samples={read_sample_size} read_concurrency={read_concurrency}",
+        "CONFIG endpoint={endpoint} bucket={bucket} prefix={prefix} writer={writer} open_mode={open_mode} stages={stages:?} existing_files={existing_files} branch_changes={branch_changes:?} list_prefixes={list_prefixes:?} list_passes={list_passes} read_passes={read_passes} branch={run_branches} node_cache_mib={node_cache_mib} foyer={} rebuild_index={rebuild_index} foreground={run_foreground} fsck={fsck_mode} gc={run_gc} gc_grace_millis={gc_grace_millis} object_bytes={} mutations_per_commit={MUTATIONS_PER_COMMIT} write_concurrency={write_concurrency} read_samples={read_sample_size} read_concurrency={read_concurrency}",
         if cfg!(feature = "foyer-cache")
             && std::env::var_os("PROLLY_RUSTFS_PERF_FOYER_DIR").is_some()
         {
@@ -348,12 +404,15 @@ async fn main() -> BenchResult {
             let write_wall = stage_started.elapsed();
             let write_metrics = client.reset_s3_operation_metrics();
             let write_wire = wire.reset();
+            let logical_bytes = added as u64 * payload(0).len() as u64;
             println!(
-                "STAGE target={target} added={added} write_wall_ms={:.3} files_per_second={:.2} commit_count={} mean_commit_ms={:.3}",
+                "STAGE target={target} added={added} logical_bytes={logical_bytes} write_wall_ms={:.3} files_per_second={:.2} commit_count={} mean_commit_ms={:.3} calls_per_file={:.4} uploaded_byte_amplification={:.2}",
                 millis(write_wall),
                 added as f64 / write_wall.as_secs_f64(),
                 receipts.len(),
                 millis(write_wall) / receipts.len() as f64,
+                write_metrics.total_calls() as f64 / added as f64,
+                write_metrics.uploaded_body_bytes as f64 / logical_bytes as f64,
             );
             print_provider_metrics("write", write_metrics);
             print_wire_metrics("write", write_wire);
@@ -421,6 +480,53 @@ async fn main() -> BenchResult {
             print_provider_metrics(&label, client.reset_s3_operation_metrics());
             print_wire_metrics(&label, wire.reset());
             print_cache_metrics(&label, cache_before, client.node_cache_snapshot());
+
+            for prefix in &list_prefixes {
+                let prefix_label = format!("prefix_list_pass_{pass}_{}", prefix.replace('/', "_"));
+                let expected = (0..target)
+                    .filter(|index| key(*index).starts_with(prefix))
+                    .count();
+                let cache_before = client.node_cache_snapshot();
+                client.reset_s3_operation_metrics();
+                wire.reset();
+                let started = Instant::now();
+                let mut continuation = None;
+                let mut listed = 0usize;
+                let mut latencies = Vec::new();
+                loop {
+                    let page_started = Instant::now();
+                    let page = client
+                        .list_objects_page(prefix, continuation.as_deref(), LIST_PAGE_SIZE)
+                        .await?;
+                    latencies.push(page_started.elapsed());
+                    listed += page.objects.len();
+                    continuation = page.continuation;
+                    if continuation.is_none() {
+                        break;
+                    }
+                }
+                if listed != expected {
+                    return Err(format!(
+                        "expected {expected} files under prefix {prefix:?}, found {listed}"
+                    )
+                    .into());
+                }
+                let wall = started.elapsed();
+                let summary = summarize(latencies);
+                println!(
+                    "PREFIX_LIST target={target} pass={pass} prefix={prefix:?} objects={listed} wall_ms={:.3} files_per_second={:.2} pages={} page_p50_ms={:.3} page_p95_ms={:.3} page_p99_ms={:.3} page_max_ms={:.3}",
+                    millis(wall),
+                    listed as f64 / wall.as_secs_f64(),
+                    summary.count,
+                    summary.p50_ms,
+                    summary.p95_ms,
+                    summary.p99_ms,
+                    summary.max_ms,
+                );
+                print_provider_metrics(&prefix_label, client.reset_s3_operation_metrics());
+                print_wire_metrics(&prefix_label, wire.reset());
+                print_cache_metrics(&prefix_label, cache_before, client.node_cache_snapshot());
+            }
         }
 
         let samples = read_sample_size.min(target);
@@ -470,111 +576,115 @@ async fn main() -> BenchResult {
             print_cache_metrics(&label, cache_before, client.node_cache_snapshot());
         }
 
-        let base = client.head().await?;
-        let branch = format!("scale-{target}-{branch_suffix}");
-        let cache_before = client.node_cache_snapshot();
-        client.reset_s3_operation_metrics();
-        wire.reset();
-        let branch_started = Instant::now();
-        client.create_branch(&branch, Some(base)).await?;
-        let branch_elapsed = branch_started.elapsed();
-        println!(
-            "BRANCH target={target} wall_ms={:.3}",
-            millis(branch_elapsed)
-        );
-        print_provider_metrics("branch", client.reset_s3_operation_metrics());
-        print_wire_metrics("branch", wire.reset());
-        print_cache_metrics("branch", cache_before, client.node_cache_snapshot());
+        if run_branches {
+            for configured_changes in &branch_changes {
+                let base = client.head().await?;
+                let branch = format!("scale-{target}-{configured_changes}-{branch_suffix}");
+                let cache_before = client.node_cache_snapshot();
+                client.reset_s3_operation_metrics();
+                wire.reset();
+                let branch_started = Instant::now();
+                client.create_branch(&branch, Some(base)).await?;
+                let branch_elapsed = branch_started.elapsed();
+                println!(
+                    "BRANCH target={target} changes={configured_changes} wall_ms={:.3}",
+                    millis(branch_elapsed)
+                );
+                print_provider_metrics("branch", client.reset_s3_operation_metrics());
+                print_wire_metrics("branch", wire.reset());
+                print_cache_metrics("branch", cache_before, client.node_cache_snapshot());
 
-        let feature = client.checkout(CheckoutRef::Branch(branch.clone())).await?;
-        let sparse_changes = target.min(branch_changes);
-        let cache_before = client.node_cache_snapshot();
-        client.reset_s3_operation_metrics();
-        wire.reset();
-        let feature_write_started = Instant::now();
-        feature
-            .put_object_stream(
-                stream::iter((0..sparse_changes).map(|index| {
-                    Ok(PutObjectInput {
-                        key: format!("repo/branch-probes/{target}/{index:03}.txt"),
-                        bytes: format!("branch-{target}-{index}\n").into_bytes(),
-                        headers: ObjectHeaders::default(),
-                        user_metadata: BTreeMap::new(),
-                    })
-                })),
-                BulkWriteOptions {
-                    batch_size: sparse_changes,
-                    concurrency: write_concurrency,
-                    checkpoint_every: sparse_changes,
-                },
-            )
-            .await?;
-        let feature_head = feature.head().await?;
-        println!(
+                let feature = client.checkout(CheckoutRef::Branch(branch.clone())).await?;
+                let sparse_changes = target.min(*configured_changes);
+                let cache_before = client.node_cache_snapshot();
+                client.reset_s3_operation_metrics();
+                wire.reset();
+                let feature_write_started = Instant::now();
+                feature
+                    .put_object_stream(
+                        stream::iter((0..sparse_changes).map(|index| {
+                            Ok(PutObjectInput {
+                                key: format!("repo/branch-probes/{target}/{index:03}.txt"),
+                                bytes: format!("branch-{target}-{index}\n").into_bytes(),
+                                headers: ObjectHeaders::default(),
+                                user_metadata: BTreeMap::new(),
+                            })
+                        })),
+                        BulkWriteOptions {
+                            batch_size: sparse_changes,
+                            concurrency: write_concurrency,
+                            checkpoint_every: sparse_changes,
+                        },
+                    )
+                    .await?;
+                let feature_head = feature.head().await?;
+                println!(
             "BRANCH_WRITE target={target} changes={sparse_changes} wall_ms={:.3} changes_per_second={:.2}",
             millis(feature_write_started.elapsed()),
             sparse_changes as f64 / feature_write_started.elapsed().as_secs_f64(),
         );
-        print_provider_metrics("branch_write", client.reset_s3_operation_metrics());
-        print_wire_metrics("branch_write", wire.reset());
-        print_cache_metrics("branch_write", cache_before, client.node_cache_snapshot());
+                print_provider_metrics("branch_write", client.reset_s3_operation_metrics());
+                print_wire_metrics("branch_write", wire.reset());
+                print_cache_metrics("branch_write", cache_before, client.node_cache_snapshot());
 
-        let cache_before = client.node_cache_snapshot();
-        client.reset_s3_operation_metrics();
-        wire.reset();
-        let diff_started = Instant::now();
-        let mut diff_cursor = None;
-        let mut changed = 0usize;
-        loop {
-            let page = client
-                .diff_bounded(base, feature_head, diff_cursor.as_ref(), 1_000)
-                .await?;
-            changed += page.changes.len();
-            diff_cursor = page.continuation;
-            if diff_cursor.is_none() {
-                break;
+                let cache_before = client.node_cache_snapshot();
+                client.reset_s3_operation_metrics();
+                wire.reset();
+                let diff_started = Instant::now();
+                let mut diff_cursor = None;
+                let mut changed = 0usize;
+                loop {
+                    let page = client
+                        .diff_bounded(base, feature_head, diff_cursor.as_ref(), 1_000)
+                        .await?;
+                    changed += page.changes.len();
+                    diff_cursor = page.continuation;
+                    if diff_cursor.is_none() {
+                        break;
+                    }
+                }
+                let diff_elapsed = diff_started.elapsed();
+                println!(
+                    "DIFF target={target} changes={changed} wall_ms={:.3} changes_per_second={:.2}",
+                    millis(diff_elapsed),
+                    changed as f64 / diff_elapsed.as_secs_f64(),
+                );
+                print_provider_metrics("diff", client.reset_s3_operation_metrics());
+                print_wire_metrics("diff", wire.reset());
+                print_cache_metrics("diff", cache_before, client.node_cache_snapshot());
+
+                let cache_before = client.node_cache_snapshot();
+                client.reset_s3_operation_metrics();
+                wire.reset();
+                let merge_started = Instant::now();
+                let mut merge = client
+                    .start_merge(
+                        &branch,
+                        Some(base),
+                        MergePolicy::Theirs,
+                        format!("merge scale branch at {target}"),
+                    )
+                    .await?;
+                let mut merge_processed = 0usize;
+                while merge.phase != MergePhase::ReadyToPublish {
+                    let page = client.advance_merge(&merge, 1_000).await?;
+                    merge_processed += page.processed;
+                    merge = page.cursor;
+                }
+                let merged = client.publish_merge(&merge).await?;
+                let merge_elapsed = merge_started.elapsed();
+                println!(
+                    "MERGE target={target} changes={} processed={} wall_ms={:.3}",
+                    merged.changed_keys,
+                    merge_processed,
+                    millis(merge_elapsed),
+                );
+                print_provider_metrics("merge", client.reset_s3_operation_metrics());
+                print_wire_metrics("merge", wire.reset());
+                print_cache_metrics("merge", cache_before, client.node_cache_snapshot());
+                client.delete_branch(&branch, feature_head).await?;
             }
         }
-        let diff_elapsed = diff_started.elapsed();
-        println!(
-            "DIFF target={target} changes={changed} wall_ms={:.3} changes_per_second={:.2}",
-            millis(diff_elapsed),
-            changed as f64 / diff_elapsed.as_secs_f64(),
-        );
-        print_provider_metrics("diff", client.reset_s3_operation_metrics());
-        print_wire_metrics("diff", wire.reset());
-        print_cache_metrics("diff", cache_before, client.node_cache_snapshot());
-
-        let cache_before = client.node_cache_snapshot();
-        client.reset_s3_operation_metrics();
-        wire.reset();
-        let merge_started = Instant::now();
-        let mut merge = client
-            .start_merge(
-                &branch,
-                Some(base),
-                MergePolicy::Theirs,
-                format!("merge scale branch at {target}"),
-            )
-            .await?;
-        let mut merge_processed = 0usize;
-        while merge.phase != MergePhase::ReadyToPublish {
-            let page = client.advance_merge(&merge, 1_000).await?;
-            merge_processed += page.processed;
-            merge = page.cursor;
-        }
-        let merged = client.publish_merge(&merge).await?;
-        let merge_elapsed = merge_started.elapsed();
-        println!(
-            "MERGE target={target} changes={} processed={} wall_ms={:.3}",
-            merged.changed_keys,
-            merge_processed,
-            millis(merge_elapsed),
-        );
-        print_provider_metrics("merge", client.reset_s3_operation_metrics());
-        print_wire_metrics("merge", wire.reset());
-        print_cache_metrics("merge", cache_before, client.node_cache_snapshot());
-        client.delete_branch(&branch, feature_head).await?;
         println!("STAGE_COMPLETE target={target}");
         prior_target = target;
     }

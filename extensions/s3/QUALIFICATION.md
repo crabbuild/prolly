@@ -177,12 +177,45 @@ cardinality and traffic. Passing a 10K test is a regression gate, not proof of
 unbounded production capacity.
 
 The staged benchmark defaults to 10K, 20K, 50K, 100K, 500K, and 1M objects and
-now records streaming ingest, point reads, full listing, branch creation,
-sparse diff, and merge for every stage:
+records bounded whole-object ingest, point reads, full and prefix listing,
+branch creation, sparse diff, and merge for every stage. Comma-separated branch
+change counts exercise both sparse and larger deltas without changing payload
+storage:
 
 ```bash
 PROLLY_RUSTFS_PERF_STAGES=100000,500000,1000000 \
-PROLLY_RUSTFS_PERF_WRITE_CONCURRENCY=32 \
+PROLLY_RUSTFS_PERF_WRITE_CONCURRENCY=512 \
+PROLLY_RUSTFS_PERF_BRANCH_CHANGES=100,10000 \
+PROLLY_RUSTFS_PERF_LIST_PREFIXES=repo/files/000,repo/files/009 \
   cargo run --release --manifest-path extensions/s3/Cargo.toml \
   -p prolly-s3-client --example rustfs_small_files_benchmark
 ```
+
+Keep the printed repository prefix, then run a fresh process against the same
+prefix to measure reopen-cold behavior. Set `EXISTING_FILES` and a single stage
+to the repository cardinality so ingestion is skipped:
+
+```bash
+PROLLY_RUSTFS_PERF_OPEN_MODE=open \
+PROLLY_RUSTFS_PERF_PREFIX=benchmarks/small-files/<run> \
+PROLLY_RUSTFS_PERF_EXISTING_FILES=1000000 \
+PROLLY_RUSTFS_PERF_STAGES=1000000 \
+PROLLY_RUSTFS_PERF_READ_PASSES=2 \
+PROLLY_RUSTFS_PERF_LIST_PASSES=2 \
+  cargo run --release --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --example rustfs_small_files_benchmark
+```
+
+Set `PROLLY_RUSTFS_PERF_LIST_PASSES=0` and
+`PROLLY_RUSTFS_PERF_BRANCH=false` in a fresh process to measure genuinely cold
+point reads before a full traversal warms metadata. Read or list pass counts may
+be zero so each cache phase can be isolated.
+
+Use the same reopen form with `PROLLY_RUSTFS_PERF_FOYER_DIR` to qualify a
+persistent cache, `PROLLY_RUSTFS_PERF_REBUILD_INDEX=true` for index rebuild,
+and `PROLLY_RUSTFS_PERF_FSCK=deep` or `PROLLY_RUSTFS_PERF_GC=true` for the
+restartable maintenance gates. Every phase prints provider calls and bytes,
+wire attempts, cache behavior, and resident memory. Set the provider-specific
+`PROLLY_RUSTFS_PERF_{READ,WRITE,LIST,DELETE}_USD_PER_1000` rates to include an
+estimated request cost in every metrics row; zero is the default so the harness
+never assumes an AWS or S3-compatible provider's pricing.
