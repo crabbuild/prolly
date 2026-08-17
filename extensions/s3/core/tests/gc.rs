@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use prolly_s3_core::{
-    GcPhase, ImmutablePut, MemoryObjectPlane, ObjectHeaders, ObjectPath, ObjectPlane, Repository,
-    RepositoryOptions,
+    FixedClock, GcPhase, ImmutablePut, ListRequest, MemoryObjectPlane, ObjectHeaders, ObjectPath,
+    ObjectPlane, PhysicalVersion, Repository, RepositoryOptions,
 };
 use sha2::{Digest, Sha256};
 
@@ -221,4 +221,164 @@ async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
         b"publication admission reopened"
     );
     repository.commit(pinned).await.unwrap();
+}
+
+#[tokio::test]
+async fn journaled_gc_discovers_unpublished_batch_payloads_without_namespace_payload_scan() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(10_000));
+    let options = RepositoryOptions {
+        repository_prefix: ".tests/gc-journal".to_string(),
+        clock: clock.clone(),
+        provider_per_key_version_limit: prolly_s3_core::ProviderPerKeyVersionLimit::Finite(10_000),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options)
+        .await
+        .unwrap();
+    let session = repository
+        .begin_commit_session("main", "journaled orphan", 60_000)
+        .await
+        .unwrap();
+    let _staged = repository
+        .stage_commit_session_put_batch(
+            &session,
+            vec![
+                (
+                    b"orphan-a".to_vec(),
+                    b"alpha".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+                (
+                    b"orphan-b".to_vec(),
+                    b"bravo".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+            ],
+            2,
+        )
+        .await
+        .unwrap();
+    let orphan_paths = plane
+        .list(ListRequest {
+            prefix: ".tests/gc-journal/payloads/".to_string(),
+            continuation: None,
+            limit: 10,
+            include_versions: false,
+        })
+        .await
+        .unwrap()
+        .entries
+        .into_iter()
+        .map(|entry| entry.path)
+        .collect::<Vec<_>>();
+    assert_eq!(orphan_paths.len(), 2);
+
+    plane.reset_request_counts();
+    clock.advance(10).unwrap();
+    let mut gc = repository.start_gc_journaled(1).await.unwrap();
+    for _ in 0..20_000 {
+        gc = match gc.phase {
+            GcPhase::Ready | GcPhase::Sweeping => {
+                repository.sweep_gc(&gc, 100).await.unwrap().cursor
+            }
+            GcPhase::Complete => break,
+            _ => {
+                repository
+                    .advance_gc(&gc, 100)
+                    .await
+                    .unwrap_or_else(|error| panic!("phase {:?}: {error:?}", gc.phase))
+                    .cursor
+            }
+        };
+    }
+    assert_eq!(gc.phase, GcPhase::Complete);
+    assert_eq!(gc.report.journal_batches, 1);
+    assert_eq!(gc.report.journal_objects, 2);
+    assert_eq!(plane.request_snapshot().head, 0);
+    assert_eq!(gc.report.candidates_by_kind.get("payloads"), Some(&2));
+    for path in orphan_paths {
+        assert!(plane.head(&path).await.unwrap().is_none());
+    }
+}
+
+#[tokio::test]
+async fn journaled_gc_falls_back_to_precompletion_intents_after_an_interrupted_upload() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(20_000));
+    let options = RepositoryOptions {
+        repository_prefix: ".tests/gc-journal-intent".to_string(),
+        clock: clock.clone(),
+        provider_per_key_version_limit: prolly_s3_core::ProviderPerKeyVersionLimit::Finite(10_000),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options)
+        .await
+        .unwrap();
+    let session = repository
+        .begin_commit_session("main", "interrupted journal completion", 60_000)
+        .await
+        .unwrap();
+    repository
+        .stage_commit_session_put_batch(
+            &session,
+            vec![(
+                b"orphan".to_vec(),
+                b"payload".to_vec(),
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+            )],
+            1,
+        )
+        .await
+        .unwrap();
+    let completion = plane
+        .list(ListRequest {
+            prefix: ".tests/gc-journal-intent/administration/physical-object-journal/".to_string(),
+            continuation: None,
+            limit: 10,
+            include_versions: true,
+        })
+        .await
+        .unwrap()
+        .entries
+        .into_iter()
+        .find(|entry| entry.path.as_str().contains("/completions/"))
+        .unwrap();
+    let completion_version = completion
+        .metadata
+        .token
+        .version_id
+        .clone()
+        .map(|version_id| PhysicalVersion::Versioned { version_id })
+        .unwrap_or_else(|| PhysicalVersion::Unversioned {
+            token: Some(completion.metadata.token.clone()),
+        });
+    assert_eq!(
+        plane
+            .delete_exact(&completion.path, completion_version)
+            .await
+            .unwrap(),
+        prolly_s3_core::DeleteOutcome::Deleted
+    );
+
+    plane.reset_request_counts();
+    clock.advance(10).unwrap();
+    let mut gc = repository.start_gc_journaled(1).await.unwrap();
+    for _ in 0..20_000 {
+        gc = match gc.phase {
+            GcPhase::Ready | GcPhase::Sweeping => {
+                repository.sweep_gc(&gc, 100).await.unwrap().cursor
+            }
+            GcPhase::Complete => break,
+            _ => repository.advance_gc(&gc, 100).await.unwrap().cursor,
+        };
+    }
+    assert_eq!(gc.phase, GcPhase::Complete);
+    assert_eq!(gc.report.journal_batches, 1);
+    assert_eq!(gc.report.journal_objects, 1);
+    assert_eq!(plane.request_snapshot().head, 1);
+    assert_eq!(gc.report.candidates_by_kind.get("payloads"), Some(&1));
 }

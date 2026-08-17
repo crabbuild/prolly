@@ -15,8 +15,14 @@ use prolly::{
 };
 use sha2::Sha256;
 
-use crate::gc::{GcCandidate, GcCoordinator, GcDirtyRoot, GcNodeWork, GcPublicationTicket};
+use crate::gc::{
+    GcCandidate, GcCandidateDiscovery, GcCandidateNamespace, GcCoordinator, GcDirtyRoot,
+    GcInventorySource, GcNodeWork, GcPublicationTicket,
+};
 use crate::merge::{MergeBaseCandidate, MergePlanEntry, MergeQueueEntry, MergeSeenEntry};
+use crate::physical_journal::{
+    journal_list_request, PhysicalObjectCompletion, PhysicalObjectIntent, PhysicalObjectJournal,
+};
 use crate::publication::BranchMovement;
 use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
 use crate::transfer::{commit_mapping_key, version_mapping_key};
@@ -42,7 +48,7 @@ use crate::{
     ProviderPerKeyVersionLimit, RandomIdSource, RefCatalogCursor, RefGeneration, RefKind,
     RepositoryFormat, Result, RootManifest, SegmentedOperationIndex, ShardWriterAuthority,
     ShardedBranchPublisher, ShardedRefCatalog, StagedMutation, StagedMutationBody, StagedPut,
-    SystemClock, TagStore, TakeoverRequest,
+    StorageToken, SystemClock, TagStore, TakeoverRequest,
 };
 
 /// Keep ordinary commit descriptors small enough for one bounded metadata
@@ -657,6 +663,13 @@ struct GcProcessState {
     publication_barrier: Arc<tokio::sync::RwLock<()>>,
 }
 
+struct GcInventoryResolved {
+    path: ObjectPath,
+    size: u64,
+    physical_version: PhysicalVersion,
+    last_modified_millis: u64,
+}
+
 fn gc_process_state(repository: crate::RepositoryId) -> Arc<GcProcessState> {
     static STATES: OnceLock<std::sync::Mutex<BTreeMap<crate::RepositoryId, Weak<GcProcessState>>>> =
         OnceLock::new();
@@ -824,6 +837,7 @@ pub struct Repository<P: ObjectPlane> {
     publisher: ShardedBranchPublisher<P>,
     payloads: ImmutablePayloadStore<P>,
     commit_sessions: CommitSessionStore<P>,
+    physical_journal: PhysicalObjectJournal<P>,
     tags: TagStore<P>,
     ref_catalog: Arc<ShardedRefCatalog<P>>,
     operation_index: SegmentedOperationIndex<P>,
@@ -1090,6 +1104,12 @@ impl<P: ObjectPlane> Repository<P> {
             format.repository_id,
             format.canonical_limits.max_mutations_per_commit as usize,
         )?;
+        let physical_journal = PhysicalObjectJournal::new(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            format.repository_id,
+            format.canonical_limits.max_mutations_per_commit as usize,
+        )?;
         let operation_index = SegmentedOperationIndex::new_with_limits(
             plane.clone(),
             options.repository_prefix.clone(),
@@ -1131,6 +1151,7 @@ impl<P: ObjectPlane> Repository<P> {
             publisher,
             payloads,
             commit_sessions,
+            physical_journal,
             tags,
             ref_catalog,
             operation_index,
@@ -1891,6 +1912,8 @@ impl<P: ObjectPlane> Repository<P> {
             }
         }
 
+        self.record_payload_intents(session, &objects).await?;
+
         let staged = stream::iter(objects)
             .map(|(key, bytes, headers, user_metadata)| async move {
                 self.stage_commit_session_put_validated(key, bytes, headers, user_metadata)
@@ -1901,6 +1924,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await;
         let mut staged = staged.into_iter().collect::<Result<Vec<_>>>()?;
         staged.sort_by(|left, right| left.key().cmp(right.key()));
+        self.record_payload_completions(session, &staged).await?;
         Ok(staged)
     }
 
@@ -1921,6 +1945,24 @@ impl<P: ObjectPlane> Repository<P> {
                 "payload staging concurrency is outside 1..=1024",
             ));
         }
+        let valid_intents = objects
+            .iter()
+            .filter_map(|(key, bytes, _, _)| {
+                self.validate_key(key)
+                    .ok()
+                    .filter(|_| bytes.len() as u64 <= self.format.canonical_limits.max_object_bytes)
+                    .and_then(|_| self.payload_intent(bytes).ok())
+            })
+            .collect::<Vec<_>>();
+        if !valid_intents.is_empty() {
+            self.physical_journal
+                .record(
+                    session.identity.operation,
+                    session.created_at_millis,
+                    valid_intents,
+                )
+                .await?;
+        }
         let mut staged = stream::iter(objects.into_iter().enumerate())
             .map(|(index, (key, bytes, headers, user_metadata))| async move {
                 (
@@ -1933,7 +1975,72 @@ impl<P: ObjectPlane> Repository<P> {
             .collect::<Vec<_>>()
             .await;
         staged.sort_by_key(|(index, _)| *index);
+        let completed = staged
+            .iter()
+            .filter_map(|(_, result)| result.as_ref().ok())
+            .cloned()
+            .collect::<Vec<_>>();
+        if !completed.is_empty() {
+            self.record_payload_completions(session, &completed).await?;
+        }
         Ok(staged.into_iter().map(|(_, result)| result).collect())
+    }
+
+    async fn record_payload_intents(
+        &self,
+        session: &CommitSessionManifest,
+        objects: &[CommitSessionPutInput],
+    ) -> Result<()> {
+        if objects.is_empty() {
+            return Ok(());
+        }
+        let intents = objects
+            .iter()
+            .map(|(_, bytes, _, _)| self.payload_intent(bytes))
+            .collect::<Result<Vec<_>>>()?;
+        self.physical_journal
+            .record(
+                session.identity.operation,
+                session.created_at_millis,
+                intents,
+            )
+            .await
+    }
+
+    fn payload_intent(&self, bytes: &[u8]) -> Result<PhysicalObjectIntent> {
+        let checksum_sha256 = crate::codec::sha256(bytes);
+        Ok(PhysicalObjectIntent {
+            path: self.payloads.path(checksum_sha256)?,
+            size: bytes.len() as u64,
+            checksum_sha256,
+        })
+    }
+
+    async fn record_payload_completions(
+        &self,
+        session: &CommitSessionManifest,
+        mutations: &[StagedMutation],
+    ) -> Result<()> {
+        let completed_at_millis = self.options.clock.now_millis()?;
+        let objects = mutations
+            .iter()
+            .filter_map(|mutation| match &mutation.body {
+                StagedMutationBody::Put(staged) => Some(PhysicalObjectCompletion {
+                    path: staged.binding.path.clone(),
+                    size: staged.size,
+                    checksum_sha256: staged.binding.checksum_sha256,
+                    provider_version_id: staged.binding.provider_version_id.clone(),
+                    provider_etag: staged.binding.provider_etag.clone(),
+                }),
+                StagedMutationBody::Delete { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        if objects.is_empty() {
+            return Ok(());
+        }
+        self.physical_journal
+            .record_completion(session.identity.operation, completed_at_millis, objects)
+            .await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3637,6 +3744,25 @@ impl<P: ObjectPlane> Repository<P> {
     /// Start a bounded concurrent collector for immutable repository data.
     /// `grace_millis` must exceed the longest allowed unpublished operation.
     pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {
+        self.start_gc_with_discovery(grace_millis, GcCandidateDiscovery::LegacyScan)
+            .await
+    }
+
+    /// Start GC using immutable physical-object creation intents for payload
+    /// candidates. Payloads created by direct/legacy writers are intentionally
+    /// retained rather than listed in this mode; run the default `start_gc`
+    /// epoch during migration. Commits and node objects remain discovered by
+    /// their normal namespace scan.
+    pub async fn start_gc_journaled(&self, grace_millis: u64) -> Result<GcCursor> {
+        self.start_gc_with_discovery(grace_millis, GcCandidateDiscovery::JournalOnly)
+            .await
+    }
+
+    async fn start_gc_with_discovery(
+        &self,
+        grace_millis: u64,
+        payload_discovery: GcCandidateDiscovery,
+    ) -> Result<GcCursor> {
         if grace_millis == 0 {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
@@ -3684,6 +3810,10 @@ impl<P: ObjectPlane> Repository<P> {
             cutoff_millis,
             phase: GcPhase::DiscoverBranches,
             continuation: None,
+            payload_discovery,
+            candidate_namespace: GcCandidateNamespace::Repository,
+            journal_object_offset: 0,
+            inventory_source: GcInventorySource::Completions,
             work: RootManifest::from_tree(&work)?,
             dirty_sequence: self.gc_dirty_sequence.load(Ordering::Acquire),
             dirty_target_sequence: 0,
@@ -3822,6 +3952,7 @@ impl<P: ObjectPlane> Repository<P> {
             GcPhase::DiscoverTags => self.gc_discover_refs(&mut next, true, max_steps).await?,
             GcPhase::MarkCommits => self.gc_mark_commits(&mut next, max_steps).await?,
             GcPhase::MarkNodes => self.gc_mark_nodes(&mut next, max_steps).await?,
+            GcPhase::ScanInventory => self.gc_scan_inventory(&mut next, max_steps).await?,
             GcPhase::ScanCandidates => self.gc_scan_candidates(&mut next, max_steps).await?,
             GcPhase::CatchUpDirtyRoots => {
                 self.gc_catch_up_dirty_roots(&mut next, max_steps).await?
@@ -7184,6 +7315,8 @@ impl<P: ObjectPlane> Repository<P> {
         if records.is_empty() {
             cursor.phase = if cursor.initial_scan_complete {
                 GcPhase::CatchUpDirtyRoots
+            } else if cursor.payload_discovery == GcCandidateDiscovery::JournalOnly {
+                GcPhase::ScanInventory
             } else {
                 GcPhase::ScanCandidates
             };
@@ -7272,11 +7405,277 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(mark_keys.len())
     }
 
+    async fn gc_scan_inventory(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        let prefix = match cursor.inventory_source {
+            GcInventorySource::Completions => self.physical_journal.completion_prefix(),
+            GcInventorySource::Intents => self.physical_journal.prefix(),
+        };
+        let page = self
+            .plane
+            .list(journal_list_request(prefix, cursor.continuation.clone(), 1))
+            .await?;
+        let Some(entry) = page.entries.into_iter().next() else {
+            cursor.continuation = None;
+            cursor.journal_object_offset = 0;
+            match cursor.inventory_source {
+                GcInventorySource::Completions => {
+                    cursor.inventory_source = GcInventorySource::Intents;
+                }
+                GcInventorySource::Intents => {
+                    cursor.phase = GcPhase::ScanCandidates;
+                    cursor.candidate_namespace = GcCandidateNamespace::Commits;
+                }
+            }
+            return Ok(0);
+        };
+        let engine = self.gc_work_engine(cursor.epoch)?;
+        let mut tree = self.tree_from_root(&cursor.work)?;
+        let (all_intents, completion_marker, completed_paths) = match cursor.inventory_source {
+            GcInventorySource::Completions => {
+                let path = entry.path;
+                let batch = self.physical_journal.load_completion(path.clone()).await?;
+                let completed_at_millis = batch.completed_at_millis;
+                let intents = batch
+                    .objects
+                    .iter()
+                    .map(|object| crate::physical_journal::PhysicalObjectIntent {
+                        path: object.path.clone(),
+                        size: object.size,
+                        checksum_sha256: object.checksum_sha256,
+                    })
+                    .collect::<Vec<_>>();
+                let resolved = batch
+                    .objects
+                    .into_iter()
+                    .map(|object| {
+                        let token = StorageToken {
+                            etag: object.provider_etag,
+                            version_id: object.provider_version_id.clone(),
+                        };
+                        GcInventoryResolved {
+                            path: object.path,
+                            size: object.size,
+                            physical_version: object
+                                .provider_version_id
+                                .map(|version_id| PhysicalVersion::Versioned { version_id })
+                                .unwrap_or_else(|| PhysicalVersion::Unversioned {
+                                    token: Some(token),
+                                }),
+                            last_modified_millis: completed_at_millis,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                (
+                    intents,
+                    Some((gc_journal_completion_key(&path), resolved)),
+                    None,
+                )
+            }
+            GcInventorySource::Intents => {
+                let batch = self.physical_journal.load(entry.path).await?;
+                let completion_path = self
+                    .physical_journal
+                    .completion_path_for_intents(batch.operation, &batch.objects)?;
+                let marker = gc_journal_completion_key(&completion_path);
+                if engine.get(&tree, &marker).await?.is_some() {
+                    let completion = self
+                        .physical_journal
+                        .load_completion(completion_path)
+                        .await?;
+                    let completed_paths = completion
+                        .objects
+                        .into_iter()
+                        .map(|object| object.path)
+                        .collect::<BTreeSet<_>>();
+                    if completed_paths.len() == batch.objects.len()
+                        && batch
+                            .objects
+                            .iter()
+                            .all(|intent| completed_paths.contains(&intent.path))
+                    {
+                        cursor.continuation = page.continuation;
+                        cursor.journal_object_offset = 0;
+                        if cursor.continuation.is_none() {
+                            cursor.phase = GcPhase::ScanCandidates;
+                            cursor.candidate_namespace = GcCandidateNamespace::Commits;
+                        }
+                        return Ok(batch.objects.len());
+                    }
+                    (batch.objects, None, Some(completed_paths))
+                } else {
+                    (batch.objects, None, None)
+                }
+            }
+        };
+        if cursor.journal_object_offset == 0 {
+            cursor.report.journal_batches = cursor.report.journal_batches.saturating_add(1);
+        }
+        let start = cursor.journal_object_offset.min(all_intents.len());
+        let end = start.saturating_add(max_steps).min(all_intents.len());
+        let intents = &all_intents[start..end];
+        cursor.report.journal_objects = cursor
+            .report
+            .journal_objects
+            .saturating_add(intents.len() as u64);
+
+        let path_keys = intents
+            .iter()
+            .map(|intent| gc_path_mark_key(&intent.path))
+            .collect::<Vec<_>>();
+        let path_marks = engine.get_many(&tree, &path_keys).await?;
+        let pending = intents
+            .iter()
+            .zip(path_marks)
+            .filter_map(|(intent, mark)| {
+                (mark.is_none()
+                    && completed_paths
+                        .as_ref()
+                        .is_none_or(|completed| !completed.contains(&intent.path)))
+                .then_some(intent.clone())
+            })
+            .collect::<Vec<_>>();
+        let mut resolved = if let Some((marker, resolved)) = completion_marker {
+            tree = engine
+                .batch(
+                    &tree,
+                    vec![Mutation::Upsert {
+                        key: marker,
+                        val: Vec::new(),
+                    }],
+                )
+                .await?;
+            resolved
+                .into_iter()
+                .filter(|resolved| intents.iter().any(|intent| intent.path == resolved.path))
+                .collect::<Vec<_>>()
+        } else {
+            let metadata = stream::iter(pending.into_iter().map(|intent| async move {
+                let head = self.plane.head(&intent.path).await?;
+                Ok::<_, Error>((intent, head))
+            }))
+            .buffered(32)
+            .collect::<Vec<_>>()
+            .await;
+            let mut resolved = Vec::new();
+            for result in metadata {
+                let (intent, Some(metadata)) = result? else {
+                    cursor.report.already_missing = cursor.report.already_missing.saturating_add(1);
+                    continue;
+                };
+                if metadata.delete_marker {
+                    continue;
+                }
+                if metadata.len != intent.size
+                    || (metadata.sha256 != [0; 32] && metadata.sha256 != intent.checksum_sha256)
+                {
+                    return Err(Error::new(
+                        ErrorCode::CorruptContent,
+                        format!(
+                            "physical-object journal identity disagrees with {}",
+                            intent.path
+                        ),
+                    ));
+                }
+                if metadata.last_modified_millis <= cursor.cutoff_millis {
+                    let physical_version = metadata
+                        .token
+                        .version_id
+                        .clone()
+                        .map(|version_id| PhysicalVersion::Versioned { version_id })
+                        .unwrap_or_else(|| PhysicalVersion::Unversioned {
+                            token: Some(metadata.token.clone()),
+                        });
+                    resolved.push(GcInventoryResolved {
+                        path: intent.path,
+                        size: metadata.len,
+                        physical_version,
+                        last_modified_millis: metadata.last_modified_millis,
+                    });
+                }
+            }
+            resolved
+        };
+        resolved.retain(|resolved| resolved.last_modified_millis <= cursor.cutoff_millis);
+        let physical_keys = resolved
+            .iter()
+            .map(|resolved| match &resolved.physical_version {
+                PhysicalVersion::Versioned { version_id } => {
+                    gc_physical_mark_key(&resolved.path, version_id)
+                }
+                PhysicalVersion::Unversioned { .. } => gc_path_mark_key(&resolved.path),
+            })
+            .collect::<Vec<_>>();
+        let physical_marks = engine.get_many(&tree, &physical_keys).await?;
+        let mut mutations = Vec::new();
+        for (resolved, physical_mark) in resolved.into_iter().zip(physical_marks) {
+            if physical_mark.is_some() {
+                continue;
+            }
+            let candidate = GcCandidate {
+                path: resolved.path,
+                physical_version: resolved.physical_version,
+                len: resolved.size,
+                last_modified_millis: resolved.last_modified_millis,
+                kind: "payloads".to_string(),
+            };
+            let key = gc_candidate_key(&candidate)?;
+            mutations.push(Mutation::Upsert {
+                key,
+                val: encode_canonical(&candidate)?,
+            });
+            cursor.report.candidates = cursor.report.candidates.saturating_add(1);
+            cursor.report.candidate_bytes =
+                cursor.report.candidate_bytes.saturating_add(candidate.len);
+            *cursor
+                .report
+                .candidates_by_kind
+                .entry("payloads".to_string())
+                .or_default() += 1;
+        }
+        if !mutations.is_empty() {
+            tree = engine.batch(&tree, mutations).await?;
+        }
+        cursor.work = RootManifest::from_tree(&tree)?;
+        if end == all_intents.len() {
+            cursor.continuation = page.continuation;
+            cursor.journal_object_offset = 0;
+            if cursor.continuation.is_none() {
+                match cursor.inventory_source {
+                    GcInventorySource::Completions => {
+                        cursor.inventory_source = GcInventorySource::Intents;
+                    }
+                    GcInventorySource::Intents => {
+                        cursor.phase = GcPhase::ScanCandidates;
+                        cursor.candidate_namespace = GcCandidateNamespace::Commits;
+                    }
+                }
+            }
+        } else {
+            cursor.journal_object_offset = end;
+        }
+        Ok(intents.len())
+    }
+
     async fn gc_scan_candidates(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
+        let (prefix, namespace) = match cursor.candidate_namespace {
+            GcCandidateNamespace::Repository => (
+                format!("{}/", self.options.repository_prefix),
+                GcCandidateNamespace::Repository,
+            ),
+            GcCandidateNamespace::Commits => (
+                format!("{}/commits/sha256/", self.options.repository_prefix),
+                GcCandidateNamespace::Commits,
+            ),
+            GcCandidateNamespace::Nodes => (
+                format!("{}/nodes/sha256/", self.options.repository_prefix),
+                GcCandidateNamespace::Nodes,
+            ),
+            GcCandidateNamespace::Complete => return Ok(0),
+        };
         let page = self
             .plane
             .list(ListRequest {
-                prefix: format!("{}/", self.options.repository_prefix),
+                prefix,
                 continuation: cursor.continuation.clone(),
                 limit: max_steps,
                 include_versions: true,
@@ -7289,6 +7688,11 @@ impl<P: ObjectPlane> Repository<P> {
             .iter()
             .filter_map(|entry| {
                 let kind = gc_managed_kind(&self.options.repository_prefix, &entry.path)?;
+                if cursor.payload_discovery == GcCandidateDiscovery::JournalOnly
+                    && kind == "payloads"
+                {
+                    return None;
+                }
                 (entry.metadata.last_modified_millis <= cursor.cutoff_millis)
                     .then_some((entry, kind))
             })
@@ -7356,8 +7760,22 @@ impl<P: ObjectPlane> Repository<P> {
         cursor.work = RootManifest::from_tree(&tree)?;
         cursor.continuation = page.continuation;
         if cursor.continuation.is_none() {
-            cursor.initial_scan_complete = true;
-            cursor.phase = GcPhase::CatchUpDirtyRoots;
+            match namespace {
+                GcCandidateNamespace::Repository => {
+                    cursor.initial_scan_complete = true;
+                    cursor.phase = GcPhase::CatchUpDirtyRoots;
+                }
+                GcCandidateNamespace::Commits => {
+                    cursor.candidate_namespace = GcCandidateNamespace::Nodes;
+                    cursor.continuation = None;
+                }
+                GcCandidateNamespace::Nodes => {
+                    cursor.candidate_namespace = GcCandidateNamespace::Complete;
+                    cursor.initial_scan_complete = true;
+                    cursor.phase = GcPhase::CatchUpDirtyRoots;
+                }
+                GcCandidateNamespace::Complete => {}
+            }
         }
         Ok(page.entries.len())
     }
@@ -10128,6 +10546,12 @@ fn gc_physical_mark_key(path: &ObjectPath, version: &str) -> Vec<u8> {
     identity.extend_from_slice(version.as_bytes());
     let mut key = b"vm/".to_vec();
     key.extend_from_slice(&crate::codec::sha256(&identity));
+    key
+}
+
+fn gc_journal_completion_key(path: &ObjectPath) -> Vec<u8> {
+    let mut key = b"ji/".to_vec();
+    key.extend_from_slice(&crate::codec::sha256(path.as_str().as_bytes()));
     key
 }
 

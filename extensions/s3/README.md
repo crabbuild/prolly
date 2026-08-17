@@ -54,3 +54,6 @@ remain operational limits. Bounded GC reclaims unreachable immutable data,
 and history-transfer APIs preserve a source commit DAG with destination-local
 IDs and payload bindings. GC currently coordinates concurrent writer handles
 inside one authoritative process; quiesce separately running writer processes.
+Journaled ingest windows can opt into payload candidate discovery without a
+payload namespace scan; legacy/direct writers should continue using the default
+GC mode until they are migrated.

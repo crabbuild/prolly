@@ -26,6 +26,8 @@ repository format.
 | commit-closure work tree | `P/administration/closure/E/tree/nodes/sha256/...` |
 | fsck cursor | `P/administration/fsck/E/cursor.cbor` |
 | fsck distinct-payload work tree | `P/administration/fsck/E/payloads/nodes/sha256/...` |
+| physical-object creation intent batch | `P/administration/physical-object-journal/R/intents/H.cbor` |
+| physical-object completion batch | `P/administration/physical-object-journal/R/completions/H.cbor` |
 | GC coordinator | `P/gc/coordinator.cbor` |
 | GC epoch cursor | `P/gc/epochs/E/cursor.cbor` |
 | GC reachability work tree | `P/administration/gc/E/tree/nodes/sha256/...` |
@@ -47,6 +49,13 @@ byte pairs. `SS` is a two-digit ref-catalog shard.
   bytes in one repository may reuse a complete payload object. A payload path
   never stores multiple logical bodies or a chunk of one logical body.
 - Delete markers do not have payload paths.
+- Journaled bulk ingest writes one immutable creation-intent manifest per
+  bounded window before uploading its complete payload objects. The manifest
+  contains paths, sizes, and checksums only; it never packs, chunks, or stores
+  payload bytes.
+- Journal-only GC is opt-in. It discovers payloads emitted by journaled batch
+  APIs and retains direct or pre-journal payloads; the default GC mode keeps a
+  legacy repository scan for complete migration coverage.
 - Ordinary reads and index maintenance must not discover nodes by namespace
   listing.
 - Mutable control records retain a bounded number of provider versions.
