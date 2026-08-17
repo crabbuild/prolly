@@ -520,8 +520,44 @@ are discovered and journaled by the same protocol.
 
 ## Cache immutable nodes
 
-The in-memory cache is enabled through repository limits. For a persistent
-Foyer cache, enable the `foyer-cache` feature:
+The `foyer-cache` feature is enabled by default. Production deployments should
+use the cardinality-aware profile so persistent storage, metadata-node bounds,
+startup prewarming, and upper-level pinning are configured together:
+
+```rust
+use prolly_s3_client::{Client, ProductionCacheProfile};
+
+let profile = ProductionCacheProfile::new(
+    "./prolly-node-cache",
+    1_000_000, // expected live logical objects
+);
+let client = Client::builder()
+    // supply the required AWS client, provider identity, signer, bucket, etc.
+    .production_cache_profile(profile)
+    .open()
+    .await?;
+
+let startup = client.startup_metrics();
+let performance = client.performance_snapshot();
+println!(
+    "startup={}ms hit_ratio={:.3} metadata_amplification={:.3}x",
+    startup.total_open_millis,
+    performance.cache.hit_ratio(),
+    performance.metadata_download_amplification(),
+);
+```
+
+`CacheSizingRecommendation::for_object_count` exposes the selected memory,
+disk, location, and prewarm bounds without opening a client. Supplying the
+profile always opens persistent Foyer storage; `--no-default-features` callers
+must enable `foyer-cache` explicitly.
+
+After stopping request traffic and dropping other client clones, call
+`client.close_production_cache().await?` to flush and close the cache opened by
+the production profile. This also stops the shared authority, branch-index,
+and telemetry maintenance tasks for that client.
+
+For custom deployments, construct the cache directly:
 
 ```rust
 use std::path::PathBuf;
@@ -559,8 +595,34 @@ Use `prewarm_node_cache(snapshot)` during startup to traverse both state trees.
 Use `prewarm_node_cache_levels(snapshot, levels)` when startup should load only
 the roots and shared upper paths instead of scanning every leaf.
 Use `node_cache_snapshot()` before and after to observe hits, misses,
-insertions, corruptions, coalesced waits, ranged fetches, fetched and avoided
-bytes, and admission rejections.
+insertions, corruptions, coalesced waits, ranged fetches, requested/fetched/
+avoided bytes, byte amplification, predictive prefetches, pinned nodes, and
+admission rejections.
+Take `performance_snapshot()` before and after a metadata-only operation and
+use `delta_since` plus `metadata_download_amplification()` to include commit,
+index, and control-object response bytes in the measured amplification.
+
+## OpenTelemetry
+
+Enable the `opentelemetry` feature and supply the application-owned meter. The
+client records deltas on a bounded maintenance interval; the embedding service
+continues to own the SDK, exporter, resource attributes, and shutdown:
+
+```rust
+use std::{sync::Arc, time::Duration};
+use opentelemetry::global;
+use prolly_s3_client::{Client, OpenTelemetryClientMetrics};
+
+let telemetry = OpenTelemetryClientMetrics::new(global::meter("prolly-s3"));
+let client = Client::builder()
+    // supply the remaining required settings
+    .telemetry(telemetry, Duration::from_secs(15))
+    .open()
+    .await?;
+```
+
+Metric names and initial alert thresholds are defined in
+[`GA-CONTRACT.md`](../GA-CONTRACT.md).
 
 ## Performance model
 

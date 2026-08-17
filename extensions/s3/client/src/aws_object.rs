@@ -49,6 +49,26 @@ impl S3OperationMetrics {
             + self.delete_object
             + self.delete_objects
     }
+
+    pub fn delta_since(self, earlier: Self) -> Self {
+        Self {
+            get_object: self.get_object.saturating_sub(earlier.get_object),
+            head_object: self.head_object.saturating_sub(earlier.head_object),
+            put_object: self.put_object.saturating_sub(earlier.put_object),
+            list_objects_v2: self.list_objects_v2.saturating_sub(earlier.list_objects_v2),
+            list_object_versions: self
+                .list_object_versions
+                .saturating_sub(earlier.list_object_versions),
+            delete_object: self.delete_object.saturating_sub(earlier.delete_object),
+            delete_objects: self.delete_objects.saturating_sub(earlier.delete_objects),
+            uploaded_body_bytes: self
+                .uploaded_body_bytes
+                .saturating_sub(earlier.uploaded_body_bytes),
+            downloaded_body_bytes: self
+                .downloaded_body_bytes
+                .saturating_sub(earlier.downloaded_body_bytes),
+        }
+    }
 }
 
 #[derive(Default)]

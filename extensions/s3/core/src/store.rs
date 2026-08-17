@@ -1,12 +1,12 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex, RwLock, Weak,
     },
 };
 
-use futures_util::StreamExt;
+use futures_util::{stream, StreamExt};
 use prolly::{AsyncStore, BatchOp, Cid};
 
 use crate::{
@@ -48,6 +48,13 @@ struct PackedNodeState {
     fetched_bytes: AtomicU64,
     avoided_bytes: AtomicU64,
     admission_rejections: AtomicU64,
+    node_requests: AtomicU64,
+    requested_bytes: AtomicU64,
+    prefetch_batches: AtomicU64,
+    prefetched_nodes: AtomicU64,
+    pinned: Mutex<BTreeSet<Cid>>,
+    pinned_bytes: AtomicU64,
+    max_tracked_pins: usize,
     locator: RwLock<Option<Arc<dyn NodeLocator>>>,
 }
 
@@ -65,6 +72,13 @@ struct DirectNodeState {
     fetched_bytes: AtomicU64,
     avoided_bytes: AtomicU64,
     admission_rejections: AtomicU64,
+    node_requests: AtomicU64,
+    requested_bytes: AtomicU64,
+    prefetch_batches: AtomicU64,
+    prefetched_nodes: AtomicU64,
+    pinned: Mutex<BTreeSet<Cid>>,
+    pinned_bytes: AtomicU64,
+    max_tracked_pins: usize,
 }
 
 struct BoundedNodeLocations {
@@ -144,6 +158,17 @@ pub struct NodeCacheSnapshot {
     pub fetched_bytes: u64,
     pub avoided_bytes: u64,
     pub admission_rejections: u64,
+    /// Number of immutable node values returned to tree engines.
+    pub node_requests: u64,
+    /// Canonical node bytes requested by tree engines, independent of tier.
+    pub requested_bytes: u64,
+    /// Predictive multi-node prefetch batches issued by tree traversal.
+    pub prefetch_batches: u64,
+    /// Nodes requested by predictive prefetch batches.
+    pub prefetched_nodes: u64,
+    /// Upper-level nodes retained in the advisory pinned tier.
+    pub pinned_nodes: u64,
+    pub pinned_bytes: u64,
 }
 
 impl NodeCacheSnapshot {
@@ -161,6 +186,60 @@ impl NodeCacheSnapshot {
             admission_rejections: self
                 .admission_rejections
                 .saturating_add(other.admission_rejections),
+            node_requests: self.node_requests.saturating_add(other.node_requests),
+            requested_bytes: self.requested_bytes.saturating_add(other.requested_bytes),
+            prefetch_batches: self.prefetch_batches.saturating_add(other.prefetch_batches),
+            prefetched_nodes: self.prefetched_nodes.saturating_add(other.prefetched_nodes),
+            pinned_nodes: self.pinned_nodes.saturating_add(other.pinned_nodes),
+            pinned_bytes: self.pinned_bytes.saturating_add(other.pinned_bytes),
+        }
+    }
+
+    /// Saturating interval metrics suitable for request and startup reports.
+    pub fn delta_since(self, earlier: Self) -> Self {
+        Self {
+            hits: self.hits.saturating_sub(earlier.hits),
+            misses: self.misses.saturating_sub(earlier.misses),
+            insertions: self.insertions.saturating_sub(earlier.insertions),
+            errors: self.errors.saturating_sub(earlier.errors),
+            corruptions: self.corruptions.saturating_sub(earlier.corruptions),
+            coalesced_waits: self.coalesced_waits.saturating_sub(earlier.coalesced_waits),
+            ranged_fetches: self.ranged_fetches.saturating_sub(earlier.ranged_fetches),
+            fetched_bytes: self.fetched_bytes.saturating_sub(earlier.fetched_bytes),
+            avoided_bytes: self.avoided_bytes.saturating_sub(earlier.avoided_bytes),
+            admission_rejections: self
+                .admission_rejections
+                .saturating_sub(earlier.admission_rejections),
+            node_requests: self.node_requests.saturating_sub(earlier.node_requests),
+            requested_bytes: self.requested_bytes.saturating_sub(earlier.requested_bytes),
+            prefetch_batches: self
+                .prefetch_batches
+                .saturating_sub(earlier.prefetch_batches),
+            prefetched_nodes: self
+                .prefetched_nodes
+                .saturating_sub(earlier.prefetched_nodes),
+            pinned_nodes: self.pinned_nodes.saturating_sub(earlier.pinned_nodes),
+            pinned_bytes: self.pinned_bytes.saturating_sub(earlier.pinned_bytes),
+        }
+    }
+
+    pub fn hit_ratio(self) -> f64 {
+        let lookups = self.hits.saturating_add(self.misses);
+        if lookups == 0 {
+            0.0
+        } else {
+            self.hits as f64 / lookups as f64
+        }
+    }
+
+    /// Provider node-body bytes fetched per canonical node byte returned.
+    /// Values below one indicate cache reuse. Client adapters combine this
+    /// with all provider response bytes for end-to-end metadata amplification.
+    pub fn byte_amplification(self) -> f64 {
+        if self.requested_bytes == 0 {
+            0.0
+        } else {
+            self.fetched_bytes as f64 / self.requested_bytes as f64
         }
     }
 }
@@ -291,6 +370,13 @@ impl<P> ProllyObjectStore<P> {
                 fetched_bytes: AtomicU64::new(0),
                 avoided_bytes: AtomicU64::new(0),
                 admission_rejections: AtomicU64::new(0),
+                node_requests: AtomicU64::new(0),
+                requested_bytes: AtomicU64::new(0),
+                prefetch_batches: AtomicU64::new(0),
+                prefetched_nodes: AtomicU64::new(0),
+                pinned: Mutex::new(BTreeSet::new()),
+                pinned_bytes: AtomicU64::new(0),
+                max_tracked_pins: max_cached_locations,
                 locator: RwLock::new(None),
             })),
             packed_pending: Some(Arc::new(RwLock::new(BTreeMap::new()))),
@@ -328,6 +414,13 @@ impl<P> ProllyObjectStore<P> {
                 fetched_bytes: AtomicU64::new(0),
                 avoided_bytes: AtomicU64::new(0),
                 admission_rejections: AtomicU64::new(0),
+                node_requests: AtomicU64::new(0),
+                requested_bytes: AtomicU64::new(0),
+                prefetch_batches: AtomicU64::new(0),
+                prefetched_nodes: AtomicU64::new(0),
+                pinned: Mutex::new(BTreeSet::new()),
+                pinned_bytes: AtomicU64::new(0),
+                max_tracked_pins: 65_536,
             })),
             write_direct: true,
         }
@@ -415,6 +508,23 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
 
     pub fn node_cache_snapshot(&self) -> NodeCacheSnapshot {
         if let Some(state) = &self.packed {
+            let exact_pinned = state
+                .node_cache
+                .as_ref()
+                .and_then(|cache| cache.pinned_usage());
+            let (pinned_nodes, pinned_bytes) = exact_pinned.map_or_else(
+                || {
+                    (
+                        state
+                            .pinned
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .len() as u64,
+                        state.pinned_bytes.load(Ordering::Relaxed),
+                    )
+                },
+                |(nodes, bytes)| (nodes as u64, bytes as u64),
+            );
             return NodeCacheSnapshot {
                 hits: state.cache_hits.load(Ordering::Relaxed),
                 misses: state.cache_misses.load(Ordering::Relaxed),
@@ -426,6 +536,12 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 fetched_bytes: state.fetched_bytes.load(Ordering::Relaxed),
                 avoided_bytes: state.avoided_bytes.load(Ordering::Relaxed),
                 admission_rejections: state.admission_rejections.load(Ordering::Relaxed),
+                node_requests: state.node_requests.load(Ordering::Relaxed),
+                requested_bytes: state.requested_bytes.load(Ordering::Relaxed),
+                prefetch_batches: state.prefetch_batches.load(Ordering::Relaxed),
+                prefetched_nodes: state.prefetched_nodes.load(Ordering::Relaxed),
+                pinned_nodes,
+                pinned_bytes,
             };
         }
         if let Some(state) = &self.direct {
@@ -440,6 +556,16 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                 fetched_bytes: state.fetched_bytes.load(Ordering::Relaxed),
                 avoided_bytes: state.avoided_bytes.load(Ordering::Relaxed),
                 admission_rejections: state.admission_rejections.load(Ordering::Relaxed),
+                node_requests: state.node_requests.load(Ordering::Relaxed),
+                requested_bytes: state.requested_bytes.load(Ordering::Relaxed),
+                prefetch_batches: state.prefetch_batches.load(Ordering::Relaxed),
+                prefetched_nodes: state.prefetched_nodes.load(Ordering::Relaxed),
+                pinned_nodes: state
+                    .pinned
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .len() as u64,
+                pinned_bytes: state.pinned_bytes.load(Ordering::Relaxed),
             };
         }
         NodeCacheSnapshot::default()
@@ -1043,16 +1169,115 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         }
         Ok(Some(object.bytes))
     }
+
+    fn record_returned_node(&self, bytes: usize) {
+        let bytes = bytes as u64;
+        if let Some(state) = &self.packed {
+            state.node_requests.fetch_add(1, Ordering::Relaxed);
+            state.requested_bytes.fetch_add(bytes, Ordering::Relaxed);
+        } else if let Some(state) = &self.direct {
+            state.node_requests.fetch_add(1, Ordering::Relaxed);
+            state.requested_bytes.fetch_add(bytes, Ordering::Relaxed);
+        }
+    }
+
+    fn record_prefetch(&self, nodes: usize) {
+        let Some(nodes) = u64::try_from(nodes).ok() else {
+            return;
+        };
+        if let Some(state) = &self.packed {
+            state.prefetch_batches.fetch_add(1, Ordering::Relaxed);
+            state.prefetched_nodes.fetch_add(nodes, Ordering::Relaxed);
+        } else if let Some(state) = &self.direct {
+            state.prefetch_batches.fetch_add(1, Ordering::Relaxed);
+            state.prefetched_nodes.fetch_add(nodes, Ordering::Relaxed);
+        }
+    }
+
+    /// Promote a verified root or upper-level node into the cache's advisory
+    /// pinned tier. The provider remains authoritative if the tier is lost.
+    pub(crate) async fn pin_node(&self, cid: Cid, bytes: Vec<u8>) -> Result<()> {
+        if sha256(&bytes).as_slice() != cid.as_bytes() {
+            return Err(Error::new(
+                ErrorCode::CorruptNode,
+                "cannot pin a node that fails CID verification",
+            ));
+        }
+        let (cache, key) = if let Some(state) = &self.packed {
+            let Some(cache) = state.node_cache.as_ref() else {
+                return Ok(());
+            };
+            let Some(key) = self.node_cache_key(cid.clone()) else {
+                return Ok(());
+            };
+            (cache.clone(), key)
+        } else if let Some(state) = &self.direct {
+            let Some(key) = self.direct_cache_key(cid.clone()) else {
+                return Ok(());
+            };
+            (state.node_cache.clone(), key)
+        } else {
+            return Ok(());
+        };
+        if !cache.admits(&key, bytes.len()) {
+            if let Some(state) = &self.packed {
+                state.admission_rejections.fetch_add(1, Ordering::Relaxed);
+            } else if let Some(state) = &self.direct {
+                state.admission_rejections.fetch_add(1, Ordering::Relaxed);
+            }
+            return Ok(());
+        }
+        if cache.pin(key, bytes.clone()).await.is_err() {
+            if let Some(state) = &self.packed {
+                state.cache_errors.fetch_add(1, Ordering::Relaxed);
+            } else if let Some(state) = &self.direct {
+                state.cache_errors.fetch_add(1, Ordering::Relaxed);
+            }
+            return Ok(());
+        }
+        let (pinned, pinned_bytes, max_tracked_pins, exact_usage) =
+            if let Some(state) = &self.packed {
+                (
+                    &state.pinned,
+                    &state.pinned_bytes,
+                    state.max_tracked_pins,
+                    cache.pinned_usage().is_some(),
+                )
+            } else {
+                let state = self.direct.as_ref().expect("direct state selected above");
+                (
+                    &state.pinned,
+                    &state.pinned_bytes,
+                    state.max_tracked_pins,
+                    false,
+                )
+            };
+        if exact_usage {
+            return Ok(());
+        }
+        let mut pinned = pinned
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !pinned.contains(&cid) && pinned.len() < max_tracked_pins && pinned.insert(cid) {
+            pinned_bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
+        }
+        Ok(())
+    }
 }
 
 impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
     type Error = Error;
 
     async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>> {
-        if self.packed.is_some() {
-            return self.get_packed(key).await;
+        let value = if self.packed.is_some() {
+            self.get_packed(key).await?
+        } else {
+            self.get_direct(key).await?
+        };
+        if let Some(bytes) = &value {
+            self.record_returned_node(bytes.len());
         }
-        self.get_direct(key).await
+        Ok(value)
     }
 
     async fn put(&self, key: &[u8], value: &[u8]) -> Result<()> {
@@ -1155,5 +1380,25 @@ impl<P: ObjectPlane> AsyncStore for ProllyObjectStore<P> {
 
     fn read_parallelism(&self) -> usize {
         16
+    }
+
+    fn prefers_batch_reads(&self) -> bool {
+        true
+    }
+
+    async fn batch_get_ordered_unique(&self, keys: &[&[u8]]) -> Result<Vec<Option<Vec<u8>>>> {
+        if keys.len() > 1 {
+            self.record_prefetch(keys.len());
+        }
+        let keys = keys.iter().map(|key| key.to_vec()).collect::<Vec<_>>();
+        stream::iter(
+            keys.into_iter()
+                .map(|key| async move { self.get(&key).await }),
+        )
+        .buffered(self.read_parallelism())
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect()
     }
 }

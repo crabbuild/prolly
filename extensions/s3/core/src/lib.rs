@@ -57,8 +57,8 @@ pub use operation_index::{
 };
 pub use payload::ImmutablePayloadStore;
 pub use prolly::{
-    BoundaryInput, BoundaryRule, ChunkMeasure, ChunkingSpec, Cid, HashAlgorithm, NodeLayoutSpec,
-    TreeFormat,
+    BoundaryInput, BoundaryRule, ChunkMeasure, ChunkingSpec, Cid, Encoding, HashAlgorithm,
+    NodeLayoutSpec, TreeFormat,
 };
 pub use publication::{
     AppliedBranchBarrier, CommitPublication, LoadedRef, PublicationJournalCursor,
@@ -76,8 +76,8 @@ pub use repository::{
     FsckCleanupPhase, FsckCursor, FsckPage, FsckPhase, FsckReport, HistoryCursor, ListObjectsPage,
     NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor, ObjectDiffPage,
     ObjectRangeData, ObjectSummary, RefCatalogRepairPage, RefMoveReceipt, RepairCursor, RepairPage,
-    RepairPhase, RepairReport, Repository, RepositoryOptions, RestoreCursor, RestorePage,
-    RetentionPin, RetentionPinPage, ShardAuthorityMaintenance, Tag, TagCatalogPage,
+    RepairPhase, RepairReport, Repository, RepositoryOptions, ResolvedSnapshot, RestoreCursor,
+    RestorePage, RetentionPin, RetentionPinPage, ShardAuthorityMaintenance, Tag, TagCatalogPage,
     TraversalBudget, VersionSummary,
 };
 pub use runtime::*;

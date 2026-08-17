@@ -674,6 +674,17 @@ pub struct JournalCommitGraphEntry {
     pub generation: CommitGeneration,
     pub parents: Vec<CommitId>,
     pub first_parent_jumps: Vec<CommitId>,
+    /// Snapshot roots and exact logical delta resolved while the publication
+    /// is indexed. Older index entries omit this field and fall back to the
+    /// immutable commit envelope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot: Option<JournalSnapshotMetadata>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalSnapshotMetadata {
+    pub state: BucketState,
+    pub delta: BucketDelta,
 }
 
 /// One atomic checkpoint for all branch-local journal-derived indexes.

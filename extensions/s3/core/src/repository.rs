@@ -5,7 +5,7 @@ use std::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex, OnceLock, RwLock, Weak,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use futures_util::{stream, StreamExt};
@@ -149,6 +149,15 @@ struct ListObjectsCursor {
     snapshot: CommitId,
     prefix: Vec<u8>,
     traversal: prolly::RangeCursor,
+}
+
+struct PutObjectRequest {
+    key: Vec<u8>,
+    bytes: Vec<u8>,
+    headers: ObjectHeaders,
+    user_metadata: BTreeMap<String, String>,
+    operation: OperationId,
+    reconcile_before_publication: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -504,8 +513,25 @@ pub struct NodeCachePrewarmReport {
     pub snapshot: CommitId,
     pub object_nodes: usize,
     pub version_nodes: usize,
+    pub pinned_nodes: usize,
+    pub elapsed_millis: u64,
     pub before: crate::NodeCacheSnapshot,
     pub after: crate::NodeCacheSnapshot,
+}
+
+/// Branch-indexed immutable snapshot roots used by listing, diff, and merge
+/// planning without downloading the containing commit's node-pack body.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedSnapshot {
+    pub repository: crate::RepositoryId,
+    pub branch: String,
+    pub commit: CommitId,
+    pub generation: CommitGeneration,
+    pub parents: Vec<CommitId>,
+    pub state: BucketState,
+    pub delta: BucketDelta,
+    /// True when the branch-local journal index supplied the roots directly.
+    pub indexed: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -860,6 +886,26 @@ pub struct Repository<P: ObjectPlane> {
 }
 
 impl<P: ObjectPlane> Repository<P> {
+    /// Load and decode the create-once repository format marker without
+    /// acquiring writer authority. Clients use this to discover persisted
+    /// tree geometry before opening an existing repository.
+    pub async fn load_format(plane: Arc<P>, repository_prefix: &str) -> Result<RepositoryFormat> {
+        let stored = plane
+            .get(GetRequest {
+                path: format_path(repository_prefix)?,
+                range: None,
+                physical_version: None,
+            })
+            .await?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::RepositoryNotInitialized,
+                    "repository format marker does not exist",
+                )
+            })?;
+        decode_canonical(&stored.bytes)
+    }
+
     pub async fn initialize(plane: Arc<P>, options: RepositoryOptions) -> Result<Self> {
         validate_options(&options)?;
         if options.read_only {
@@ -992,20 +1038,7 @@ impl<P: ObjectPlane> Repository<P> {
 
     pub async fn open(plane: Arc<P>, options: RepositoryOptions) -> Result<Self> {
         validate_options(&options)?;
-        let stored = plane
-            .get(GetRequest {
-                path: format_path(&options.repository_prefix)?,
-                range: None,
-                physical_version: None,
-            })
-            .await?
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::RepositoryNotInitialized,
-                    "repository format marker does not exist",
-                )
-            })?;
-        let format: RepositoryFormat = decode_canonical(&stored.bytes)?;
+        let format = Self::load_format(plane.clone(), &options.repository_prefix).await?;
         validate_format_compatibility(&format, &options)?;
         let repository = Self::from_format(plane, options, format)?;
         repository.restore_gc_state().await?;
@@ -1207,11 +1240,12 @@ impl<P: ObjectPlane> Repository<P> {
         branch: &str,
         snapshot: CommitId,
     ) -> Result<NodeCachePrewarmReport> {
+        let started = Instant::now();
         validate_branch(branch)?;
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
         let before = self.node_store.node_cache_snapshot();
-        let commit = self.load_commit_object(snapshot).await?.commit;
+        let commit = self.resolve_snapshot(branch, snapshot).await?;
         let engine = self.engine(self.node_store.clone());
         let object_stats = engine
             .collect_stats(&self.tree_from_root(&commit.state.objects)?)
@@ -1223,6 +1257,8 @@ impl<P: ObjectPlane> Repository<P> {
             snapshot,
             object_nodes: object_stats.num_nodes,
             version_nodes: version_stats.num_nodes,
+            pinned_nodes: 0,
+            elapsed_millis: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
             before,
             after: self.node_store.node_cache_snapshot(),
         })
@@ -1237,6 +1273,7 @@ impl<P: ObjectPlane> Repository<P> {
         snapshot: CommitId,
         levels: usize,
     ) -> Result<NodeCachePrewarmReport> {
+        let started = Instant::now();
         if !(1..=64).contains(&levels) {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
@@ -1247,19 +1284,26 @@ impl<P: ObjectPlane> Repository<P> {
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
         let before = self.node_store.node_cache_snapshot();
-        let commit = self.load_commit_object(snapshot).await?.commit;
+        let commit = self.resolve_snapshot(branch, snapshot).await?;
         let object_nodes = self
             .prewarm_root_levels(&commit.state.objects, levels)
             .await?;
         let version_nodes = self
             .prewarm_root_levels(&commit.state.versions, levels)
             .await?;
+        let after = self.node_store.node_cache_snapshot();
         Ok(NodeCachePrewarmReport {
             snapshot,
             object_nodes,
             version_nodes,
+            // Pinning is deliberately best effort. Report only nodes the
+            // configured cache actually retained, not merely nodes visited
+            // during the upper-level traversal.
+            pinned_nodes: usize::try_from(after.pinned_nodes.saturating_sub(before.pinned_nodes))
+                .unwrap_or(usize::MAX),
+            elapsed_millis: started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
             before,
-            after: self.node_store.node_cache_snapshot(),
+            after,
         })
     }
 
@@ -1283,14 +1327,15 @@ impl<P: ObjectPlane> Repository<P> {
                             format!("prewarm node could not be decoded: {error}"),
                         )
                     })?;
-                Ok::<_, Error>(node)
+                Ok::<_, Error>((cid, bytes, node))
             }))
             .buffered(32)
             .collect::<Vec<_>>()
             .await;
             let mut next = Vec::new();
             for node in loaded {
-                let node = node?;
+                let (cid, bytes, node) = node?;
+                self.node_store.pin_node(cid, bytes).await?;
                 loaded_nodes = loaded_nodes.saturating_add(1);
                 if !node.leaf {
                     for child in node.vals {
@@ -1311,6 +1356,48 @@ impl<P: ObjectPlane> Repository<P> {
     pub async fn head(&self, branch: &str) -> Result<CommitId> {
         self.locator.register(branch)?;
         Ok(self.publisher.load(branch).await?.value.target)
+    }
+
+    /// Resolve immutable state roots from the branch-local journal index.
+    /// Legacy index entries fall back to the bounded commit-metadata range
+    /// read and remain fully compatible.
+    pub async fn resolve_snapshot(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+    ) -> Result<ResolvedSnapshot> {
+        validate_branch(branch)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        if let Some(entry) = self
+            .journal_indexes
+            .commit_graph_entry(branch, snapshot)
+            .await?
+        {
+            if let Some(indexed) = entry.snapshot {
+                return Ok(ResolvedSnapshot {
+                    repository: self.format.repository_id,
+                    branch: branch.to_string(),
+                    commit: snapshot,
+                    generation: entry.generation,
+                    parents: entry.parents,
+                    state: indexed.state,
+                    delta: indexed.delta,
+                    indexed: true,
+                });
+            }
+        }
+        let commit = self.load_commit_metadata(snapshot).await?;
+        Ok(ResolvedSnapshot {
+            repository: self.format.repository_id,
+            branch: branch.to_string(),
+            commit: snapshot,
+            generation: commit.generation,
+            parents: commit.parents.clone(),
+            state: commit.state.clone(),
+            delta: commit.delta.clone(),
+            indexed: false,
+        })
     }
 
     pub async fn create_branch(&self, name: &str, from: CommitId) -> Result<BranchHead> {
@@ -2419,8 +2506,18 @@ impl<P: ObjectPlane> Repository<P> {
         // retry of an earlier publication. Avoid walking the unindexed journal
         // to prove absence on every hot-branch write; caller-stable operation
         // IDs still take the full reconciliation path below.
-        self.put_object_inner(branch, key, bytes, headers, user_metadata, operation, false)
-            .await
+        self.put_object_inner(
+            branch,
+            PutObjectRequest {
+                key,
+                bytes,
+                headers,
+                user_metadata,
+                operation,
+                reconcile_before_publication: false,
+            },
+        )
+        .await
     }
 
     async fn validate_commit_session(&self, session: &CommitSessionManifest) -> Result<()> {
@@ -2499,20 +2596,33 @@ impl<P: ObjectPlane> Repository<P> {
         user_metadata: BTreeMap<String, String>,
         operation: OperationId,
     ) -> Result<CommitReceipt> {
-        self.put_object_inner(branch, key, bytes, headers, user_metadata, operation, true)
-            .await
+        self.put_object_inner(
+            branch,
+            PutObjectRequest {
+                key,
+                bytes,
+                headers,
+                user_metadata,
+                operation,
+                reconcile_before_publication: true,
+            },
+        )
+        .await
     }
 
     async fn put_object_inner(
         &self,
         branch: &str,
-        key: Vec<u8>,
-        bytes: Vec<u8>,
-        headers: ObjectHeaders,
-        user_metadata: BTreeMap<String, String>,
-        operation: OperationId,
-        reconcile_before_publication: bool,
+        request: PutObjectRequest,
     ) -> Result<CommitReceipt> {
+        let PutObjectRequest {
+            key,
+            bytes,
+            headers,
+            user_metadata,
+            operation,
+            reconcile_before_publication,
+        } = request;
         if !self.writable.load(Ordering::Acquire) {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
@@ -3187,7 +3297,7 @@ impl<P: ObjectPlane> Repository<P> {
         };
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
-        let commit = self.load_commit_metadata(cursor.snapshot).await?;
+        let commit = self.resolve_snapshot(branch, cursor.snapshot).await?;
         let objects = self.tree_from_root(&commit.state.objects)?;
         let engine = self.engine(self.node_store.clone());
         let mut page = engine
@@ -5193,8 +5303,8 @@ impl<P: ObjectPlane> Repository<P> {
         validate_branch(branch)?;
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
-        let from_commit = self.load_commit_metadata(from).await?;
-        let to_commit = self.load_commit_metadata(to).await?;
+        let from_commit = self.resolve_snapshot(branch, from).await?;
+        let to_commit = self.resolve_snapshot(branch, to).await?;
         if to_commit.parents.first() == Some(&from) && to_commit.delta.changes_root.is_none() {
             return to_commit
                 .delta
@@ -5244,8 +5354,8 @@ impl<P: ObjectPlane> Repository<P> {
         }
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
-        let from_commit = self.load_commit_metadata(from).await?;
-        let to_commit = self.load_commit_metadata(to).await?;
+        let from_commit = self.resolve_snapshot(branch, from).await?;
+        let to_commit = self.resolve_snapshot(branch, to).await?;
         // Direct children carry an exact logical transition stream, inline or
         // in an immutable delta tree. Page that stream instead of comparing
         // snapshot structure; tree boundary churn is irrelevant to this path.
@@ -5260,8 +5370,9 @@ impl<P: ObjectPlane> Repository<P> {
                 None => None,
                 Some(ObjectDiffTraversal::Structural(_)) => unreachable!("excluded above"),
             };
-            let (transitions, next_after) =
-                self.commit_delta_page(&to_commit, after, limit).await?;
+            let (transitions, next_after) = self
+                .commit_delta_page(&to_commit.delta, after, limit)
+                .await?;
             let changes = transitions
                 .iter()
                 .map(object_diff_from_transition)
@@ -5939,8 +6050,10 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         let permit = self.active_permit(&cursor.target_branch, now).await?;
-        let ours = self.load_commit_metadata(cursor.ours).await?;
-        let theirs = self.load_commit_metadata(cursor.theirs).await?;
+        let (ours, theirs) = futures_util::try_join!(
+            self.merge_graph_entry(&cursor.target_branch, &cursor.source_branch, cursor.ours,),
+            self.merge_graph_entry(&cursor.target_branch, &cursor.source_branch, cursor.theirs,),
+        )?;
         let generation = CommitGeneration(
             ours.generation
                 .0
@@ -8705,6 +8818,49 @@ impl<P: ObjectPlane> Repository<P> {
             generation: commit_object.generation,
             parents: commit_object.parents.clone(),
             first_parent_jumps: Vec::new(),
+            snapshot: Some(crate::JournalSnapshotMetadata {
+                state: commit_object.state.clone(),
+                delta: commit_object.delta.clone(),
+            }),
+        })
+    }
+
+    async fn resolve_merge_snapshot(
+        &self,
+        target_branch: &str,
+        source_branch: &str,
+        commit: CommitId,
+    ) -> Result<ResolvedSnapshot> {
+        for branch in [target_branch, source_branch] {
+            if let Some(entry) = self
+                .journal_indexes
+                .commit_graph_entry(branch, commit)
+                .await?
+            {
+                if let Some(snapshot) = entry.snapshot {
+                    return Ok(ResolvedSnapshot {
+                        repository: self.format.repository_id,
+                        branch: branch.to_string(),
+                        commit,
+                        generation: entry.generation,
+                        parents: entry.parents,
+                        state: snapshot.state,
+                        delta: snapshot.delta,
+                        indexed: true,
+                    });
+                }
+            }
+        }
+        let commit_object = self.load_commit_metadata(commit).await?;
+        Ok(ResolvedSnapshot {
+            repository: self.format.repository_id,
+            branch: target_branch.to_string(),
+            commit,
+            generation: commit_object.generation,
+            parents: commit_object.parents.clone(),
+            state: commit_object.state.clone(),
+            delta: commit_object.delta.clone(),
+            indexed: false,
         })
     }
 
@@ -8958,9 +9114,15 @@ impl<P: ObjectPlane> Repository<P> {
                 "merge plan has no selected base",
             )
         })?;
-        let base_commit = self.load_commit_metadata(base).await?;
-        let ours_commit = self.load_commit_metadata(cursor.ours).await?;
-        let theirs_commit = self.load_commit_metadata(cursor.theirs).await?;
+        let (base_commit, ours_commit, theirs_commit) = futures_util::try_join!(
+            self.resolve_merge_snapshot(&cursor.target_branch, &cursor.source_branch, base),
+            self.resolve_merge_snapshot(&cursor.target_branch, &cursor.source_branch, cursor.ours,),
+            self.resolve_merge_snapshot(
+                &cursor.target_branch,
+                &cursor.source_branch,
+                cursor.theirs,
+            ),
+        )?;
         let base_tree = self.tree_from_root(&base_commit.state.objects)?;
         let ours_tree = self.tree_from_root(&ours_commit.state.objects)?;
         let theirs_tree = self.tree_from_root(&theirs_commit.state.objects)?;
@@ -9209,8 +9371,8 @@ impl<P: ObjectPlane> Repository<P> {
     async fn direct_parent_diffs(
         &self,
         parent: CommitId,
-        parent_commit: &BucketCommit,
-        child_commit: &BucketCommit,
+        parent_commit: &ResolvedSnapshot,
+        child_commit: &ResolvedSnapshot,
     ) -> Result<Option<Vec<Diff>>> {
         if child_commit.parents.first() != Some(&parent)
             || child_commit.delta.changes_root.is_some()
@@ -9279,12 +9441,14 @@ impl<P: ObjectPlane> Repository<P> {
 
     async fn direct_parent_diff_page(
         &self,
-        parent_commit: &BucketCommit,
-        child_commit: &BucketCommit,
+        parent_commit: &ResolvedSnapshot,
+        child_commit: &ResolvedSnapshot,
         after: Option<&[u8]>,
         limit: usize,
     ) -> Result<(Vec<Diff>, Option<Vec<u8>>)> {
-        let (transitions, next_after) = self.commit_delta_page(child_commit, after, limit).await?;
+        let (transitions, next_after) = self
+            .commit_delta_page(&child_commit.delta, after, limit)
+            .await?;
         if transitions.is_empty() {
             return Ok((Vec::new(), next_after));
         }
@@ -9340,11 +9504,11 @@ impl<P: ObjectPlane> Repository<P> {
 
     async fn commit_delta_page(
         &self,
-        commit: &BucketCommit,
+        delta: &BucketDelta,
         after: Option<&[u8]>,
         limit: usize,
     ) -> Result<(Vec<ObjectTransition>, Option<Vec<u8>>)> {
-        if let Some(root) = &commit.delta.changes_root {
+        if let Some(root) = &delta.changes_root {
             let tree = self.tree_from_root(root)?;
             let engine = self.engine(self.node_store.clone());
             let mut entries = match after {
@@ -9381,14 +9545,13 @@ impl<P: ObjectPlane> Repository<P> {
         }
 
         let start = after.map_or(0, |after| {
-            commit
-                .delta
+            delta
                 .changes
                 .partition_point(|transition| transition.key.as_slice() <= after)
         });
-        let end = start.saturating_add(limit).min(commit.delta.changes.len());
-        let transitions = commit.delta.changes[start..end].to_vec();
-        let next = (end < commit.delta.changes.len()).then(|| {
+        let end = start.saturating_add(limit).min(delta.changes.len());
+        let transitions = delta.changes[start..end].to_vec();
+        let next = (end < delta.changes.len()).then(|| {
             transitions
                 .last()
                 .expect("a truncated inline delta page has a last transition")
@@ -9403,8 +9566,14 @@ impl<P: ObjectPlane> Repository<P> {
         cursor: &mut MergeCursor,
         max_steps: usize,
     ) -> Result<usize> {
-        let ours_commit = self.load_commit_metadata(cursor.ours).await?;
-        let theirs_commit = self.load_commit_metadata(cursor.theirs).await?;
+        let (ours_commit, theirs_commit) = futures_util::try_join!(
+            self.resolve_merge_snapshot(&cursor.target_branch, &cursor.source_branch, cursor.ours,),
+            self.resolve_merge_snapshot(
+                &cursor.target_branch,
+                &cursor.source_branch,
+                cursor.theirs,
+            ),
+        )?;
         let base = cursor.selected_base.ok_or_else(|| {
             Error::new(
                 ErrorCode::InternalInvariant,
@@ -9505,11 +9674,13 @@ impl<P: ObjectPlane> Repository<P> {
     /// structural union fallback.
     async fn direct_child_version_mutations_page(
         &self,
-        child_commit: &BucketCommit,
+        child_commit: &ResolvedSnapshot,
         after: Option<&[u8]>,
         limit: usize,
     ) -> Result<(Vec<Mutation>, Option<Vec<u8>>)> {
-        let (transitions, next_after) = self.commit_delta_page(child_commit, after, limit).await?;
+        let (transitions, next_after) = self
+            .commit_delta_page(&child_commit.delta, after, limit)
+            .await?;
         let keys = transitions
             .iter()
             .map(|transition| transition.key.as_slice())
@@ -9553,7 +9724,7 @@ impl<P: ObjectPlane> Repository<P> {
         Ok((mutations, next_after))
     }
 
-    async fn commit_delta_contains_delete(&self, commit: &BucketCommit) -> Result<bool> {
+    async fn commit_delta_contains_delete(&self, commit: &ResolvedSnapshot) -> Result<bool> {
         if commit.delta.changes_root.is_none() {
             return Ok(commit
                 .delta
@@ -9564,7 +9735,7 @@ impl<P: ObjectPlane> Repository<P> {
         let mut after = None;
         loop {
             let (page, next) = self
-                .commit_delta_page(commit, after.as_deref(), 1_000)
+                .commit_delta_page(&commit.delta, after.as_deref(), 1_000)
                 .await?;
             if page.iter().any(|transition| transition.delete_marker) {
                 return Ok(true);
@@ -9623,8 +9794,10 @@ impl<P: ObjectPlane> Repository<P> {
             cursor.phase = MergePhase::ReadyToPublish;
             return Ok(0);
         }
-        let ours = self.load_commit_metadata(cursor.ours).await?;
-        let theirs = self.load_commit_metadata(cursor.theirs).await?;
+        let (ours, theirs) = futures_util::try_join!(
+            self.merge_graph_entry(&cursor.target_branch, &cursor.source_branch, cursor.ours,),
+            self.merge_graph_entry(&cursor.target_branch, &cursor.source_branch, cursor.theirs,),
+        )?;
         let generation = CommitGeneration(
             ours.generation
                 .0
@@ -9802,7 +9975,9 @@ impl<P: ObjectPlane> Repository<P> {
             ));
         }
         if cursor.selected_base == Some(cursor.ours) {
-            let theirs = self.load_commit_metadata(cursor.theirs).await?;
+            let theirs = self
+                .resolve_merge_snapshot(&cursor.target_branch, &cursor.source_branch, cursor.theirs)
+                .await?;
             if theirs.parents.first() == Some(&cursor.ours)
                 && theirs.delta.changes_root.is_some()
                 && cursor.built_changes == cursor.planned_changes
@@ -9821,7 +9996,7 @@ impl<P: ObjectPlane> Repository<P> {
                     })
                     .transpose()?;
                 let (transitions, next_after) =
-                    self.commit_delta_page(&theirs, after, limit).await?;
+                    self.commit_delta_page(&theirs.delta, after, limit).await?;
                 let changes = transitions
                     .into_iter()
                     .map(|transition| MergeChange {
