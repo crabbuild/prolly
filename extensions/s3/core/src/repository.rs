@@ -7495,6 +7495,10 @@ impl<P: ObjectPlane> Repository<P> {
                     {
                         cursor.continuation = page.continuation;
                         cursor.journal_object_offset = 0;
+                        if cursor.continuation.is_none() {
+                            cursor.phase = GcPhase::ScanCandidates;
+                            cursor.candidate_namespace = GcCandidateNamespace::Commits;
+                        }
                         return Ok(batch.objects.len());
                     }
                     (batch.objects, None, Some(completed_paths))
@@ -7635,6 +7639,17 @@ impl<P: ObjectPlane> Repository<P> {
         if end == all_intents.len() {
             cursor.continuation = page.continuation;
             cursor.journal_object_offset = 0;
+            if cursor.continuation.is_none() {
+                match cursor.inventory_source {
+                    GcInventorySource::Completions => {
+                        cursor.inventory_source = GcInventorySource::Intents;
+                    }
+                    GcInventorySource::Intents => {
+                        cursor.phase = GcPhase::ScanCandidates;
+                        cursor.candidate_namespace = GcCandidateNamespace::Commits;
+                    }
+                }
+            }
         } else {
             cursor.journal_object_offset = end;
         }

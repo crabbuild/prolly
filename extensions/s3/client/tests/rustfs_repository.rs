@@ -1018,6 +1018,61 @@ async fn rustfs_streaming_bulk_write_is_bounded_batched_and_ordered() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn rustfs_journaled_gc_resolves_completed_batches_without_payload_heads() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("journaled-gc");
+    let client = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-journaled-gc-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .initialize()
+        .await
+        .unwrap();
+    let objects = stream::iter((0..64).map(|index| {
+        Ok(PutObjectInput {
+            key: format!("journal/{index:04}.txt"),
+            bytes: format!("value-{index}").into_bytes(),
+            headers: Default::default(),
+            user_metadata: Default::default(),
+        })
+    }));
+    client
+        .put_object_stream(
+            objects,
+            BulkWriteOptions {
+                batch_size: 32,
+                concurrency: 8,
+                checkpoint_every: 16,
+            },
+        )
+        .await
+        .unwrap();
+
+    client.reset_s3_operation_metrics();
+    let mut gc = client.start_gc_journaled(1).await.unwrap();
+    for _ in 0..1_000 {
+        gc = match gc.phase {
+            GcPhase::Ready | GcPhase::Sweeping => client.sweep_gc(&gc, 1_000).await.unwrap().cursor,
+            GcPhase::Complete => break,
+            _ => client.advance_gc(&gc, 1_000).await.unwrap().cursor,
+        };
+    }
+    assert_eq!(gc.phase, GcPhase::Complete);
+    assert_eq!(gc.report.journal_objects, 64);
+    assert!(gc.report.journal_batches >= 4);
+    let metrics = client.reset_s3_operation_metrics();
+    assert_eq!(metrics.head_object, 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn rustfs_ordered_publication_queue_groups_unique_keys_and_orders_duplicates() {
     if !rustfs_enabled() {
         eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
