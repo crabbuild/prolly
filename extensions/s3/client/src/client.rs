@@ -633,6 +633,15 @@ impl Client {
         self.repository.start_gc(grace_millis).await
     }
 
+    /// Start GC with payload candidates sourced from immutable ingest-window
+    /// journals. Payloads from legacy/direct writers remain retained; use
+    /// `start_gc` while migrating those writers.
+    pub async fn start_gc_journaled(&self, grace_millis: u64) -> Result<GcCursor> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.start_gc_journaled(grace_millis).await
+    }
+
     pub async fn resume_gc(&self) -> Result<Option<GcCursor>> {
         self.ensure_provider_qualified()?;
         self.attached_branch()?;

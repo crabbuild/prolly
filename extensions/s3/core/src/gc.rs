@@ -6,12 +6,43 @@ use crate::{
     CommitId, ObjectPath, OperationId, PhysicalVersion, RefGeneration, RepositoryId, RootManifest,
 };
 
+/// Payload candidate discovery policy for a GC epoch.
+///
+/// `LegacyScan` is the compatibility-safe default because direct/single-object
+/// writers from older clients do not emit creation intents. `JournalOnly` is
+/// intended for repositories whose payload ingestion uses the journaled batch
+/// APIs; it avoids listing the payload namespace entirely. Unjournaled payloads
+/// are retained until a legacy-scan epoch discovers them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GcCandidateDiscovery {
+    #[default]
+    LegacyScan,
+    JournalOnly,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GcCandidateNamespace {
+    #[default]
+    Repository,
+    Commits,
+    Nodes,
+    Complete,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GcInventorySource {
+    #[default]
+    Completions,
+    Intents,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GcPhase {
     DiscoverBranches,
     DiscoverTags,
     MarkCommits,
     MarkNodes,
+    ScanInventory,
     ScanCandidates,
     CatchUpDirtyRoots,
     Ready,
@@ -27,6 +58,14 @@ pub struct GcCursor {
     pub cutoff_millis: u64,
     pub phase: GcPhase,
     pub continuation: Option<String>,
+    #[serde(default)]
+    pub payload_discovery: GcCandidateDiscovery,
+    #[serde(default)]
+    pub candidate_namespace: GcCandidateNamespace,
+    #[serde(default)]
+    pub journal_object_offset: usize,
+    #[serde(default)]
+    pub inventory_source: GcInventorySource,
     pub work: RootManifest,
     pub dirty_sequence: u64,
     pub dirty_target_sequence: u64,
@@ -58,6 +97,10 @@ pub struct GcReport {
     pub deleted_by_kind: BTreeMap<String, u64>,
     #[serde(default)]
     pub protected_by_kind: BTreeMap<String, u64>,
+    #[serde(default)]
+    pub journal_batches: u64,
+    #[serde(default)]
+    pub journal_objects: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

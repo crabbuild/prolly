@@ -1202,7 +1202,8 @@ async fn repository_batch_results_isolates_invalid_objects_after_one_session_val
         results[1].as_ref().unwrap_err().code,
         prolly_s3_core::ErrorCode::InvalidKey
     );
-    assert_eq!(plane.request_snapshot().immutable_put, 2);
+    // Two whole-object payloads plus immutable intent and completion manifests.
+    assert_eq!(plane.request_snapshot().immutable_put, 4);
     let staged = results.into_iter().filter_map(Result::ok).collect();
     let receipt = repository
         .publish_commit_session(session, staged)

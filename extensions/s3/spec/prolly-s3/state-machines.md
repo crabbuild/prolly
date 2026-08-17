@@ -103,8 +103,10 @@ preserve commit topology.
 2. Discover live branches, tags, and retention-pin tags in bounded LIST pages.
 3. Mark the complete commit closure, direct nodes, packed commit containers,
    and exact payload versions in a job-scoped Prolly tree.
-4. Scan only immutable commit, direct-node, and payload namespaces older than
-   the configured grace cutoff.
+4. In legacy mode, scan immutable commit, direct-node, and payload namespaces
+   older than the configured grace cutoff. Journal-only mode scans commit and
+   direct-node namespaces and resolves payload candidates from immutable
+   ingest-window creation intents.
 5. Fence publication, capture the dirty-root watermark, and catch up any new
    roots before deletion.
 6. Recheck reachability and exact-delete a bounded physical-version batch.

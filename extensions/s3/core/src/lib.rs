@@ -13,6 +13,7 @@ mod model;
 mod object_plane;
 mod operation_index;
 mod payload;
+mod physical_journal;
 mod publication;
 mod ref_catalog;
 mod repository;
@@ -33,7 +34,10 @@ pub use control_versions::{
     MutableControlObserver, MutableControlStore, DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN,
 };
 pub use error::{Error, ErrorCode, Result, RetryAdvice};
-pub use gc::{GcCursor, GcPage, GcPhase, GcReport};
+pub use gc::{
+    GcCandidateDiscovery, GcCandidateNamespace, GcCursor, GcInventorySource, GcPage, GcPhase,
+    GcReport,
+};
 pub use journal_indexes::{
     JournalDerivedIndexes, JournalIndexAdvanceReport, JournalIndexRebuildCleanup,
     JournalIndexRebuildCursor, JournalIndexRebuildPhase, JournalIndexRebuildStep,

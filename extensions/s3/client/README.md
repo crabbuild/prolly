@@ -497,6 +497,19 @@ while gc.phase != GcPhase::Complete {
 }
 ```
 
+Bulk ingest callers that use the journaled batch APIs can opt into
+journal-driven payload discovery:
+
+```rust
+let mut gc = client.start_gc_journaled(two_hours_millis).await?;
+```
+
+This mode reads one immutable creation-intent manifest per ingest window and
+does not list the payload namespace. Payloads from direct or pre-journal
+writers remain retained, so use `start_gc` while those writers remain active.
+A manifest contains whole-object paths,
+sizes, and checksums only—payload bytes are never packed or chunked.
+
 The collector sweeps only immutable commit, direct-node, and whole-payload
 objects.
 It never sweeps mutable refs, derived indexes, publication journals, format
