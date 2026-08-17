@@ -24,8 +24,10 @@ content-hash verified before use.
 The client supports:
 
 - bounded in-process memory caching for hot nodes and pack locations;
-- optional Foyer memory/disk caching behind the `foyer-cache` feature;
+- Foyer memory/disk caching enabled by the default client feature and required
+  by `ProductionCacheProfile`;
 - safe cache persistence across restarts;
+- byte-bounded root/upper-level pinning and cardinality-derived sizing;
 - provider reads as the authoritative fallback.
 
 Cache corruption becomes a miss or a validation error; it cannot silently
@@ -53,9 +55,10 @@ A process should:
 
 1. open the repository and validate provider attestation;
 2. load the branch ref and index heads;
-3. open the persistent Foyer cache, if configured;
+3. open the persistent Foyer cache (required by the production profile);
 4. catch indexes up to the current journal generation;
-5. optionally prewarm upper tree levels for known hot branches.
+5. prewarm and pin a bounded number of upper tree levels for the attached
+   branch, subject to the configured startup timeout.
 
 Persisting immutable nodes removes the 421+ request cold-traversal pattern seen
 in early prototypes. A fully cold cache still performs bounded tree-depth and
@@ -118,10 +121,11 @@ block-index and entry overhead.
 Prewarming is advisory and cancellable. A reader remains correct if prewarming
 never runs or the cache directory is deleted.
 
-## Remaining production gaps
+## Remaining qualification gaps
 
 - production garbage collection for unreachable immutable data;
 - published AWS qualification at customer-specific scale and traffic;
-- automatic cache sizing from observed working set;
+- feedback-driven cache resizing from observed working set (the initial size is
+  derived from expected cardinality);
 - operational SLOs for index lag and rebuild completion;
 - cross-region and disaster-recovery workflows.

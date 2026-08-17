@@ -1,5 +1,8 @@
 # Prolly S3 operations
 
+The stable upgrade/recovery contract, exported OpenTelemetry instruments, and
+reference production alerts are defined in [GA-CONTRACT.md](GA-CONTRACT.md).
+
 ## Provisioning
 
 1. Create a dedicated S3 or S3-compatible bucket.

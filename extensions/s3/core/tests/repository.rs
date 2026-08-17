@@ -2,9 +2,10 @@ use std::{collections::BTreeMap, io::Write as _, sync::Arc};
 
 use md5::{Digest as _, Md5};
 use prolly_s3_core::{
-    decode_canonical, encode_canonical, FixedClock, GetRequest, ListRequest,
+    decode_canonical, encode_canonical, BoundaryRule, FixedClock, GetRequest, ListRequest,
     LogicalObjectVersionKind, MemoryNodeCache, MemoryObjectPlane, ObjectHeaders, ObjectPath,
     ObjectPlane, ProviderPerKeyVersionLimit, Repository, RepositoryOptions, SequenceIdSource,
+    TreeFormat,
 };
 use sha2::Sha256;
 
@@ -43,6 +44,72 @@ async fn repository_cache_snapshot_includes_ref_catalog_reads_after_reopen() {
         after.hits > before.hits,
         "ref-catalog cache hits must be included in the repository snapshot"
     );
+}
+
+#[tokio::test]
+async fn listing_predictively_prefetches_adjacent_metadata_nodes() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let mut format = TreeFormat::default();
+    format.chunking.min = 2;
+    format.chunking.target = 4;
+    format.chunking.max = 8;
+    format.chunking.rule = BoundaryRule::HashThreshold { factor: 4 };
+    format.chunking.hard_max_node_bytes = 64 * 1024;
+    let options = RepositoryOptions {
+        repository_prefix: ".tests/list-prefetch".to_string(),
+        writer: "prefetch-writer".to_string(),
+        state_tree_format: format,
+        provider_per_key_version_limit: ProviderPerKeyVersionLimit::Finite(10_000),
+        ..RepositoryOptions::default()
+    };
+    let repository = Repository::initialize(plane.clone(), options.clone())
+        .await
+        .unwrap();
+    let session = repository
+        .begin_commit_session("main", "prefetch fixture", 60_000)
+        .await
+        .unwrap();
+    let inputs = (0..128)
+        .map(|index| {
+            (
+                format!("prefetch/{index:04}").into_bytes(),
+                vec![index as u8],
+                ObjectHeaders::default(),
+                BTreeMap::new(),
+            )
+        })
+        .collect();
+    let mutations = repository
+        .stage_commit_session_put_batch(&session, inputs, 16)
+        .await
+        .unwrap();
+    repository
+        .publish_commit_session(session, mutations)
+        .await
+        .unwrap();
+    repository.advance_branch_indexes("main").await.unwrap();
+    drop(repository);
+
+    let reader = Repository::open(
+        plane,
+        RepositoryOptions {
+            read_only: true,
+            node_cache: Some(Arc::new(MemoryNodeCache::new(64 * 1024 * 1024))),
+            ..options
+        },
+    )
+    .await
+    .unwrap();
+    let before = reader.node_cache_snapshot();
+    let page = reader
+        .list_objects_page("main", b"prefetch/", None, 100)
+        .await
+        .unwrap();
+    let activity = reader.node_cache_snapshot().delta_since(before);
+    assert_eq!(page.objects.len(), 100);
+    assert!(page.continuation.is_some());
+    assert!(activity.prefetch_batches > 0);
+    assert!(activity.prefetched_nodes > activity.prefetch_batches);
 }
 
 #[tokio::test]
@@ -93,6 +160,13 @@ async fn repository_put_read_replay_and_reopen_use_only_authority() {
         .unwrap();
     assert_eq!(upper.object_nodes, 1);
     assert_eq!(upper.version_nodes, 1);
+    assert_eq!(upper.pinned_nodes, 2);
+    assert!(repository.node_cache_snapshot().pinned_nodes >= 2);
+    repository.advance_branch_indexes("main").await.unwrap();
+    let resolved = repository.resolve_snapshot("main", first.id).await.unwrap();
+    assert!(resolved.indexed);
+    assert_eq!(resolved.commit, first.id);
+    assert_eq!(resolved.parents, vec![first.parents[0]]);
     assert_eq!(
         repository
             .prewarm_node_cache_levels("main", first.id, 0)

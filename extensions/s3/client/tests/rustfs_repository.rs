@@ -101,6 +101,72 @@ async fn rustfs_client() -> (aws_sdk_s3::Client, String) {
     (client, bucket)
 }
 
+#[cfg(feature = "foyer-cache")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn rustfs_production_cache_profile_reopens_prewarms_and_closes_cleanly() {
+    if !rustfs_enabled() {
+        eprintln!("set PROLLY_S3_RUSTFS=1 to run RustFS integration tests");
+        return;
+    }
+
+    let (aws, bucket) = rustfs_client().await;
+    let repository_prefix = unique_name("production-cache-profile");
+    let cache_directory = tempfile::tempdir().unwrap();
+    let mut profile = prolly_s3_client::ProductionCacheProfile::new(cache_directory.path(), 10_000)
+        .startup_prewarm(2, Duration::from_secs(10));
+    profile.sizing.memory_capacity_bytes = 16 * 1024 * 1024;
+    profile.sizing.disk_capacity_bytes = 128 * 1024 * 1024;
+    profile.sizing.max_cached_node_pack_bytes = 16 * 1024 * 1024;
+    profile.sizing.max_cached_node_locations = 4_096;
+    let writer = Client::builder()
+        .aws_client(aws.clone())
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .writer("rustfs-production-cache-writer")
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .production_cache_profile(profile.clone())
+        .initialize()
+        .await
+        .unwrap();
+    writer
+        .put_object("docs/cached.txt", b"persistent metadata".to_vec())
+        .await
+        .unwrap();
+    writer.advance_branch_indexes().await.unwrap();
+    writer.close_production_cache().await.unwrap();
+    drop(writer);
+
+    let reader = Client::builder()
+        .aws_client(aws)
+        .bucket(&bucket)
+        .repository_prefix(&repository_prefix)
+        .read_only(true)
+        .provider_identity(provider_identity())
+        .attestation_signer(attestation_signer())
+        .provider_per_key_version_limit(ProviderPerKeyVersionLimit::Finite(10_000))
+        .production_cache_profile(profile)
+        .open()
+        .await
+        .unwrap();
+    let startup = reader.startup_metrics();
+    let prewarm = startup.prewarm_report.expect("production prewarm report");
+    assert!(prewarm.object_nodes > 0);
+    assert!(prewarm.version_nodes > 0);
+    assert!(prewarm.after.pinned_nodes > 0);
+    assert_eq!(
+        reader
+            .get_object("docs/cached.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"persistent metadata"
+    );
+    reader.close_production_cache().await.unwrap();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn rustfs_client_uses_immutable_payloads_and_fences_takeover() {
     if !rustfs_enabled() {

@@ -1,5 +1,10 @@
 # Prolly S3
 
+The proposed stable compatibility, cache, telemetry, recovery, and provider
+support promises are defined in [GA-CONTRACT.md](GA-CONTRACT.md). The current
+`0.1.x` crates remain suitable for controlled pilots after the qualification
+gates in that contract pass; they are not yet a universal GA claim.
+
 Prolly S3 adds repository history to a versioned S3 bucket. It stores each file
 as one immutable, content-addressed S3 object and stores directory state,
 commits, branches, tags, and indexes as Prolly trees.

@@ -23,9 +23,9 @@ use prolly_s3_core::{
     OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
     ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
-    RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
-    RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
-    TreeFormat, VersionSummary,
+    RepairCursor, RepairPage, Repository, RepositoryOptions, ResolvedSnapshot, RestoreCursor,
+    RestorePage, Result, RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage,
+    TraversalBudget, TreeFormat, VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
 use tokio::{
@@ -35,8 +35,9 @@ use tokio::{
 
 use crate::{
     ensure_attestation_current, load_valid_attestation, qualify_and_store,
-    validate_provider_bucket, AttestationSigner, AwsS3ObjectPlane, ProviderIdentity,
-    ProviderQualificationOptions, S3OperationMetrics,
+    validate_provider_bucket, AttestationSigner, AwsS3ObjectPlane, ClientPerformanceSnapshot,
+    ClientStartupMetrics, ClientTelemetry, ClientTelemetryContext, ClientTelemetryInterval,
+    ProductionCacheProfile, ProviderIdentity, ProviderQualificationOptions, S3OperationMetrics,
 };
 
 /// Application-facing repository client.
@@ -52,8 +53,12 @@ pub struct Client {
     branch: String,
     checked_out: CheckedOutRef,
     provider_attestation: ProviderAttestation,
+    startup_metrics: ClientStartupMetrics,
     shard_authority_maintenance: Arc<Mutex<Option<prolly_s3_core::ShardAuthorityMaintenance>>>,
     _branch_index_maintenance: Arc<Mutex<Option<prolly_s3_core::BranchIndexMaintenance>>>,
+    _telemetry_maintenance: Arc<Mutex<Option<crate::telemetry::ClientTelemetryMaintenance>>>,
+    #[cfg(feature = "foyer-cache")]
+    production_node_cache: Option<Arc<crate::FoyerNodeCache>>,
 }
 
 /// Durable handoff describing one complete provider object.
@@ -96,6 +101,9 @@ pub struct ClientBuilder {
     qualification_options: Option<ProviderQualificationOptions>,
     provider_per_key_version_limit: Option<ProviderPerKeyVersionLimit>,
     background_index_maintenance: Option<bool>,
+    production_cache_profile: Option<ProductionCacheProfile>,
+    telemetry: Option<Arc<dyn ClientTelemetry>>,
+    telemetry_interval: Option<Duration>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -324,6 +332,44 @@ impl Client {
         self.repository.node_cache_snapshot()
     }
 
+    pub fn startup_metrics(&self) -> ClientStartupMetrics {
+        self.startup_metrics
+    }
+
+    pub fn performance_snapshot(&self) -> ClientPerformanceSnapshot {
+        ClientPerformanceSnapshot {
+            cache: self.node_cache_snapshot(),
+            provider: self.s3_operation_metrics(),
+        }
+    }
+
+    /// Stop this client's background maintenance, then flush and close the
+    /// internally owned production cache. Stop serving requests and drop
+    /// other client clones before calling this during graceful shutdown.
+    #[cfg(feature = "foyer-cache")]
+    pub async fn close_production_cache(&self) -> Result<()> {
+        let authority = self
+            .shard_authority_maintenance
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let indexes = self
+            ._branch_index_maintenance
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let telemetry = self
+            ._telemetry_maintenance
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        drop((authority, indexes, telemetry));
+        if let Some(cache) = &self.production_node_cache {
+            cache.close().await?;
+        }
+        Ok(())
+    }
+
     pub async fn prewarm_node_cache(&self, snapshot: CommitId) -> Result<NodeCachePrewarmReport> {
         self.ensure_provider_qualified()?;
         self.repository
@@ -339,6 +385,13 @@ impl Client {
         self.ensure_provider_qualified()?;
         self.repository
             .prewarm_node_cache_levels(&self.branch, snapshot, levels)
+            .await
+    }
+
+    pub async fn resolve_snapshot(&self, snapshot: CommitId) -> Result<ResolvedSnapshot> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .resolve_snapshot(&self.branch, snapshot)
             .await
     }
 
@@ -2405,6 +2458,22 @@ impl ClientBuilder {
         self
     }
 
+    /// Apply the production metadata-cache profile. The profile owns a
+    /// persistent Foyer directory, cardinality-derived bounds, upper-level
+    /// pinning, and bounded startup prewarming.
+    pub fn production_cache_profile(mut self, profile: ProductionCacheProfile) -> Self {
+        self.production_cache_profile = Some(profile);
+        self
+    }
+
+    /// Export cache, provider, and cold-start deltas through an application
+    /// telemetry sink. The OpenTelemetry feature provides a ready-made sink.
+    pub fn telemetry(mut self, telemetry: Arc<dyn ClientTelemetry>, interval: Duration) -> Self {
+        self.telemetry = Some(telemetry);
+        self.telemetry_interval = Some(interval);
+        self
+    }
+
     pub fn max_cached_node_pack_bytes(mut self, bytes: usize) -> Self {
         self.max_cached_node_pack_bytes = Some(bytes);
         self
@@ -2461,12 +2530,24 @@ impl ClientBuilder {
     }
 
     async fn finish(self, initialize: bool) -> Result<Client> {
+        let total_started = Instant::now();
         if initialize && self.read_only {
             return Err(invalid(
                 "repository initialization requires a writable client",
             ));
         }
         let background_index_maintenance = self.background_index_maintenance.unwrap_or(true);
+        let production_cache_profile = self.production_cache_profile.clone();
+        let telemetry = self.telemetry.clone();
+        let telemetry_interval = self.telemetry_interval.unwrap_or(Duration::from_secs(15));
+        if telemetry.is_some() && telemetry_interval.is_zero() {
+            return Err(invalid("telemetry interval must be nonzero"));
+        }
+        if production_cache_profile.is_some() && !background_index_maintenance {
+            return Err(invalid(
+                "production cache profile requires branch-index maintenance",
+            ));
+        }
         let aws = self
             .aws_client
             .ok_or_else(|| invalid("aws_client is required"))?;
@@ -2475,6 +2556,11 @@ impl ClientBuilder {
             .provider_identity
             .ok_or_else(|| invalid("provider_identity is required"))?;
         validate_provider_bucket(&identity, &bucket)?;
+        let telemetry_provider = match identity.bucket_class() {
+            prolly_s3_core::BucketClass::GeneralPurpose => "aws-s3",
+            prolly_s3_core::BucketClass::S3Compatible => "s3-compatible",
+        }
+        .to_string();
         let signer = self
             .attestation_signer
             .ok_or_else(|| invalid("attestation_signer is required"))?;
@@ -2525,7 +2611,7 @@ impl ClientBuilder {
         attestation.body.capabilities.validate_prolly_s3()?;
 
         let mut options = RepositoryOptions {
-            repository_prefix: prefix,
+            repository_prefix: prefix.clone(),
             read_only: self.read_only,
             provider_per_key_version_limit,
             ..RepositoryOptions::default()
@@ -2542,6 +2628,24 @@ impl ClientBuilder {
         }
         if let Some(format) = self.state_tree_format {
             options.state_tree_format = format;
+        } else if initialize && production_cache_profile.is_some() {
+            options.state_tree_format = crate::production_metadata_tree_format();
+        } else if !initialize {
+            options.state_tree_format =
+                Repository::<AwsS3ObjectPlane>::load_format(plane.clone(), &prefix)
+                    .await?
+                    .state_tree_format;
+        }
+        if let Some(profile) = &production_cache_profile {
+            if profile.directory.as_os_str().is_empty()
+                || !(1..=64).contains(&profile.startup_prewarm_levels)
+                || profile.startup_prewarm_timeout.is_zero()
+            {
+                return Err(invalid("production cache profile is invalid"));
+            }
+            options.max_cached_node_pack_bytes = profile.sizing.max_cached_node_pack_bytes;
+            options.max_cached_node_locations = profile.sizing.max_cached_node_locations;
+            options.max_cached_node_bytes = profile.sizing.memory_capacity_bytes;
         }
         if let Some(bytes) = self.max_cached_node_pack_bytes {
             options.max_cached_node_pack_bytes = bytes;
@@ -2567,7 +2671,43 @@ impl ClientBuilder {
         if let Some(events) = self.operation_index_max_unindexed_events {
             options.operation_index_max_unindexed_events = events;
         }
-        options.node_cache = self.node_cache;
+        #[cfg(feature = "foyer-cache")]
+        let (node_cache, production_node_cache) = {
+            let mut node_cache = self.node_cache;
+            let mut production_node_cache = None;
+            if let Some(profile) = &production_cache_profile {
+                if node_cache.is_some() {
+                    return Err(invalid(
+                        "production cache profile cannot be combined with a custom node cache",
+                    ));
+                }
+                let cache = crate::FoyerNodeCache::open(crate::FoyerNodeCacheConfig {
+                    directory: profile.directory.clone(),
+                    memory_capacity_bytes: profile.sizing.memory_capacity_bytes,
+                    disk_capacity_bytes: profile.sizing.disk_capacity_bytes,
+                    disk_block_size_bytes: crate::production::cache_block_size_for_tree(
+                        profile.sizing.disk_block_size_bytes,
+                        &options.state_tree_format,
+                    ),
+                    memory_shards: profile.sizing.memory_shards,
+                })
+                .await?;
+                node_cache = Some(cache.clone());
+                production_node_cache = Some(cache);
+            }
+            (node_cache, production_node_cache)
+        };
+        #[cfg(not(feature = "foyer-cache"))]
+        let node_cache = {
+            if production_cache_profile.is_some() {
+                return Err(Error::new(
+                    ErrorCode::UnsupportedParameter,
+                    "production cache profile requires the foyer-cache feature",
+                ));
+            }
+            self.node_cache
+        };
+        options.node_cache = node_cache;
         let branch = options.default_branch.clone();
         let repository = if initialize {
             Repository::initialize(plane.clone(), options).await?
@@ -2585,22 +2725,104 @@ impl ClientBuilder {
         } else {
             None
         };
-        let client = Client {
+        let mut client = Client {
             repository,
             bucket,
             branch: branch.clone(),
             checked_out: CheckedOutRef::Branch(branch),
             provider_attestation: attestation,
+            startup_metrics: ClientStartupMetrics::default(),
             shard_authority_maintenance: Arc::new(Mutex::new(shard_authority_maintenance)),
             _branch_index_maintenance: Arc::new(Mutex::new(branch_index_maintenance)),
+            _telemetry_maintenance: Arc::new(Mutex::new(None)),
+            #[cfg(feature = "foyer-cache")]
+            production_node_cache,
         };
+        let cache_before = client.node_cache_snapshot();
+        let provider_before = S3OperationMetrics::default();
+        let index_started = Instant::now();
         if background_index_maintenance {
             client
                 .wait_for_branch_indexes(Duration::from_secs(30))
                 .await?;
         }
+        client.startup_metrics.index_catchup_millis = elapsed_millis(index_started);
+        if let Some(profile) = &production_cache_profile {
+            let prewarm_started = Instant::now();
+            let snapshot = client.head().await?;
+            match tokio::time::timeout(
+                profile.startup_prewarm_timeout,
+                client.prewarm_node_cache_levels(snapshot, profile.startup_prewarm_levels),
+            )
+            .await
+            {
+                Ok(Ok(report)) => client.startup_metrics.prewarm_report = Some(report),
+                Ok(Err(error)) if profile.require_successful_prewarm => return Err(error),
+                Ok(Err(_)) => client.startup_metrics.prewarm_failed = true,
+                Err(_) if profile.require_successful_prewarm => {
+                    return Err(Error::new(
+                        ErrorCode::Timeout,
+                        "production metadata-cache prewarm exceeded its startup timeout",
+                    ))
+                }
+                Err(_) => client.startup_metrics.prewarm_timed_out = true,
+            }
+            client.startup_metrics.prewarm_millis = elapsed_millis(prewarm_started);
+        }
+        client.startup_metrics.total_open_millis = elapsed_millis(total_started);
+        client.startup_metrics.cache_activity =
+            client.node_cache_snapshot().delta_since(cache_before);
+        client.startup_metrics.provider_activity =
+            client.s3_operation_metrics().delta_since(provider_before);
+        if let Some(telemetry) = telemetry {
+            let context = ClientTelemetryContext {
+                repository_id: client.repository_id().to_string(),
+                provider: telemetry_provider,
+                expected_objects: production_cache_profile
+                    .as_ref()
+                    .map(|profile| profile.sizing.expected_objects),
+            };
+            telemetry.record_startup(&context, client.startup_metrics);
+            let initial_cache = client.repository.node_cache_snapshot();
+            let initial_provider = client.repository.plane().metrics();
+            let repository = Arc::downgrade(&client.repository);
+            let task = tokio::spawn(async move {
+                let mut ticker = tokio::time::interval(telemetry_interval);
+                ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                let mut previous_cache = initial_cache;
+                let mut previous_provider = initial_provider;
+                // The startup report already covers the initial interval.
+                ticker.tick().await;
+                loop {
+                    ticker.tick().await;
+                    let Some(repository) = repository.upgrade() else {
+                        break;
+                    };
+                    let current_cache = repository.node_cache_snapshot();
+                    let current_provider = repository.plane().metrics();
+                    telemetry.record_interval(
+                        &context,
+                        ClientTelemetryInterval {
+                            cache: current_cache.delta_since(previous_cache),
+                            provider: current_provider.delta_since(previous_provider),
+                        },
+                    );
+                    previous_cache = current_cache;
+                    previous_provider = current_provider;
+                }
+            });
+            *client
+                ._telemetry_maintenance
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                Some(crate::telemetry::ClientTelemetryMaintenance::new(task));
+        }
         Ok(client)
     }
+}
+
+fn elapsed_millis(started: Instant) -> u64 {
+    u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 fn invalid(message: impl Into<String>) -> Error {

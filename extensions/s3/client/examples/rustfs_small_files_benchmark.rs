@@ -734,7 +734,7 @@ async fn main() -> BenchResult {
             let page = client.advance_fsck(&cursor, 10_000).await?;
             pages += 1;
             cursor = page.cursor;
-            if pages % 10 == 0 {
+            if pages.is_multiple_of(10) {
                 println!(
                     "FSCK_PROGRESS mode={fsck_mode} pages={pages} phase={:?} commits={} current_objects={} logical_versions={}",
                     cursor.phase,
@@ -793,7 +793,7 @@ async fn main() -> BenchResult {
             };
             pages += 1;
             cursor = page.cursor;
-            if pages % 100 == 0 {
+            if pages.is_multiple_of(100) {
                 println!(
                     "GC_PROGRESS pages={pages} phase={:?} commits={} nodes={} logical_versions={} candidates={} deleted_versions={}",
                     cursor.phase,

@@ -1082,6 +1082,10 @@ impl<P: ObjectPlane> JournalDerivedIndexes<P> {
             generation: commit.generation,
             parents: commit.parents,
             first_parent_jumps: jumps,
+            snapshot: Some(crate::JournalSnapshotMetadata {
+                state: commit.state,
+                delta: commit.delta,
+            }),
         })
     }
 

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     sync::{Arc, Mutex},
 };
 
@@ -57,6 +57,13 @@ pub trait NodeCache: Send + Sync + 'static {
         true
     }
 
+    /// Current node/byte usage of a distinct pinned tier, when the cache can
+    /// report it exactly. `None` asks the repository to use bounded fallback
+    /// accounting for successful pin requests.
+    fn pinned_usage(&self) -> Option<(usize, usize)> {
+        None
+    }
+
     async fn get(&self, key: &NodeCacheKey)
         -> std::result::Result<Option<Vec<u8>>, NodeCacheError>;
 
@@ -66,12 +73,27 @@ pub trait NodeCache: Send + Sync + 'static {
         value: Vec<u8>,
     ) -> std::result::Result<(), NodeCacheError>;
 
+    /// Retain a verified upper-level node in the fastest available cache tier.
+    ///
+    /// Pinning is advisory and byte bounded. Implementations that do not have
+    /// a distinct pinned tier may treat this as an ordinary insertion. Cache
+    /// loss or pin rejection can affect latency but never repository
+    /// correctness.
+    async fn pin(
+        &self,
+        key: NodeCacheKey,
+        value: Vec<u8>,
+    ) -> std::result::Result<(), NodeCacheError> {
+        self.insert(key, value).await
+    }
+
     async fn remove(&self, key: &NodeCacheKey) -> std::result::Result<(), NodeCacheError>;
 }
 
 struct MemoryNodeCacheState {
     entries: BTreeMap<NodeCacheKey, Arc<[u8]>>,
     order: VecDeque<NodeCacheKey>,
+    pinned: BTreeSet<NodeCacheKey>,
     bytes: usize,
 }
 
@@ -90,6 +112,7 @@ impl MemoryNodeCache {
             state: Mutex::new(MemoryNodeCacheState {
                 entries: BTreeMap::new(),
                 order: VecDeque::new(),
+                pinned: BTreeSet::new(),
                 bytes: 0,
             }),
         }
@@ -113,12 +136,86 @@ impl MemoryNodeCache {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    pub fn pinned_len(&self) -> usize {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .pinned
+            .len()
+    }
+
+    fn insert_locked(
+        &self,
+        state: &mut MemoryNodeCacheState,
+        key: NodeCacheKey,
+        value: Vec<u8>,
+        pin: bool,
+    ) -> bool {
+        if !self.admits(&key, value.len()) {
+            return false;
+        }
+        let was_pinned = state.pinned.contains(&key);
+        if let Some(previous) = state.entries.remove(&key) {
+            state.bytes = state.bytes.saturating_sub(previous.len());
+        }
+        state.order.retain(|candidate| candidate != &key);
+        state.bytes = state.bytes.saturating_add(value.len());
+        state.entries.insert(key.clone(), Arc::from(value));
+        state.order.push_back(key.clone());
+        if pin || was_pinned {
+            state.pinned.insert(key.clone());
+        }
+
+        let mut inspected = 0usize;
+        while state.bytes > self.max_bytes && inspected < state.order.len() {
+            let Some(candidate) = state.order.pop_front() else {
+                break;
+            };
+            if state.pinned.contains(&candidate) {
+                state.order.push_back(candidate);
+                inspected = inspected.saturating_add(1);
+                continue;
+            }
+            if let Some(removed) = state.entries.remove(&candidate) {
+                state.bytes = state.bytes.saturating_sub(removed.len());
+            }
+            inspected = 0;
+        }
+
+        // A pin set larger than the configured capacity is rejected rather
+        // than allowing an advisory tier to become unbounded.
+        if state.bytes > self.max_bytes {
+            state.pinned.remove(&key);
+            if let Some(removed) = state.entries.remove(&key) {
+                state.bytes = state.bytes.saturating_sub(removed.len());
+            }
+            state.order.retain(|candidate| candidate != &key);
+        }
+        state.entries.contains_key(&key) && (!pin || state.pinned.contains(&key))
+    }
 }
 
 #[async_trait::async_trait]
 impl NodeCache for MemoryNodeCache {
     fn admits(&self, _key: &NodeCacheKey, value_len: usize) -> bool {
         self.max_bytes > 0 && value_len <= self.max_bytes
+    }
+
+    fn pinned_usage(&self) -> Option<(usize, usize)> {
+        let state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        Some((
+            state.pinned.len(),
+            state
+                .pinned
+                .iter()
+                .filter_map(|key| state.entries.get(key))
+                .map(|value| value.len())
+                .sum(),
+        ))
     }
 
     async fn get(
@@ -149,22 +246,26 @@ impl NodeCache for MemoryNodeCache {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if let Some(previous) = state.entries.remove(&key) {
-            state.bytes = state.bytes.saturating_sub(previous.len());
-        }
-        state.order.retain(|candidate| candidate != &key);
-        state.bytes = state.bytes.saturating_add(value.len());
-        state.entries.insert(key.clone(), Arc::from(value));
-        state.order.push_back(key);
-        while state.bytes > self.max_bytes {
-            let Some(evicted) = state.order.pop_front() else {
-                break;
-            };
-            if let Some(value) = state.entries.remove(&evicted) {
-                state.bytes = state.bytes.saturating_sub(value.len());
-            }
-        }
+        self.insert_locked(&mut state, key, value, false);
         Ok(())
+    }
+
+    async fn pin(
+        &self,
+        key: NodeCacheKey,
+        value: Vec<u8>,
+    ) -> std::result::Result<(), NodeCacheError> {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if self.insert_locked(&mut state, key, value, true) {
+            Ok(())
+        } else {
+            Err(NodeCacheError::new(
+                "pinned memory-cache capacity is exhausted",
+            ))
+        }
     }
 
     async fn remove(&self, key: &NodeCacheKey) -> std::result::Result<(), NodeCacheError> {
@@ -175,6 +276,7 @@ impl NodeCache for MemoryNodeCache {
         if let Some(value) = state.entries.remove(key) {
             state.bytes = state.bytes.saturating_sub(value.len());
         }
+        state.pinned.remove(key);
         state.order.retain(|candidate| candidate != key);
         Ok(())
     }
@@ -210,6 +312,21 @@ mod tests {
         let cache = MemoryNodeCache::new(2);
         cache.insert(key(1), vec![1; 3]).await.unwrap();
         assert!(cache.is_empty());
+    }
+
+    #[tokio::test]
+    async fn pinned_nodes_survive_lru_pressure_within_the_byte_bound() {
+        let cache = MemoryNodeCache::new(6);
+        cache.pin(key(1), vec![1; 3]).await.unwrap();
+        cache.insert(key(2), vec![2; 3]).await.unwrap();
+        cache.insert(key(3), vec![3; 3]).await.unwrap();
+
+        assert_eq!(cache.get(&key(1)).await.unwrap(), Some(vec![1; 3]));
+        assert_eq!(cache.get(&key(2)).await.unwrap(), None);
+        assert_eq!(cache.get(&key(3)).await.unwrap(), Some(vec![3; 3]));
+        assert_eq!(cache.pinned_len(), 1);
+        assert_eq!(cache.pinned_usage(), Some((1, 3)));
+        assert_eq!(cache.resident_bytes(), 6);
     }
 
     #[test]

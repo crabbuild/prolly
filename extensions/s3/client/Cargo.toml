@@ -8,8 +8,9 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/crabbuild/prolly"
 
 [features]
-default = []
+default = ["foyer-cache"]
 foyer-cache = ["dep:foyer"]
+opentelemetry = ["dep:opentelemetry"]
 
 [dependencies]
 async-trait = "0.1"
@@ -24,6 +25,7 @@ hmac = "0.12"
 http-body = "1"
 md-5 = "0.10"
 hex = "0.4"
+opentelemetry = { version = "=0.32.0", default-features = false, features = ["metrics"], optional = true }
 prolly-s3-core = { path = "../core", version = "0.1.0" }
 serde = { version = "1.0", features = ["derive"] }
 sha2 = "0.10"

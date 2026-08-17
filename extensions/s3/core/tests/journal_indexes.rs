@@ -2,11 +2,62 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use prolly::TreeFormat;
 use prolly_s3_core::{
-    AuthorityScope, AuthorityStamp, BucketCommit, BucketDelta, BucketState, CommitGeneration,
-    CommitId, CommitPublication, JournalDerivedIndexes, MemoryObjectPlane, NodePack, NodePackEntry,
-    OperationId, RepositoryId, RootManifest, ShardWriterAuthority, ShardedBranchPublisher,
-    TreeFormatDigest,
+    decode_canonical, encode_canonical, AuthorityScope, AuthorityStamp, BucketCommit, BucketDelta,
+    BucketState, CommitGeneration, CommitId, CommitPublication, JournalCommitGraphEntry,
+    JournalDerivedIndexes, MemoryObjectPlane, NodePack, NodePackEntry, OperationId, RepositoryId,
+    RootManifest, ShardWriterAuthority, ShardedBranchPublisher, TreeFormatDigest,
 };
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct LegacyJournalCommitGraphEntry {
+    commit: CommitId,
+    generation: CommitGeneration,
+    parents: Vec<CommitId>,
+    first_parent_jumps: Vec<CommitId>,
+}
+
+#[test]
+fn graph_index_decodes_entries_written_before_snapshot_roots_were_added() {
+    let commit = CommitId::from_hash([0x11; 32]);
+    let encoded = encode_canonical(&LegacyJournalCommitGraphEntry {
+        commit,
+        generation: CommitGeneration(7),
+        parents: Vec::new(),
+        first_parent_jumps: Vec::new(),
+    })
+    .unwrap();
+    let decoded: JournalCommitGraphEntry = decode_canonical(&encoded).unwrap();
+    assert_eq!(decoded.commit, commit);
+    assert!(decoded.snapshot.is_none());
+
+    let reencoded = encode_canonical(&JournalCommitGraphEntry {
+        commit,
+        generation: CommitGeneration(8),
+        parents: Vec::new(),
+        first_parent_jumps: Vec::new(),
+        snapshot: Some(prolly_s3_core::JournalSnapshotMetadata {
+            state: BucketState {
+                objects: RootManifest {
+                    root: None,
+                    format_digest: TreeFormatDigest::from_hash([0x22; 32]),
+                },
+                versions: RootManifest {
+                    root: None,
+                    format_digest: TreeFormatDigest::from_hash([0x22; 32]),
+                },
+            },
+            delta: BucketDelta {
+                input_digest: [0; 32],
+                changes: Vec::new(),
+                changes_root: None,
+                change_count: 0,
+            },
+        }),
+    })
+    .unwrap();
+    let error = decode_canonical::<LegacyJournalCommitGraphEntry>(&reencoded).unwrap_err();
+    assert_eq!(error.code, prolly_s3_core::ErrorCode::CorruptCommit);
+}
 
 fn operation(value: u128) -> OperationId {
     OperationId(uuid::Uuid::from_u128(value))

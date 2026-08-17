@@ -1,5 +1,9 @@
 # Prolly S3 API guide
 
+Stable-release compatibility, upgrade/downgrade recovery, production cache,
+OpenTelemetry, and provider/cardinality support rules are defined in
+[`GA-CONTRACT.md`](GA-CONTRACT.md).
+
 The application-facing type is `prolly_s3_client::Client`. This guide describes
 the public client surface in version 0.1.0 and separates ordinary application
 operations from administrative maintenance.

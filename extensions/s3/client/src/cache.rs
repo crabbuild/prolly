@@ -1,4 +1,8 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use foyer::{
     BlockEngineConfig, DeviceBuilder, FsDeviceBuilder, HybridCache, HybridCachePolicy,
@@ -69,6 +73,15 @@ impl FoyerNodeCacheConfig {
 pub struct FoyerNodeCache {
     cache: HybridCache<Vec<u8>, Vec<u8>>,
     max_entry_size_bytes: usize,
+    pinned_capacity_bytes: usize,
+    pinned: Mutex<PinnedFoyerState>,
+}
+
+#[derive(Default)]
+struct PinnedFoyerState {
+    entries: BTreeMap<Vec<u8>, Arc<[u8]>>,
+    order: VecDeque<Vec<u8>>,
+    bytes: usize,
 }
 
 impl FoyerNodeCache {
@@ -118,6 +131,8 @@ impl FoyerNodeCache {
         Ok(Arc::new(Self {
             cache,
             max_entry_size_bytes,
+            pinned_capacity_bytes: config.memory_capacity_bytes / 4,
+            pinned: Mutex::new(PinnedFoyerState::default()),
         }))
     }
 
@@ -142,11 +157,29 @@ impl NodeCache for FoyerNodeCache {
         value_len <= self.max_entry_size_bytes
     }
 
+    fn pinned_usage(&self) -> Option<(usize, usize)> {
+        let state = self
+            .pinned
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        Some((state.entries.len(), state.bytes))
+    }
+
     async fn get(
         &self,
         key: &NodeCacheKey,
     ) -> std::result::Result<Option<Vec<u8>>, NodeCacheError> {
         let encoded = key.encode().to_vec();
+        if let Some(value) = self
+            .pinned
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entries
+            .get(&encoded)
+            .cloned()
+        {
+            return Ok(Some(value.as_ref().to_vec()));
+        }
         self.cache
             .get(encoded.as_slice())
             .await
@@ -177,8 +210,55 @@ impl NodeCache for FoyerNodeCache {
         Ok(())
     }
 
+    async fn pin(
+        &self,
+        key: NodeCacheKey,
+        value: Vec<u8>,
+    ) -> std::result::Result<(), NodeCacheError> {
+        if !self.admits(&key, value.len()) {
+            return Ok(());
+        }
+        self.insert(key.clone(), value.clone()).await?;
+        if value.len() > self.pinned_capacity_bytes {
+            return Err(NodeCacheError::new(
+                "node exceeds the bounded Foyer pinned-memory tier",
+            ));
+        }
+        let encoded = key.encode().to_vec();
+        let mut state = self
+            .pinned
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(previous) = state.entries.remove(&encoded) {
+            state.bytes = state.bytes.saturating_sub(previous.len());
+        }
+        state.order.retain(|candidate| candidate != &encoded);
+        state.bytes = state.bytes.saturating_add(value.len());
+        state.entries.insert(encoded.clone(), Arc::from(value));
+        state.order.push_back(encoded);
+        while state.bytes > self.pinned_capacity_bytes {
+            let Some(evicted) = state.order.pop_front() else {
+                break;
+            };
+            if let Some(value) = state.entries.remove(&evicted) {
+                state.bytes = state.bytes.saturating_sub(value.len());
+            }
+        }
+        Ok(())
+    }
+
     async fn remove(&self, key: &NodeCacheKey) -> std::result::Result<(), NodeCacheError> {
         let encoded = key.encode().to_vec();
+        {
+            let mut state = self
+                .pinned
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if let Some(value) = state.entries.remove(&encoded) {
+                state.bytes = state.bytes.saturating_sub(value.len());
+            }
+            state.order.retain(|candidate| candidate != &encoded);
+        }
         // Foyer 0.22's delete tombstone is not recovered after every clean
         // reopen. Persist an adapter-level tombstone so a corrupt entry cannot
         // reappear after restart. The storage engine bounds these markers by
@@ -353,5 +433,20 @@ mod tests {
             Some(vec![7; 1024])
         );
         reopened_after_reinsert.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn pinned_nodes_use_the_bounded_memory_tier() {
+        let directory = tempfile::tempdir().unwrap();
+        let cache = FoyerNodeCache::open(config(directory.path().to_path_buf()))
+            .await
+            .unwrap();
+        cache.pin(key(), vec![7; 1024]).await.unwrap();
+        assert_eq!(cache.pinned_usage(), Some((1, 1024)));
+        assert_eq!(cache.get(&key()).await.unwrap(), Some(vec![7; 1024]));
+        cache.remove(&key()).await.unwrap();
+        assert_eq!(cache.pinned_usage(), Some((0, 0)));
+        assert_eq!(cache.get(&key()).await.unwrap(), None);
+        cache.close().await.unwrap();
     }
 }
