@@ -299,8 +299,13 @@ impl<P: ObjectPlane> ShardWriterAuthority<P> {
             })?;
         let current: AuthorityLease = decode_canonical(&stored.bytes)?;
         current.validate(self.repository, &permit.lease.scope)?;
-        if current != permit.lease
-            || stored.metadata.token != permit.token
+        // The immutable authority epoch, not the mutable lease object's
+        // storage token or expiry, fences publication. Ordinary renewal keeps
+        // the epoch stable, so an operation/session that began before one or
+        // many renewals remains valid while the current lease for that epoch
+        // is active. A real takeover advances the stamp generation and is
+        // rejected here.
+        if current.stamp() != permit.lease.stamp()
             || current.expires_at_millis <= now_millis
             || !matches!(current.state, AuthorityLeaseState::Active)
         {

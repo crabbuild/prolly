@@ -25,7 +25,7 @@ operations from administrative maintenance.
 | Restore logical state as new history | `start_restore`, `advance_restore` |
 | Move a branch administratively | `reset_branch` |
 | Merge branches | `start_merge`, `advance_merge`, `publish_merge` |
-| Check repository integrity | `start_fsck`, `advance_fsck` |
+| Check repository integrity | `start_fsck`, `advance_fsck`, `resume_fsck`, `start_fsck_cleanup`, `advance_fsck_cleanup` |
 | Reclaim unreachable immutable data | `start_gc`, `advance_gc`, `sweep_gc` |
 | Synchronize only one logical snapshot | `start_repair_from`, `start_clone_from`, `start_fetch_from`, `start_push_to` |
 | Preserve a complete source commit DAG | `start_history_clone_from`, `start_history_fetch_from`, `start_history_push_to` |
@@ -56,6 +56,7 @@ Start with `Client::builder` (the `builder` constructor). The builder exposes:
 |---|---|
 | AWS transport and location | `aws_client`, `bucket`, `repository_prefix`, `default_branch` |
 | Writer identity and fencing | `writer`, `authority_lease_duration`, `read_only` |
+| Persisted metadata-tree geometry | `state_tree_format` (initialization-time; must match on reopen) |
 | Provider qualification | `provider_identity`, `attestation_signer`, `provider_attestation`, `provider_attestation_validity`, `provider_per_key_version_limit` |
 | Immutable-node caching | `node_cache`, `max_cached_node_pack_bytes`, `max_cached_node_locations`, `max_cached_node_bytes` |
 | Index maintenance | `background_index_maintenance`, `journal_index_max_unindexed_events`, `operation_index_limits` |
@@ -114,8 +115,28 @@ When an object listing is truncated, pass the last returned logical key as
 values into durable atomic batches, uploads each checkpoint window with bounded
 concurrency, and returns one receipt per published batch. `put_object_stream`
 accepts a fallible `Stream` plus `BulkWriteOptions` for bounded-memory ingestion
-from an unbounded source. Completed checkpoint windows remain resumable after
-cancellation or a source/object failure.
+from an unbounded source. Durable checkpoints append only mutations changed
+since the preceding sequence; resume validates and folds the windows by key.
+Completed windows remain resumable after cancellation or a source/object
+failure without rewriting earlier payload bindings.
+
+`ordered_publication_queue` is the concurrent-caller group-commit path.
+`OrderedPublicationOptions` independently bounds channel capacity, unique keys
+per publication, whole-object upload concurrency, coalescing wait, and durable
+checkpoint-window size. Producers await channel capacity. Unique keys are
+prepared concurrently and published in canonical order; repeated submissions
+for one key are split across consecutive commits so version order is retained.
+One failed object returns its own error without discarding valid objects in the
+same group. Successful callers receive a constant-size
+`OrderedPublicationReceipt` only after the grouped ref CAS succeeds.
+
+Every distinct payload is stored as one complete immutable provider object.
+Built-in streaming uses one bounded disk spool followed by one conditional
+`PutObject`, so it is limited by the provider single-PUT maximum. For larger or
+resumable transfers, call `prepare_external_object_upload`, complete the one
+final object with a provider transfer manager, and then call
+`stage_external_object_upload`. Prolly never persists upload IDs, parts, or
+payload extents.
 
 For explicit control, call `begin_commit`. `CommitSessionBuilder` supports:
 
@@ -186,8 +207,15 @@ pruned without loading full commit node packs.
 
 `start_fsck(false)` validates metadata and immutable structure.
 `start_fsck(true)` additionally downloads and hashes reachable payload bytes.
-Advance either mode with `advance_fsck`, persisting the cursor after every
-page.
+Advance either mode with `advance_fsck`. The repository durably checkpoints
+every returned page. After process loss, call `resume_fsck(job)`; a stale worker
+is fenced by the checkpoint generation. After retaining the completed report,
+use `start_fsck_cleanup(job)` and `advance_fsck_cleanup` to exact-delete the
+job's payload-dedup tree, closure tree, and checkpoint in bounded pages.
+
+`FsckReport` separately counts logical payload references, distinct complete
+physical objects, verified bytes, and deep content bytes. Payload bodies are
+never packed or split by Prolly.
 
 ### GC
 
@@ -196,8 +224,10 @@ Start with `start_gc(grace_millis)`, advance marking and discovery with
 Retention pins are roots. The grace period must exceed the longest possible
 unpublished upload, commit session, merge, repair, or transfer.
 
-Concurrent GC coordinates all writer handles inside the authoritative process.
-Quiesce separately running writer processes before GC.
+GC closes durable repository-wide publication admission. Branch and tag CAS
+operations in every process hold expiring publication tickets; marking starts
+only after all pre-maintenance tickets finish or expire. New publications fail
+with `PreconditionFailed` until GC cleanup reopens admission.
 
 ## Repair, clone, fetch, push, and backup
 
@@ -240,15 +270,21 @@ These methods are operational controls, not normal foreground request paths:
 
 - `node_cache_snapshot` returns immutable-node cache counters.
 - `prewarm_node_cache` traverses both state trees for one snapshot.
+- `prewarm_node_cache_levels` loads only a bounded number of shared upper
+  levels, avoiding a full scan before point-read traffic.
 - `s3_operation_metrics` returns provider operation and wire-attempt counters.
 - `reset_s3_operation_metrics` atomically returns and resets those counters.
 
 Metrics are process-local. Export them before process termination and correlate
 them with provider request IDs and service-side metrics.
+Prolly reports only operations it owns. Multipart create, part, complete, abort,
+and resumable-transfer metrics belong to the external provider transfer manager
+and are intentionally absent from Prolly metrics.
 
 Journal-derived node indexes are built from compact commit descriptors and
-node-pack tables of contents. Payload sections are range-fetched only when a
-referenced node is actually read.
+metadata node-pack tables of contents. Encoded node regions are range-fetched
+only when a referenced node is actually read; node packs never contain user
+object bytes.
 
 ## Error and consistency model
 

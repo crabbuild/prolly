@@ -249,6 +249,13 @@ pub struct ProviderCapabilities {
     pub physical_versioning: PhysicalVersioning,
     pub conflicting_lifecycle_rule: bool,
     pub default_object_lock_retention: bool,
+    /// Whether qualification could inspect the bucket replication policy.
+    #[serde(default)]
+    pub replication_configuration_readable: bool,
+    /// Replication is operationally relevant but does not mutate the source
+    /// repository, so it is reported rather than rejected.
+    #[serde(default)]
+    pub replication_enabled: bool,
     pub max_object_bytes: u64,
     pub max_single_put_bytes: u64,
 }
@@ -526,11 +533,14 @@ pub struct NodePackAttachment {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodePack {
+    /// Metadata-only Prolly node container. User object bytes are never stored
+    /// in a node pack.
     pub format_digest: TreeFormatDigest,
     /// Sorted strictly by CID.
     pub entries: Vec<NodePackEntry>,
     pub attachments: Vec<NodePackAttachment>,
-    /// Concatenated canonical node and attachment bytes.
+    /// Concatenated canonical metadata-node and attachment bytes. The field
+    /// name is retained as part of the version-1 wire format.
     pub payload: Vec<u8>,
 }
 
@@ -791,7 +801,7 @@ impl NodePack {
         Ok(pack)
     }
 
-    pub fn object_payload_offset(object_prefix: &[u8]) -> Result<u64> {
+    pub fn object_node_region_offset(object_prefix: &[u8]) -> Result<u64> {
         if object_prefix.len() < 12 || &object_prefix[..8] != NODE_PACK_MAGIC {
             return Err(Error::new(
                 ErrorCode::CorruptNode,
@@ -876,7 +886,7 @@ impl NodePack {
                 .map_err(|_| Error::new(ErrorCode::CorruptNode, "node-pack payload exceeds u64"))?,
         )?;
         for entry in &self.entries {
-            let bytes = self.payload_slice(entry.offset, entry.len)?;
+            let bytes = self.node_region_slice(entry.offset, entry.len)?;
             if sha256(bytes) != entry.sha256 || entry.cid.as_bytes() != entry.sha256 {
                 return Err(Error::new(
                     ErrorCode::CorruptNode,
@@ -885,7 +895,7 @@ impl NodePack {
             }
         }
         for attachment in &self.attachments {
-            let bytes = self.payload_slice(attachment.offset, attachment.len)?;
+            let bytes = self.node_region_slice(attachment.offset, attachment.len)?;
             if sha256(bytes) != attachment.digest {
                 return Err(Error::new(
                     ErrorCode::CorruptCommit,
@@ -901,10 +911,10 @@ impl NodePack {
             return Ok(None);
         };
         let entry = &self.entries[index];
-        Ok(Some(self.payload_slice(entry.offset, entry.len)?))
+        Ok(Some(self.node_region_slice(entry.offset, entry.len)?))
     }
 
-    fn payload_slice(&self, offset: u64, len: u32) -> Result<&[u8]> {
+    fn node_region_slice(&self, offset: u64, len: u32) -> Result<&[u8]> {
         let start = usize::try_from(offset)
             .map_err(|_| Error::new(ErrorCode::CorruptNode, "node pack offset overflow"))?;
         let end = start
@@ -1527,12 +1537,12 @@ impl CommitObject {
         Self::new(commit, node_pack)
     }
 
-    pub fn node_payload_offset(encoded: &[u8]) -> Result<Option<u64>> {
+    pub fn node_region_offset(encoded: &[u8]) -> Result<Option<u64>> {
         let (_, pack_range) = Self::ranges(encoded)?;
         if pack_range.is_empty() {
             return Ok(None);
         }
-        let relative = NodePack::object_payload_offset(&encoded[pack_range.start..])?;
+        let relative = NodePack::object_node_region_offset(&encoded[pack_range.start..])?;
         Ok(Some(pack_range.start as u64 + relative))
     }
 
@@ -1571,9 +1581,10 @@ pub struct MutationIdentity {
     pub authority: AuthorityStamp,
 }
 
-/// Repository payload binding. The physical path is explicit because
-/// stores content under immutable derived keys instead of accumulating
-/// provider versions at the logical user key.
+/// Repository binding for one complete immutable payload object. The physical
+/// path is explicit because Prolly stores whole content under derived keys
+/// instead of accumulating provider versions at the logical user key. This
+/// format deliberately has no chunk, segment, or byte-extent fields.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PayloadBinding {
     pub path: ObjectPath,
@@ -1581,36 +1592,17 @@ pub struct PayloadBinding {
     pub provider_etag: String,
     /// SHA-256 of this logical object's bytes.
     pub checksum_sha256: [u8; 32],
-    /// SHA-256 of the physical pack. Absent for legacy/direct payloads.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pack_checksum_sha256: Option<[u8; 32]>,
-    /// Inclusive logical extent inside the physical pack.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pack_range: Option<(u64, u64)>,
 }
 
 impl PayloadBinding {
     pub fn validate(&self) -> Result<()> {
-        let pack_shape_valid = match (self.pack_checksum_sha256, self.pack_range) {
-            (None, None) => true,
-            (Some(physical), Some((start, end))) => physical != [0; 32] && start <= end,
-            _ => false,
-        };
-        if self.provider_etag.is_empty() || self.checksum_sha256 == [0; 32] || !pack_shape_valid {
+        if self.provider_etag.is_empty() || self.checksum_sha256 == [0; 32] {
             return Err(Error::new(
                 ErrorCode::CorruptCommit,
                 "physical payload binding is malformed",
             ));
         }
         Ok(())
-    }
-
-    pub fn physical_checksum_sha256(&self) -> [u8; 32] {
-        self.pack_checksum_sha256.unwrap_or(self.checksum_sha256)
-    }
-
-    pub fn is_packed(&self) -> bool {
-        self.pack_range.is_some()
     }
 }
 
@@ -1815,6 +1807,12 @@ pub enum CommitSessionState {
 pub struct CommitSessionCheckpoint {
     pub session: CommitSessionManifest,
     pub sequence: u64,
+    /// Number of unique logical mutations represented after applying this
+    /// checkpoint window and every preceding window in sequence order.
+    pub total_mutations: u64,
+    /// Canonically ordered mutations changed since the preceding checkpoint.
+    /// Resume folds these bounded windows by key; earlier windows are never
+    /// serialized again.
     pub mutations: Vec<StagedMutation>,
     pub state: CommitSessionState,
 }
@@ -1822,10 +1820,19 @@ pub struct CommitSessionCheckpoint {
 impl CommitSessionCheckpoint {
     pub fn validate(&self, repository: RepositoryId, max_mutations: usize) -> Result<()> {
         self.session.validate(repository)?;
-        if self.mutations.len() > max_mutations {
+        if self.total_mutations > max_mutations as u64
+            || self.mutations.len() > max_mutations
+            || self.mutations.len() as u64 > self.total_mutations
+        {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
                 "commit-session checkpoint exceeds the mutation limit",
+            ));
+        }
+        if self.sequence == 0 && (self.total_mutations != 0 || !self.mutations.is_empty()) {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "initial commit-session checkpoint must be empty",
             ));
         }
         let mut previous = None;

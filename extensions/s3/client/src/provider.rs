@@ -212,7 +212,8 @@ pub(crate) async fn qualify_and_store(
                 .map_err(|_| invalid("provider attestation validity exceeds millisecond range"))?,
         )
         .ok_or_else(|| invalid("provider attestation expiry overflow"))?;
-    let capabilities = probe_provider(plane.clone(), repository_prefix).await?;
+    let capabilities =
+        probe_provider(plane.clone(), repository_prefix, identity.bucket_class()).await?;
     capabilities.validate_prolly_s3()?;
     let body = ProviderAttestationBody {
         endpoint_fingerprint: identity.endpoint_fingerprint()?,
@@ -346,7 +347,28 @@ pub(crate) fn ensure_attestation_current(attestation: &ProviderAttestation) -> R
 async fn probe_provider(
     plane: Arc<AwsS3ObjectPlane>,
     repository_prefix: &str,
+    bucket_class: BucketClass,
 ) -> Result<ProviderCapabilities> {
+    // Inspect policies before creating probe objects. A default retention rule
+    // could otherwise lock qualification debris, and a lifecycle rule could
+    // mutate probes while their consistency semantics are being measured.
+    let conflicting_lifecycle_rule = lifecycle_conflicts(plane.client(), plane.bucket()).await?;
+    if conflicting_lifecycle_rule {
+        return Err(not_qualified(
+            "bucket lifecycle rules can mutate repository objects",
+        ));
+    }
+    let default_object_lock_retention =
+        object_lock_conflicts(plane.client(), plane.bucket()).await?;
+    if default_object_lock_retention {
+        return Err(not_qualified(
+            "bucket default Object Lock retention would retain qualification and repository objects",
+        ));
+    }
+    let (replication_configuration_readable, replication_enabled) =
+        replication_status(plane.client(), plane.bucket(), bucket_class).await?;
+    let physical_versioning = bucket_versioning(plane.client(), plane.bucket()).await?;
+
     let probe = format!(
         "{repository_prefix}/probes/{}/",
         prolly_s3_core::OperationId::new()
@@ -473,7 +495,6 @@ async fn probe_provider(
         ));
     }
 
-    let physical_versioning = bucket_versioning(plane.client(), plane.bucket()).await?;
     if matches!(
         physical_versioning,
         PhysicalVersioning::Enabled | PhysicalVersioning::Suspended
@@ -516,9 +537,6 @@ async fn probe_provider(
         ));
     }
 
-    let conflicting_lifecycle_rule = lifecycle_conflicts(plane.client(), plane.bucket()).await?;
-    let default_object_lock_retention =
-        object_lock_conflicts(plane.client(), plane.bucket()).await?;
     Ok(ProviderCapabilities {
         conditional_create: true,
         conditional_update: true,
@@ -532,9 +550,49 @@ async fn probe_provider(
         physical_versioning,
         conflicting_lifecycle_rule,
         default_object_lock_retention,
+        replication_configuration_readable,
+        replication_enabled,
         max_object_bytes: 5 * 1_024 * 1_024 * 1_024 * 1_024,
         max_single_put_bytes: 5 * 1_024 * 1_024 * 1_024,
     })
+}
+
+async fn replication_status(
+    client: &aws_sdk_s3::Client,
+    bucket: &str,
+    bucket_class: BucketClass,
+) -> Result<(bool, bool)> {
+    match client.get_bucket_replication().bucket(bucket).send().await {
+        Ok(output) => Ok((
+            true,
+            output
+                .replication_configuration()
+                .is_some_and(|configuration| !configuration.rules().is_empty()),
+        )),
+        Err(error)
+            if matches!(
+                error.code(),
+                Some(
+                    "ReplicationConfigurationNotFoundError"
+                        | "NoSuchReplicationConfiguration"
+                        | "NoSuchConfiguration"
+                        | "NotFound"
+                )
+            ) =>
+        {
+            Ok((true, false))
+        }
+        Err(error)
+            if bucket_class == BucketClass::S3Compatible
+                && matches!(
+                    error.code(),
+                    Some("NotImplemented" | "UnsupportedOperation" | "MethodNotAllowed")
+                ) =>
+        {
+            Ok((false, false))
+        }
+        Err(error) => Err(provider_error("GetBucketReplication", error.code(), &error)),
+    }
 }
 
 async fn delete_metadata_exact(
@@ -692,6 +750,8 @@ mod tests {
             physical_versioning: PhysicalVersioning::Unversioned,
             conflicting_lifecycle_rule: false,
             default_object_lock_retention: false,
+            replication_configuration_readable: true,
+            replication_enabled: false,
             max_object_bytes: 1,
             max_single_put_bytes: 1,
         }
@@ -750,6 +810,15 @@ mod tests {
             lifecycle.validate_required().unwrap_err().code,
             ErrorCode::ProviderNotQualified
         );
+        let mut object_lock = capabilities();
+        object_lock.default_object_lock_retention = true;
+        assert_eq!(
+            object_lock.validate_required().unwrap_err().code,
+            ErrorCode::ProviderNotQualified
+        );
+        let mut replicated = capabilities();
+        replicated.replication_enabled = true;
+        replicated.validate_required().unwrap();
     }
 
     #[test]

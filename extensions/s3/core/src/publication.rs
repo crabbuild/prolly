@@ -18,11 +18,11 @@ pub struct LoadedRef {
 }
 
 /// Commit data needed by derived indexes without downloading the immutable
-/// node-pack payload. Every node remains independently CID-verified when read.
+/// node region. Every node remains independently CID-verified when read.
 pub(crate) struct CommitIndexView {
     pub(crate) commit: BucketCommit,
     pub(crate) toc: Option<NodePackToc>,
-    pub(crate) payload_offset: Option<u64>,
+    pub(crate) node_region_offset: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -889,7 +889,7 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
             return Ok(CommitIndexView {
                 commit,
                 toc: None,
-                payload_offset: None,
+                node_region_offset: None,
             });
         };
         if pack_len != expected.object_len {
@@ -953,7 +953,7 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
         Ok(CommitIndexView {
             commit,
             toc: Some(toc),
-            payload_offset: Some(toc_end),
+            node_region_offset: Some(toc_end),
         })
     }
 
@@ -975,6 +975,7 @@ impl<P: ObjectPlane> ShardedBranchPublisher<P> {
             })
             .await;
         match outcome {
+            Err(error) if error.code == ErrorCode::PreconditionFailed => Err(error),
             Err(error) => {
                 if let Some(current) = self.plane.load_mutable(&path).await? {
                     if current.bytes == bytes {

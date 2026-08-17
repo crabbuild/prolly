@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
     decode_canonical, encode_canonical, BatchId, CommitSessionCheckpoint,
@@ -76,7 +76,7 @@ impl<P: ObjectPlane> CommitSessionStore<P> {
     pub async fn latest(&self, batch: BatchId) -> Result<Option<CommitSessionCheckpoint>> {
         let prefix = self.batch_prefix(batch);
         let mut continuation = None;
-        let mut latest: Option<(u64, ObjectPath)> = None;
+        let mut paths = BTreeMap::new();
         let mut scanned = 0_usize;
         loop {
             let page = self
@@ -99,11 +99,11 @@ impl<P: ObjectPlane> CommitSessionStore<P> {
                     ));
                 }
                 let sequence = parse_checkpoint_sequence(&prefix, &entry.path)?;
-                if latest
-                    .as_ref()
-                    .is_none_or(|(current, _)| sequence > *current)
-                {
-                    latest = Some((sequence, entry.path));
+                if paths.insert(sequence, entry.path).is_some() {
+                    return Err(Error::new(
+                        ErrorCode::CorruptContent,
+                        "commit session has duplicate checkpoint sequences",
+                    ));
                 }
             }
             continuation = page.continuation;
@@ -111,38 +111,78 @@ impl<P: ObjectPlane> CommitSessionStore<P> {
                 break;
             }
         }
-        let Some((sequence, path)) = latest else {
+        if paths.is_empty() {
             return Ok(None);
-        };
-        let stored = self
-            .plane
-            .get(GetRequest {
-                path,
-                range: None,
-                physical_version: None,
-            })
-            .await?
-            .ok_or_else(|| {
-                Error::new(
-                    ErrorCode::OutcomeUnknown,
-                    "latest commit-session checkpoint disappeared during resume",
-                )
-            })?;
-        let checkpoint: CommitSessionCheckpoint = decode_canonical(&stored.bytes)?;
-        checkpoint.validate(self.repository, self.max_mutations)?;
-        if checkpoint.session.id != batch {
-            return Err(Error::new(
-                ErrorCode::CorruptContent,
-                "checkpoint path and embedded batch ID disagree",
-            ));
         }
-        if checkpoint.sequence != sequence {
-            return Err(Error::new(
-                ErrorCode::CorruptContent,
-                "checkpoint path and embedded sequence disagree",
-            ));
+
+        let mut aggregate = BTreeMap::<Vec<u8>, crate::StagedMutation>::new();
+        let mut latest = None;
+        let checkpoint_count = paths.len();
+        for (index, (sequence, path)) in paths.into_iter().enumerate() {
+            if sequence != index as u64 {
+                return Err(Error::new(
+                    ErrorCode::MissingClosure,
+                    "commit-session checkpoint sequence has a gap",
+                ));
+            }
+            let stored = self
+                .plane
+                .get(GetRequest {
+                    path,
+                    range: None,
+                    physical_version: None,
+                })
+                .await?
+                .ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::OutcomeUnknown,
+                        "commit-session checkpoint disappeared during resume",
+                    )
+                })?;
+            let checkpoint: CommitSessionCheckpoint = decode_canonical(&stored.bytes)?;
+            checkpoint.validate(self.repository, self.max_mutations)?;
+            if checkpoint.session.id != batch || checkpoint.sequence != sequence {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "checkpoint path and embedded identity disagree",
+                ));
+            }
+            if let Some(previous) = latest.as_ref() {
+                if !same_session_lineage(previous, &checkpoint) {
+                    return Err(Error::new(
+                        ErrorCode::CorruptContent,
+                        "commit-session checkpoint lineage changed",
+                    ));
+                }
+                if previous.state == crate::CommitSessionState::Aborted {
+                    return Err(Error::new(
+                        ErrorCode::CorruptContent,
+                        "commit session continues after an aborted checkpoint",
+                    ));
+                }
+            }
+            if checkpoint.state == crate::CommitSessionState::Aborted
+                && index + 1 != checkpoint_count
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "aborted commit-session checkpoint is not terminal",
+                ));
+            }
+            for mutation in &checkpoint.mutations {
+                aggregate.insert(mutation.key().to_vec(), mutation.clone());
+            }
+            if aggregate.len() as u64 != checkpoint.total_mutations {
+                return Err(Error::new(
+                    ErrorCode::MissingClosure,
+                    "commit-session checkpoint total does not match its windows",
+                ));
+            }
+            latest = Some(checkpoint);
         }
-        Ok(Some(checkpoint))
+        let mut latest = latest.expect("nonempty checkpoint paths produced a checkpoint");
+        latest.mutations = aggregate.into_values().collect();
+        Ok(Some(latest))
     }
 
     pub async fn cleanup_expired_page(
@@ -233,6 +273,23 @@ impl<P: ObjectPlane> CommitSessionStore<P> {
     fn checkpoint_path(&self, batch: BatchId, sequence: u64) -> Result<ObjectPath> {
         ObjectPath::new(format!("{}{sequence:020}.cbor", self.batch_prefix(batch)))
     }
+}
+
+fn same_session_lineage(
+    previous: &CommitSessionCheckpoint,
+    next: &CommitSessionCheckpoint,
+) -> bool {
+    let previous = &previous.session;
+    let next = &next.session;
+    previous.id == next.id
+        && previous.branch == next.branch
+        && previous.base_commit == next.base_commit
+        && previous.identity.repository == next.identity.repository
+        && previous.identity.operation == next.identity.operation
+        && previous.identity.authority.writer_id == next.identity.authority.writer_id
+        && previous.message == next.message
+        && previous.created_at_millis == next.created_at_millis
+        && previous.expires_at_millis == next.expires_at_millis
 }
 
 fn parse_checkpoint_sequence(prefix: &str, path: &ObjectPath) -> Result<u64> {

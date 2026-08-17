@@ -535,17 +535,21 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         &self,
         container: CommitId,
         prepared: PreparedNodePack,
-        payload_offset: u64,
+        node_region_offset: u64,
     ) -> Result<()> {
-        self.commit_node_pack_for(PackedCommitId::Native(container), prepared, payload_offset)
-            .await
+        self.commit_node_pack_for(
+            PackedCommitId::Native(container),
+            prepared,
+            node_region_offset,
+        )
+        .await
     }
 
     async fn commit_node_pack_for(
         &self,
         container: PackedCommitId,
         prepared: PreparedNodePack,
-        payload_offset: u64,
+        node_region_offset: u64,
     ) -> Result<()> {
         let Some(state) = &self.packed else {
             return Err(Error::new(
@@ -568,7 +572,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                     PackedNodeLocation {
                         container,
                         pack: reference.id,
-                        absolute_offset: payload_offset + entry.offset,
+                        absolute_offset: node_region_offset + entry.offset,
                         len: entry.len,
                         sha256: entry.sha256,
                     },
@@ -599,11 +603,11 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         object: &CommitObject,
         encoded: &[u8],
     ) -> Result<()> {
-        let payload_offset = CommitObject::node_payload_offset(encoded)?;
+        let node_region_offset = CommitObject::node_region_offset(encoded)?;
         self.register_node_pack(
             PackedCommitId::Native(container),
             object.node_pack.as_ref(),
-            payload_offset,
+            node_region_offset,
         )
     }
 
@@ -612,7 +616,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         &self,
         container: PackedCommitId,
         pack: Option<&NodePack>,
-        payload_offset: Option<u64>,
+        node_region_offset: Option<u64>,
     ) -> Result<()> {
         let Some(pack) = pack else {
             return Ok(());
@@ -620,10 +624,10 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
         let Some(state) = &self.packed else {
             return Ok(());
         };
-        let payload_offset = payload_offset.ok_or_else(|| {
+        let node_region_offset = node_region_offset.ok_or_else(|| {
             Error::new(
                 ErrorCode::CorruptCommit,
-                "commit node-pack payload is absent",
+                "commit node-pack node region is absent",
             )
         })?;
         let reference = pack.reference()?;
@@ -637,7 +641,7 @@ impl<P: ObjectPlane> ProllyObjectStore<P> {
                     PackedNodeLocation {
                         container,
                         pack: reference.id,
-                        absolute_offset: payload_offset + entry.offset,
+                        absolute_offset: node_region_offset + entry.offset,
                         len: entry.len,
                         sha256: entry.sha256,
                     },

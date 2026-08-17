@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     io::Write as _,
     str::FromStr as _,
     sync::{Arc, Mutex},
@@ -12,21 +12,26 @@ use md5::Md5;
 use prolly_s3_core::{
     BackupVerificationCursor, BackupVerificationPage, BatchId, BranchCatalogPage, BranchHead,
     BranchIndexAdvanceReport, BranchIndexHealth, CommitId, CommitPage, CommitReceipt,
-    CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCursor, FsckPage, GcCursor,
-    GcPage, HistoryCursor, HistoryTransferCursor, HistoryTransferMapping, HistoryTransferPage,
-    JournalIndexRebuildCleanup, JournalIndexRebuildCursor, JournalIndexRebuildStep,
-    ListObjectsPage, MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChangeCursor,
-    MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflictCursor, MergeConflictPage,
-    MergeCursor, MergePolicy, MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff,
-    ObjectDiffCursor, ObjectDiffPage, ObjectHeaders, ObjectRangeData, ObjectSummary, ObjectVersion,
-    OperationId, OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
+    CommitSessionManifest, DelimitedObjectPage, Error, ErrorCode, FsckCleanupCursor,
+    FsckCleanupPage, FsckCursor, FsckPage, GcCursor, GcPage, HistoryCursor, HistoryTransferCursor,
+    HistoryTransferMapping, HistoryTransferPage, JournalIndexRebuildCleanup,
+    JournalIndexRebuildCursor, JournalIndexRebuildStep, ListObjectsPage, MergeAdvancePage,
+    MergeBaseCursor, MergeBasePage, MergeChangeCursor, MergeChangePage, MergeCleanupCursor,
+    MergeCleanupPage, MergeConflictCursor, MergeConflictPage, MergeCursor, MergePolicy,
+    MergeReceipt, NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor, ObjectDiffPage,
+    ObjectHeaders, ObjectPath, ObjectRangeData, ObjectSummary, ObjectVersion, OperationId,
+    OperationIndexRebuildCursor, OperationIndexRebuildStep, ProviderAttestation,
     ProviderPerKeyVersionLimit, ProviderProfileId, PublicationJournalCursor,
     PublicationJournalPage, RefCatalogCursor, RefCatalogRepairPage, RefKind, RefMoveReceipt,
     RepairCursor, RepairPage, Repository, RepositoryOptions, RestoreCursor, RestorePage, Result,
     RetentionPin, RetentionPinPage, StagedMutation, Tag, TagCatalogPage, TraversalBudget,
-    VersionSummary,
+    TreeFormat, VersionSummary,
 };
 use sha2::{Digest as _, Sha256};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::Instant,
+};
 
 use crate::{
     ensure_attestation_current, load_valid_attestation, qualify_and_store,
@@ -51,6 +56,21 @@ pub struct Client {
     _branch_index_maintenance: Arc<Mutex<Option<prolly_s3_core::BranchIndexMaintenance>>>,
 }
 
+/// Durable handoff describing one complete provider object.
+///
+/// Upload this exact object with any S3 transfer manager, including the
+/// `prolly-sha256` metadata value. Prolly never observes upload IDs, parts, or
+/// part checksums; it only verifies the completed whole object before publish.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExternalObjectUpload {
+    pub batch: BatchId,
+    pub key: Vec<u8>,
+    pub path: ObjectPath,
+    pub size: u64,
+    pub checksum_sha256: [u8; 32],
+    pub checksum_md5: [u8; 16],
+}
+
 #[derive(Default)]
 pub struct ClientBuilder {
     aws_client: Option<aws_sdk_s3::Client>,
@@ -58,6 +78,7 @@ pub struct ClientBuilder {
     repository_prefix: Option<String>,
     default_branch: Option<String>,
     writer: Option<String>,
+    state_tree_format: Option<TreeFormat>,
     authority_lease_duration: Option<Duration>,
     read_only: bool,
     max_cached_node_pack_bytes: Option<usize>,
@@ -103,6 +124,114 @@ impl Default for BulkWriteOptions {
             concurrency: 32,
             checkpoint_every: 1_000,
         }
+    }
+}
+
+/// Controls an [`OrderedPublicationQueue`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrderedPublicationOptions {
+    /// Maximum unique logical keys published by one atomic commit.
+    pub max_group_size: usize,
+    /// Maximum complete-object uploads prepared concurrently for one group.
+    pub upload_concurrency: usize,
+    /// Maximum time the worker waits for more submissions after receiving the
+    /// first item in a group.
+    pub max_wait: Duration,
+    /// Bounded channel capacity. Producers await capacity and therefore apply
+    /// backpressure rather than growing process memory without limit.
+    pub queue_capacity: usize,
+    /// Maximum successfully staged mutations appended to one durable recovery
+    /// checkpoint window. This is independent of the final publication group.
+    pub checkpoint_every: usize,
+    /// Persist one recovery checkpoint before each grouped publication.
+    pub durable: bool,
+}
+
+impl Default for OrderedPublicationOptions {
+    fn default() -> Self {
+        Self {
+            max_group_size: 1_000,
+            upload_concurrency: 128,
+            max_wait: Duration::from_millis(2),
+            queue_capacity: 10_000,
+            checkpoint_every: 1_000,
+            durable: true,
+        }
+    }
+}
+
+/// Bounded ordered submission queue that coalesces independent callers into
+/// atomic branch publications.
+///
+/// Every user body remains one complete immutable provider object. Only
+/// candidate metadata and the final branch CAS are grouped. Repeated writes to
+/// the same key are split across consecutive commits so logical version order
+/// is preserved.
+#[derive(Clone)]
+pub struct OrderedPublicationQueue {
+    sender: mpsc::Sender<QueuedPut>,
+}
+
+/// Constant-size acknowledgement for one object accepted by an ordered group
+/// commit. The full batch receipt remains an internal publication result so
+/// acknowledging N callers does not clone an N-entry version vector N times.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrderedPublicationReceipt {
+    pub commit: CommitId,
+    pub operation: OperationId,
+    pub group_size: u64,
+}
+
+struct QueuedPut {
+    object: PutObjectInput,
+    response: oneshot::Sender<Result<OrderedPublicationReceipt>>,
+}
+
+impl OrderedPublicationQueue {
+    pub async fn put_object(
+        &self,
+        key: impl Into<String>,
+        bytes: Vec<u8>,
+    ) -> Result<OrderedPublicationReceipt> {
+        self.put_object_with_metadata(key, bytes, ObjectHeaders::default(), BTreeMap::new())
+            .await
+    }
+
+    pub async fn put_object_with_metadata(
+        &self,
+        key: impl Into<String>,
+        bytes: Vec<u8>,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    ) -> Result<OrderedPublicationReceipt> {
+        let (response, receipt) = oneshot::channel();
+        self.sender
+            .send(QueuedPut {
+                object: PutObjectInput {
+                    key: key.into(),
+                    bytes,
+                    headers,
+                    user_metadata,
+                },
+                response,
+            })
+            .await
+            .map_err(|_| {
+                Error::new(
+                    ErrorCode::OperationCanceled,
+                    "ordered publication queue is closed",
+                )
+            })?;
+        receipt.await.map_err(|_| {
+            Error::new(
+                ErrorCode::OperationCanceled,
+                "ordered publication worker stopped before acknowledging the object",
+            )
+        })?
+    }
+
+    pub fn remaining_capacity(&self) -> usize {
+        self.sender.capacity()
     }
 }
 
@@ -199,6 +328,17 @@ impl Client {
         self.ensure_provider_qualified()?;
         self.repository
             .prewarm_node_cache(&self.branch, snapshot)
+            .await
+    }
+
+    pub async fn prewarm_node_cache_levels(
+        &self,
+        snapshot: CommitId,
+        levels: usize,
+    ) -> Result<NodeCachePrewarmReport> {
+        self.ensure_provider_qualified()?;
+        self.repository
+            .prewarm_node_cache_levels(&self.branch, snapshot, levels)
             .await
     }
 
@@ -463,10 +603,52 @@ impl Client {
         self.repository.advance_fsck(cursor, max_steps).await
     }
 
+    pub async fn resume_fsck(&self, job: OperationId) -> Result<Option<FsckCursor>> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.resume_fsck(job).await
+    }
+
+    pub async fn start_fsck_cleanup(&self, job: OperationId) -> Result<FsckCleanupCursor> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.start_fsck_cleanup(job).await
+    }
+
+    pub async fn advance_fsck_cleanup(
+        &self,
+        cursor: &FsckCleanupCursor,
+        max_objects: usize,
+    ) -> Result<FsckCleanupPage> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository
+            .advance_fsck_cleanup(cursor, max_objects)
+            .await
+    }
+
     pub async fn start_gc(&self, grace_millis: u64) -> Result<GcCursor> {
         self.ensure_provider_qualified()?;
         self.attached_branch()?;
         self.repository.start_gc(grace_millis).await
+    }
+
+    pub async fn resume_gc(&self) -> Result<Option<GcCursor>> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.resume_gc().await
+    }
+
+    pub async fn abandon_gc(&self, expected_epoch: prolly_s3_core::OperationId) -> Result<()> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.abandon_gc(expected_epoch).await
+    }
+
+    pub async fn abandon_incomplete_gc(&self) -> Result<prolly_s3_core::OperationId> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        self.repository.abandon_incomplete_gc().await
     }
 
     pub async fn advance_gc(&self, cursor: &GcCursor, max_steps: usize) -> Result<GcPage> {
@@ -886,6 +1068,51 @@ impl Client {
             .await
     }
 
+    /// Start a bounded ordered queue that coalesces independent submissions
+    /// into grouped branch commits. The worker lives until every queue handle
+    /// is dropped and drains submissions already accepted by the channel.
+    pub fn ordered_publication_queue(
+        &self,
+        options: OrderedPublicationOptions,
+    ) -> Result<OrderedPublicationQueue> {
+        self.ensure_provider_qualified()?;
+        self.attached_branch()?;
+        let max = self
+            .repository
+            .format()
+            .canonical_limits
+            .max_mutations_per_commit as usize;
+        if options.max_group_size == 0 || options.max_group_size > max {
+            return Err(invalid(
+                "ordered publication group size exceeds the canonical mutation limit",
+            ));
+        }
+        if options.upload_concurrency == 0 || options.upload_concurrency > 1_024 {
+            return Err(invalid(
+                "ordered publication upload concurrency must be 1..=1024",
+            ));
+        }
+        if options.queue_capacity == 0 || options.queue_capacity > 1_000_000 {
+            return Err(invalid(
+                "ordered publication queue capacity must be 1..=1000000",
+            ));
+        }
+        if options.checkpoint_every == 0 || options.checkpoint_every > options.max_group_size {
+            return Err(invalid(
+                "ordered publication checkpoint interval must be within the group size",
+            ));
+        }
+        let runtime = tokio::runtime::Handle::try_current()
+            .map_err(|_| invalid("ordered publication queue requires an active Tokio runtime"))?;
+        let (sender, receiver) = mpsc::channel(options.queue_capacity);
+        runtime.spawn(run_ordered_publication_queue(
+            self.clone(),
+            receiver,
+            options,
+        ));
+        Ok(OrderedPublicationQueue { sender })
+    }
+
     /// Put objects through durable atomic batches. This is the recommended
     /// path for bulk loading because publication and checkpoint costs are
     /// amortized across each batch.
@@ -1142,6 +1369,7 @@ impl Client {
             checkpoint_every: 256,
             checkpoint_sequence: checkpoint.sequence,
             dirty_mutations: 0,
+            dirty_keys: BTreeSet::new(),
         })
     }
 
@@ -1521,6 +1749,10 @@ impl Client {
         self.repository.plane().reset_metrics()
     }
 
+    pub fn provider_capabilities(&self) -> &prolly_s3_core::ProviderCapabilities {
+        &self.provider_attestation.body.capabilities
+    }
+
     pub fn fenced_branches(&self) -> Result<Vec<String>> {
         self.repository.fenced_branches()
     }
@@ -1545,6 +1777,179 @@ impl Client {
     }
 }
 
+async fn run_ordered_publication_queue(
+    client: Client,
+    mut receiver: mpsc::Receiver<QueuedPut>,
+    options: OrderedPublicationOptions,
+) {
+    let mut pending = None;
+    loop {
+        let first = match pending.take() {
+            Some(first) => first,
+            None => match receiver.recv().await {
+                Some(first) => first,
+                None => return,
+            },
+        };
+        if first.response.is_closed() {
+            continue;
+        }
+
+        let mut keys = BTreeSet::from([first.object.key.clone()]);
+        let mut group = vec![first];
+        let deadline = Instant::now() + options.max_wait;
+        while group.len() < options.max_group_size {
+            let received = if options.max_wait.is_zero() {
+                receiver.try_recv().ok()
+            } else {
+                tokio::time::timeout_at(deadline, receiver.recv())
+                    .await
+                    .ok()
+                    .flatten()
+            };
+            let Some(next) = received else {
+                break;
+            };
+            if next.response.is_closed() {
+                continue;
+            }
+            if !keys.insert(next.object.key.clone()) {
+                pending = Some(next);
+                break;
+            }
+            group.push(next);
+        }
+        publish_ordered_group(&client, group, options).await;
+    }
+}
+
+async fn publish_ordered_group(
+    client: &Client,
+    group: Vec<QueuedPut>,
+    options: OrderedPublicationOptions,
+) {
+    let mut group = group
+        .into_iter()
+        .filter(|queued| !queued.response.is_closed())
+        .collect::<Vec<_>>();
+    if group.is_empty() {
+        return;
+    }
+    group.sort_by(|left, right| left.object.key.cmp(&right.object.key));
+    let group_len = group.len();
+    let mut builder = client
+        .begin_commit()
+        .message("ordered grouped publication")
+        .checkpoint_every(options.checkpoint_every.min(group_len));
+    if !options.durable {
+        builder = builder.ephemeral();
+    }
+    let mut session = match builder.start().await {
+        Ok(session) => session,
+        Err(error) => {
+            acknowledge_group_error(group, error);
+            return;
+        }
+    };
+    let mut pending = VecDeque::from(group);
+    let mut responses = Vec::with_capacity(group_len);
+    while !pending.is_empty() {
+        let mut window_responses = Vec::with_capacity(options.checkpoint_every);
+        let mut objects = Vec::with_capacity(options.checkpoint_every);
+        for _ in 0..options.checkpoint_every {
+            let Some(queued) = pending.pop_front() else {
+                break;
+            };
+            if queued.response.is_closed() {
+                continue;
+            }
+            let PutObjectInput {
+                key,
+                bytes,
+                headers,
+                user_metadata,
+            } = queued.object;
+            window_responses.push(queued.response);
+            objects.push((key.into_bytes(), bytes, headers, user_metadata));
+        }
+        let staged = match client
+            .repository
+            .stage_commit_session_put_batch_results(
+                &session.manifest,
+                objects,
+                options.upload_concurrency,
+            )
+            .await
+        {
+            Ok(staged) => staged,
+            Err(error) => {
+                let _ = session.abort().await;
+                for response in responses
+                    .into_iter()
+                    .chain(window_responses)
+                    .chain(pending.into_iter().map(|queued| queued.response))
+                {
+                    let _ = response.send(Err(error.clone()));
+                }
+                return;
+            }
+        };
+        for (response, result) in window_responses.into_iter().zip(staged) {
+            if response.is_closed() {
+                continue;
+            }
+            match result {
+                Ok(mutation) => {
+                    session.insert_staged(mutation);
+                    responses.push(response);
+                }
+                Err(mut error) => {
+                    error.operation_id = Some(session.id().to_string());
+                    let _ = response.send(Err(error));
+                }
+            }
+        }
+        if options.durable {
+            if let Err(error) = session.checkpoint().await {
+                for response in responses
+                    .into_iter()
+                    .chain(pending.into_iter().map(|queued| queued.response))
+                {
+                    let _ = response.send(Err(error.clone()));
+                }
+                return;
+            }
+        }
+    }
+    if responses.is_empty() {
+        let _ = session.abort().await;
+        return;
+    }
+    match session.publish().await {
+        Ok(receipt) => {
+            let acknowledgement = OrderedPublicationReceipt {
+                commit: receipt.id,
+                operation: receipt.operation,
+                group_size: receipt.changed_keys,
+            };
+            for response in responses {
+                let _ = response.send(Ok(acknowledgement));
+            }
+        }
+        Err(error) => {
+            for response in responses {
+                let _ = response.send(Err(error.clone()));
+            }
+        }
+    }
+}
+
+fn acknowledge_group_error(group: Vec<QueuedPut>, error: Error) {
+    for queued in group {
+        let _ = queued.response.send(Err(error.clone()));
+    }
+}
+
 pub struct CommitSessionBuilder {
     client: Client,
     message: String,
@@ -1564,8 +1969,9 @@ impl CommitSessionBuilder {
         self
     }
 
-    /// Disable remote checkpoints for the minimum N + 3 S3 PUT shape. The
-    /// session cannot then be resumed after process loss.
+    /// Disable remote checkpoints for the minimum N + 4 S3 PUT shape: N
+    /// payloads, commit/event/ref publication, and one short-lived durable GC
+    /// admission ticket. The session cannot then be resumed after process loss.
     pub fn ephemeral(mut self) -> Self {
         self.durable = false;
         self
@@ -1610,6 +2016,7 @@ impl CommitSessionBuilder {
             checkpoint_every: self.checkpoint_every,
             checkpoint_sequence,
             dirty_mutations: 0,
+            dirty_keys: BTreeSet::new(),
         })
     }
 }
@@ -1622,6 +2029,7 @@ pub struct CommitSession {
     checkpoint_every: usize,
     checkpoint_sequence: u64,
     dirty_mutations: usize,
+    dirty_keys: BTreeSet<Vec<u8>>,
 }
 
 impl CommitSession {
@@ -1646,7 +2054,9 @@ impl CommitSession {
     }
 
     fn insert_staged(&mut self, staged: StagedMutation) {
-        self.staged.insert(staged.key().to_vec(), staged);
+        let key = staged.key().to_vec();
+        self.staged.insert(key.clone(), staged);
+        self.dirty_keys.insert(key);
         self.dirty_mutations = self.dirty_mutations.saturating_add(1);
     }
 
@@ -1758,13 +2168,76 @@ impl CommitSession {
         Ok(())
     }
 
+    /// Prepare a durable whole-object handoff for an external S3 uploader.
+    /// The uploader owns multipart, retry, and resume behavior entirely.
+    pub async fn prepare_external_object_upload(
+        &self,
+        key: impl Into<String>,
+        size: u64,
+        checksum_sha256: [u8; 32],
+        checksum_md5: [u8; 16],
+    ) -> Result<ExternalObjectUpload> {
+        self.client.ensure_provider_qualified()?;
+        let key = key.into().into_bytes();
+        let path = self
+            .client
+            .repository
+            .commit_session_payload_path(&self.manifest, &key, size, checksum_sha256)
+            .await?;
+        Ok(ExternalObjectUpload {
+            batch: self.id(),
+            key,
+            path,
+            size,
+            checksum_sha256,
+            checksum_md5,
+        })
+    }
+
+    /// Verify and stage a completed whole object uploaded to the handoff path.
+    pub async fn stage_external_object_upload(
+        &mut self,
+        upload: &ExternalObjectUpload,
+        headers: ObjectHeaders,
+        metadata: BTreeMap<String, String>,
+    ) -> Result<()> {
+        upload.validate_for(self)?;
+        let expected_path = self
+            .client
+            .repository
+            .commit_session_payload_path(
+                &self.manifest,
+                &upload.key,
+                upload.size,
+                upload.checksum_sha256,
+            )
+            .await?;
+        if upload.path != expected_path {
+            return Err(invalid("external object handoff path was modified"));
+        }
+        let staged = self
+            .client
+            .repository
+            .stage_commit_session_existing_object(
+                &self.manifest,
+                upload.key.clone(),
+                upload.size,
+                upload.checksum_sha256,
+                upload.checksum_md5,
+                headers,
+                metadata,
+            )
+            .await?;
+        self.insert_staged(staged);
+        self.mark_staged_and_checkpoint_if_due().await
+    }
+
     pub fn delete_object(&mut self, key: impl Into<String>) -> Result<()> {
         let key = key.into().into_bytes();
         if key.is_empty() {
             return Err(invalid("commit-session delete key is empty"));
         }
-        self.staged.insert(key.clone(), StagedMutation::delete(key));
-        self.dirty_mutations = self.dirty_mutations.saturating_add(1);
+        self.insert_staged(StagedMutation::delete(key));
         Ok(())
     }
 
@@ -1776,18 +2249,25 @@ impl CommitSession {
             .checkpoint_sequence
             .checked_add(1)
             .ok_or_else(|| invalid("commit-session checkpoint sequence overflow"))?;
+        let delta = self
+            .dirty_keys
+            .iter()
+            .map(|key| {
+                self.staged
+                    .get(key)
+                    .cloned()
+                    .expect("dirty commit-session key is staged")
+            })
+            .collect();
         let checkpoint = self
             .client
             .repository
-            .checkpoint_commit_session(
-                &self.manifest,
-                self.staged.values().cloned().collect(),
-                sequence,
-            )
+            .checkpoint_commit_session(&self.manifest, delta, self.staged.len(), sequence)
             .await?;
         self.manifest = checkpoint.session;
         self.checkpoint_sequence = checkpoint.sequence;
         self.dirty_mutations = 0;
+        self.dirty_keys.clear();
         Ok(())
     }
 
@@ -1802,23 +2282,39 @@ impl CommitSession {
 
     /// Mark a durable session aborted. Immutable payload candidates remain
     /// deduplicated and bounded staging cleanup removes expired checkpoints.
-    pub async fn abort(self) -> Result<()> {
+    pub async fn abort(mut self) -> Result<()> {
         if !self.durable {
             return Ok(());
         }
+        self.checkpoint().await?;
         let sequence = self
             .checkpoint_sequence
             .checked_add(1)
             .ok_or_else(|| invalid("commit-session checkpoint sequence overflow"))?;
         self.client
             .repository
-            .abort_commit_session(self.manifest, self.staged.into_values().collect(), sequence)
+            .abort_commit_session(self.manifest, Vec::new(), self.staged.len(), sequence)
             .await
     }
 
     async fn mark_staged_and_checkpoint_if_due(&mut self) -> Result<()> {
         if self.durable && self.dirty_mutations >= self.checkpoint_every {
             self.checkpoint().await?;
+        }
+        Ok(())
+    }
+}
+
+impl ExternalObjectUpload {
+    fn validate_for(&self, session: &CommitSession) -> Result<()> {
+        if self.batch != session.id()
+            || self.key.is_empty()
+            || self.size == 0
+            || self.checksum_sha256 == [0; 32]
+        {
+            return Err(invalid(
+                "external object handoff is malformed or belongs to another session",
+            ));
         }
         Ok(())
     }
@@ -1879,6 +2375,14 @@ impl ClientBuilder {
 
     pub fn authority_lease_duration(mut self, duration: Duration) -> Self {
         self.authority_lease_duration = Some(duration);
+        self
+    }
+
+    /// Select the persisted tree geometry when initializing a repository.
+    /// Opening an existing repository must supply the identical format. Shape
+    /// experiments therefore require a new repository prefix.
+    pub fn state_tree_format(mut self, format: TreeFormat) -> Self {
+        self.state_tree_format = Some(format);
         self
     }
 
@@ -2027,6 +2531,9 @@ impl ClientBuilder {
             options.authority_lease_millis = u64::try_from(duration.as_millis())
                 .map_err(|_| invalid("authority lease duration exceeds u64 milliseconds"))?;
         }
+        if let Some(format) = self.state_tree_format {
+            options.state_tree_format = format;
+        }
         if let Some(bytes) = self.max_cached_node_pack_bytes {
             options.max_cached_node_pack_bytes = bytes;
         }
@@ -2054,9 +2561,9 @@ impl ClientBuilder {
         options.node_cache = self.node_cache;
         let branch = options.default_branch.clone();
         let repository = if initialize {
-            Repository::initialize(plane, options).await?
+            Repository::initialize(plane.clone(), options).await?
         } else {
-            Repository::open(plane, options).await?
+            Repository::open(plane.clone(), options).await?
         };
         let repository = Arc::new(repository);
         let shard_authority_maintenance = if self.read_only {

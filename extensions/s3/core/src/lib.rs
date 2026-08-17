@@ -42,7 +42,7 @@ pub use journal_indexes::{
 pub use merge::{
     MergeAdvancePage, MergeBaseCursor, MergeBasePage, MergeChange, MergeChangeCursor,
     MergeChangePage, MergeCleanupCursor, MergeCleanupPage, MergeConflict, MergeConflictCursor,
-    MergeConflictPage, MergeCursor, MergePhase, MergePolicy, MergeReceipt,
+    MergeConflictPage, MergeCursor, MergeDiffCursor, MergePhase, MergePolicy, MergeReceipt,
 };
 pub use model::*;
 pub use object_plane::*;
@@ -52,7 +52,10 @@ pub use operation_index::{
     DEFAULT_OPERATION_INDEX_MAX_UNINDEXED_EVENTS, DEFAULT_OPERATION_INDEX_MERGE_FANOUT,
 };
 pub use payload::ImmutablePayloadStore;
-pub use prolly::Cid;
+pub use prolly::{
+    BoundaryInput, BoundaryRule, ChunkMeasure, ChunkingSpec, Cid, HashAlgorithm, NodeLayoutSpec,
+    TreeFormat,
+};
 pub use publication::{
     AppliedBranchBarrier, CommitPublication, LoadedRef, PublicationJournalCursor,
     PublicationJournalEntry, PublicationJournalPage, ShardedBranchPublisher,
@@ -65,12 +68,13 @@ pub use repository::{
     validate_branch, BackupVerificationCursor, BackupVerificationPage, BackupVerificationReport,
     BranchCatalogPage, BranchHead, BranchIndexAdvanceReport, BranchIndexHealth,
     BranchIndexMaintenance, CommitClosureCursor, CommitClosurePage, CommitPage, CommitReceipt,
-    CommitSessionPutInput, DelimitedObjectPage, FsckCursor, FsckPage, FsckPhase, FsckReport,
-    HistoryCursor, ListObjectsPage, NodeCachePrewarmReport, ObjectData, ObjectDiff,
-    ObjectDiffCursor, ObjectDiffPage, ObjectRangeData, ObjectSummary, RefCatalogRepairPage,
-    RefMoveReceipt, RepairCursor, RepairPage, RepairPhase, RepairReport, Repository,
-    RepositoryOptions, RestoreCursor, RestorePage, RetentionPin, RetentionPinPage,
-    ShardAuthorityMaintenance, Tag, TagCatalogPage, TraversalBudget, VersionSummary,
+    CommitSessionPutInput, DelimitedObjectPage, FsckCleanupCursor, FsckCleanupPage,
+    FsckCleanupPhase, FsckCursor, FsckPage, FsckPhase, FsckReport, HistoryCursor, ListObjectsPage,
+    NodeCachePrewarmReport, ObjectData, ObjectDiff, ObjectDiffCursor, ObjectDiffPage,
+    ObjectRangeData, ObjectSummary, RefCatalogRepairPage, RefMoveReceipt, RepairCursor, RepairPage,
+    RepairPhase, RepairReport, Repository, RepositoryOptions, RestoreCursor, RestorePage,
+    RetentionPin, RetentionPinPage, ShardAuthorityMaintenance, Tag, TagCatalogPage,
+    TraversalBudget, VersionSummary,
 };
 pub use runtime::*;
 pub use store::{NodeCacheSnapshot, ProllyObjectStore};

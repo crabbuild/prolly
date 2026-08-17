@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, OnceLock, RwLock, Weak,
+        Arc, Mutex, OnceLock, RwLock, Weak,
     },
     time::Duration,
 };
@@ -15,7 +15,7 @@ use prolly::{
 };
 use sha2::Sha256;
 
-use crate::gc::{GcCandidate, GcCoordinator, GcDirtyRoot, GcNodeWork};
+use crate::gc::{GcCandidate, GcCoordinator, GcDirtyRoot, GcNodeWork, GcPublicationTicket};
 use crate::merge::{MergeBaseCandidate, MergePlanEntry, MergeQueueEntry, MergeSeenEntry};
 use crate::publication::BranchMovement;
 use crate::store::{LocatedPackedNode, NodeCacheNamespace, NodeLocator, PreparedNodePack};
@@ -34,15 +34,15 @@ use crate::{
     LogicalObjectVersionBody, LogicalObjectVersionKind, MemoryNodeCache, MergeAdvancePage,
     MergeBaseCursor, MergeBasePage, MergeChange, MergeChangeCursor, MergeChangePage,
     MergeCleanupCursor, MergeCleanupPage, MergeConflict, MergeConflictCursor, MergeConflictPage,
-    MergeCursor, MergePhase, MergePolicy, MergeReceipt, MutableControlKind, MutableControlObserver,
-    MutableControlStore, MutationIdentity, NodeCache, ObjectHeaders, ObjectPath, ObjectPlane,
-    ObjectTransition, ObjectVersion, ObjectVersionId, ObjectVersionOrder, OperationId,
-    OperationIndexAdvanceReport, OperationIndexRebuildCursor, OperationIndexRebuildStep,
-    PendingHistoryTransferCommit, PhysicalVersion, ProllyObjectStore, ProviderPerKeyVersionLimit,
-    RandomIdSource, RefCatalogCursor, RefGeneration, RefKind, RepositoryFormat, Result,
-    RootManifest, SegmentedOperationIndex, ShardWriterAuthority, ShardedBranchPublisher,
-    ShardedRefCatalog, StagedMutation, StagedMutationBody, StagedPut, SystemClock, TagStore,
-    TakeoverRequest,
+    MergeCursor, MergeDiffCursor, MergePhase, MergePolicy, MergeReceipt, MutableControlKind,
+    MutableControlObserver, MutableControlStore, MutationIdentity, NodeCache, ObjectHeaders,
+    ObjectPath, ObjectPlane, ObjectTransition, ObjectVersion, ObjectVersionId, ObjectVersionOrder,
+    OperationId, OperationIndexAdvanceReport, OperationIndexRebuildCursor,
+    OperationIndexRebuildStep, PendingHistoryTransferCommit, PhysicalVersion, ProllyObjectStore,
+    ProviderPerKeyVersionLimit, RandomIdSource, RefCatalogCursor, RefGeneration, RefKind,
+    RepositoryFormat, Result, RootManifest, SegmentedOperationIndex, ShardWriterAuthority,
+    ShardedBranchPublisher, ShardedRefCatalog, StagedMutation, StagedMutationBody, StagedPut,
+    SystemClock, TagStore, TakeoverRequest,
 };
 
 /// Keep ordinary commit descriptors small enough for one bounded metadata
@@ -230,7 +230,13 @@ pub struct ObjectDiffCursor {
     branch: String,
     from: CommitId,
     to: CommitId,
-    traversal: prolly::StructuralDiffCursor,
+    traversal: ObjectDiffTraversal,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+enum ObjectDiffTraversal {
+    Structural(prolly::StructuralDiffCursor),
+    Delta { after: Vec<u8> },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -305,6 +311,7 @@ pub enum FsckPhase {
     DiscoverCommits,
     VerifyObjects,
     VerifyVersions,
+    VerifyPayloads,
     Complete,
 }
 
@@ -317,6 +324,12 @@ pub struct FsckReport {
     pub payloads_verified: u64,
     pub payload_bytes_verified: u64,
     pub deep_content_bytes_verified: u64,
+    #[serde(default)]
+    pub physical_payloads_verified: u64,
+    #[serde(default)]
+    pub physical_payload_bytes_verified: u64,
+    #[serde(default)]
+    pub deep_physical_bytes_read: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -324,6 +337,14 @@ pub struct FsckCursor {
     pub repository: crate::RepositoryId,
     pub branch: String,
     pub snapshot: CommitId,
+    pub snapshot_objects: RootManifest,
+    pub snapshot_versions: RootManifest,
+    pub job: OperationId,
+    /// Monotonic generation of the durable checkpoint. This fences stale
+    /// workers after another process resumes and advances the same job.
+    #[serde(default)]
+    pub checkpoint_generation: u64,
+    pub payloads: RootManifest,
     pub closure: CommitClosureCursor,
     pub phase: FsckPhase,
     pub after: Option<Vec<u8>>,
@@ -331,10 +352,43 @@ pub struct FsckCursor {
     pub report: FsckReport,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct FsckPhysicalPayload {
+    binding: crate::PayloadBinding,
+    size: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FsckPage {
     pub cursor: FsckCursor,
     pub processed: usize,
+    pub complete: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum FsckCleanupPhase {
+    PayloadWork,
+    ClosureWork,
+    CheckpointHistory,
+    CheckpointCurrent,
+    Complete,
+}
+
+/// Restart-safe cleanup descriptor for one completed fsck job. Cleanup may be
+/// restarted from this initial descriptor because every page exact-deletes
+/// immutable physical versions and the durable checkpoint is removed last.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct FsckCleanupCursor {
+    pub repository: crate::RepositoryId,
+    pub job: OperationId,
+    pub closure_traversal: OperationId,
+    pub phase: FsckCleanupPhase,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FsckCleanupPage {
+    pub cursor: FsckCleanupCursor,
+    pub deleted: usize,
     pub complete: bool,
 }
 
@@ -585,8 +639,16 @@ struct GcDirtyRootObserver<P: ObjectPlane> {
     plane: Arc<P>,
     prefix: String,
     repository: crate::RepositoryId,
-    active_epoch: Arc<RwLock<Option<OperationId>>>,
-    sequence: Arc<AtomicU64>,
+    instance: OperationId,
+    clock: Arc<dyn Clock>,
+    ticket_ttl_millis: u64,
+    tickets: Mutex<BTreeMap<[u8; 32], HeldPublicationTicket>>,
+}
+
+struct HeldPublicationTicket {
+    path: ObjectPath,
+    version: PhysicalVersion,
+    references: usize,
 }
 
 struct GcProcessState {
@@ -622,68 +684,128 @@ impl<P: ObjectPlane> MutableControlObserver for GcDirtyRootObserver<P> {
         kind: MutableControlKind,
         request: &CompareExchange,
     ) -> Result<()> {
-        let epoch = *self
-            .active_epoch
-            .read()
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?;
-        let Some(epoch) = epoch else {
+        if !matches!(
+            kind,
+            MutableControlKind::BranchRef | MutableControlKind::TagRef
+        ) {
             return Ok(());
-        };
-        let (namespace, name, target, previous_target, generation, operation, created_at_millis) =
-            match kind {
-                MutableControlKind::BranchRef => {
-                    let value: crate::RefValue = decode_canonical(&request.bytes)?;
-                    (
-                        "branch",
-                        value.inline_reflog.branch,
-                        value.target,
-                        value.previous_target,
-                        value.generation,
-                        value.operation,
-                        value.updated_at_millis,
-                    )
-                }
-                MutableControlKind::TagRef => {
-                    let value: crate::TagValue = decode_canonical(&request.bytes)?;
-                    (
-                        "tag",
-                        value.inline_reflog.branch,
-                        value.target,
-                        value.previous_target,
-                        value.generation,
-                        value.operation,
-                        value.updated_at_millis,
-                    )
-                }
-                _ => return Ok(()),
-            };
-        let sequence = self
-            .sequence
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
-                current.checked_add(1)
-            })
-            .map(|previous| previous + 1)
-            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "GC sequence overflow"))?;
-        let event = GcDirtyRoot {
+        }
+        let request_digest = publication_ticket_digest(request);
+        let now = self.clock.now_millis()?;
+        let ticket = GcPublicationTicket {
             repository: self.repository,
-            epoch,
-            sequence,
-            namespace: namespace.to_string(),
-            name,
-            target,
-            previous_target,
-            generation,
-            operation,
-            created_at_millis,
+            instance: self.instance,
+            request_digest,
+            expires_at_millis: now.checked_add(self.ticket_ttl_millis).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "publication ticket expiry overflow",
+                )
+            })?,
         };
-        let bytes = encode_canonical(&event)?;
-        self.plane
+        let bytes = encode_canonical(&ticket)?;
+        let path = gc_publication_ticket_path(
+            &self.prefix,
+            self.repository,
+            self.instance,
+            request_digest,
+        )?;
+        let stored = self
+            .plane
             .put_immutable(crate::ImmutablePut {
-                path: gc_dirty_root_path(&self.prefix, &event, crate::codec::sha256(&bytes))?,
+                path: path.clone(),
                 expected_sha256: crate::codec::sha256(&bytes),
                 bytes,
             })
             .await?;
+        let metadata = match stored {
+            crate::ImmutablePutOutcome::Created(metadata)
+            | crate::ImmutablePutOutcome::AlreadyPresent(metadata) => metadata,
+        };
+        let version = metadata.token.version_id.clone().map_or_else(
+            || PhysicalVersion::Unversioned {
+                token: Some(metadata.token.clone()),
+            },
+            |version_id| PhysicalVersion::Versioned { version_id },
+        );
+
+        let coordinator = self
+            .plane
+            .load_mutable(&gc_coordinator_path(&self.prefix)?)
+            .await?
+            .map(|stored| decode_canonical::<GcCoordinator>(&stored.bytes))
+            .transpose()?;
+        if coordinator.as_ref().is_some_and(|coordinator| {
+            coordinator.repository != self.repository
+                || coordinator.active_epoch.is_some()
+                || coordinator.admission_closed
+        }) {
+            let _ = self.plane.delete_exact(&path, version).await;
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "repository publication admission is closed for maintenance",
+            )
+            .retry(crate::RetryAdvice::After(Duration::from_millis(250))));
+        }
+        let mut tickets = self.tickets.lock().map_err(|_| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "publication-ticket lock poisoned",
+            )
+        })?;
+        tickets
+            .entry(request_digest)
+            .and_modify(|held| held.references = held.references.saturating_add(1))
+            .or_insert(HeldPublicationTicket {
+                path,
+                version,
+                references: 1,
+            });
+        Ok(())
+    }
+
+    async fn after_compare_exchange(
+        &self,
+        kind: MutableControlKind,
+        request: &CompareExchange,
+    ) -> Result<()> {
+        if !matches!(
+            kind,
+            MutableControlKind::BranchRef | MutableControlKind::TagRef
+        ) {
+            return Ok(());
+        }
+        let digest = publication_ticket_digest(request);
+        let release = {
+            let mut tickets = self.tickets.lock().map_err(|_| {
+                Error::new(
+                    ErrorCode::InternalInvariant,
+                    "publication-ticket lock poisoned",
+                )
+            })?;
+            let Some(ticket) = tickets.get_mut(&digest) else {
+                return Ok(());
+            };
+            ticket.references = ticket.references.saturating_sub(1);
+            (ticket.references == 0)
+                .then(|| tickets.remove(&digest))
+                .flatten()
+        };
+        if let Some(ticket) = release {
+            match self
+                .plane
+                .delete_exact(&ticket.path, ticket.version)
+                .await?
+            {
+                DeleteOutcome::Deleted | DeleteOutcome::NotFound => {}
+                DeleteOutcome::TokenMismatch => {
+                    return Err(Error::new(
+                        ErrorCode::PreconditionFailed,
+                        "publication ticket changed before release",
+                    ));
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -706,6 +828,7 @@ pub struct Repository<P: ObjectPlane> {
     ref_catalog: Arc<ShardedRefCatalog<P>>,
     operation_index: SegmentedOperationIndex<P>,
     journal_indexes: Arc<JournalDerivedIndexes<P>>,
+    maintenance_controls: MutableControlStore<P>,
     locator: Arc<JournalNodeLocator<P>>,
     permits: RwLock<BTreeMap<AuthorityScope, AuthorityPermit>>,
     fenced_scopes: RwLock<BTreeSet<AuthorityScope>>,
@@ -925,8 +1048,10 @@ impl<P: ObjectPlane> Repository<P> {
             plane: plane.clone(),
             prefix: options.repository_prefix.clone(),
             repository: format.repository_id,
-            active_epoch: active_gc_epoch.clone(),
-            sequence: gc_dirty_sequence.clone(),
+            instance: options.ids.operation(),
+            clock: options.clock.clone(),
+            ticket_ttl_millis: options.authority_lease_millis,
+            tickets: Mutex::new(BTreeMap::new()),
         });
         let publisher = ShardedBranchPublisher::new_with_gc_controls(
             plane.clone(),
@@ -984,6 +1109,11 @@ impl<P: ObjectPlane> Repository<P> {
             options.journal_index_max_unindexed_events,
             options.mutable_control_versions_to_retain,
         )?);
+        let maintenance_controls = MutableControlStore::new(
+            plane.clone(),
+            options.repository_prefix.clone(),
+            options.mutable_control_versions_to_retain,
+        )?;
         let locator = Arc::new(JournalNodeLocator {
             indexes: journal_indexes.clone(),
             branches: RwLock::new(BTreeSet::new()),
@@ -1005,6 +1135,7 @@ impl<P: ObjectPlane> Repository<P> {
             ref_catalog,
             operation_index,
             journal_indexes,
+            maintenance_controls,
             locator,
             permits: RwLock::new(BTreeMap::new()),
             fenced_scopes: RwLock::new(BTreeSet::new()),
@@ -1074,6 +1205,86 @@ impl<P: ObjectPlane> Repository<P> {
             before,
             after: self.node_store.node_cache_snapshot(),
         })
+    }
+
+    /// Load only the root and a bounded number of upper tree levels. This
+    /// avoids a full-snapshot scan while removing repeated cold traversal of
+    /// shared internal paths before point-read traffic begins.
+    pub async fn prewarm_node_cache_levels(
+        &self,
+        branch: &str,
+        snapshot: CommitId,
+        levels: usize,
+    ) -> Result<NodeCachePrewarmReport> {
+        if !(1..=64).contains(&levels) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "node-cache prewarm levels must be within 1..=64",
+            ));
+        }
+        validate_branch(branch)?;
+        self.locator.register(branch)?;
+        self.require_branch_indexes_ready(branch).await?;
+        let before = self.node_store.node_cache_snapshot();
+        let commit = self.load_commit_object(snapshot).await?.commit;
+        let object_nodes = self
+            .prewarm_root_levels(&commit.state.objects, levels)
+            .await?;
+        let version_nodes = self
+            .prewarm_root_levels(&commit.state.versions, levels)
+            .await?;
+        Ok(NodeCachePrewarmReport {
+            snapshot,
+            object_nodes,
+            version_nodes,
+            before,
+            after: self.node_store.node_cache_snapshot(),
+        })
+    }
+
+    async fn prewarm_root_levels(&self, root: &RootManifest, levels: usize) -> Result<usize> {
+        let mut frontier = root.root.iter().cloned().collect::<Vec<_>>();
+        let mut seen = BTreeSet::new();
+        let mut loaded_nodes = 0usize;
+        for _ in 0..levels {
+            frontier.retain(|cid| seen.insert(cid.clone()));
+            if frontier.is_empty() {
+                break;
+            }
+            let loaded = stream::iter(frontier.into_iter().map(|cid| async move {
+                let bytes = self.node_store.get(cid.as_bytes()).await?.ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "prewarm node is missing")
+                })?;
+                let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                    .map_err(|error| {
+                        Error::new(
+                            ErrorCode::CorruptNode,
+                            format!("prewarm node could not be decoded: {error}"),
+                        )
+                    })?;
+                Ok::<_, Error>(node)
+            }))
+            .buffered(32)
+            .collect::<Vec<_>>()
+            .await;
+            let mut next = Vec::new();
+            for node in loaded {
+                let node = node?;
+                loaded_nodes = loaded_nodes.saturating_add(1);
+                if !node.leaf {
+                    for child in node.vals {
+                        next.push(prolly::Cid(child.try_into().map_err(|_| {
+                            Error::new(
+                                ErrorCode::CorruptNode,
+                                "prewarm internal child CID is invalid",
+                            )
+                        })?));
+                    }
+                }
+            }
+            frontier = next;
+        }
+        Ok(loaded_nodes)
     }
 
     pub async fn head(&self, branch: &str) -> Result<CommitId> {
@@ -1477,6 +1688,7 @@ impl<P: ObjectPlane> Repository<P> {
         let checkpoint = CommitSessionCheckpoint {
             session,
             sequence: 0,
+            total_mutations: 0,
             mutations: Vec::new(),
             state: CommitSessionState::Open,
         };
@@ -1488,12 +1700,19 @@ impl<P: ObjectPlane> Repository<P> {
         &self,
         session: &CommitSessionManifest,
         mutations: Vec<StagedMutation>,
+        total_mutations: usize,
         sequence: u64,
     ) -> Result<CommitSessionCheckpoint> {
         self.validate_commit_session(session).await?;
         let checkpoint = CommitSessionCheckpoint {
             session: session.clone(),
             sequence,
+            total_mutations: u64::try_from(total_mutations).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "checkpoint mutation count exceeds u64",
+                )
+            })?,
             mutations: self.canonical_session_mutations(mutations, true)?,
             state: CommitSessionState::Open,
         };
@@ -1548,7 +1767,9 @@ impl<P: ObjectPlane> Repository<P> {
                 Error::new(ErrorCode::InvalidLimit, "checkpoint sequence overflow")
             })?;
             checkpoint.session.identity.authority = permit.stamp();
-            self.commit_sessions.save(&checkpoint).await?;
+            let mut adoption = checkpoint.clone();
+            adoption.mutations.clear();
+            self.commit_sessions.save(&adoption).await?;
         }
         Ok(checkpoint)
     }
@@ -1557,12 +1778,19 @@ impl<P: ObjectPlane> Repository<P> {
         &self,
         session: CommitSessionManifest,
         mutations: Vec<StagedMutation>,
+        total_mutations: usize,
         sequence: u64,
     ) -> Result<()> {
         self.validate_commit_session(&session).await?;
         let checkpoint = CommitSessionCheckpoint {
             session,
             sequence,
+            total_mutations: u64::try_from(total_mutations).map_err(|_| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "checkpoint mutation count exceeds u64",
+                )
+            })?,
             mutations: self.canonical_session_mutations(mutations, true)?,
             state: CommitSessionState::Aborted,
         };
@@ -1588,6 +1816,17 @@ impl<P: ObjectPlane> Repository<P> {
         user_metadata: BTreeMap<String, String>,
     ) -> Result<StagedMutation> {
         self.validate_commit_session(session).await?;
+        self.stage_commit_session_put_validated(key, bytes, headers, user_metadata)
+            .await
+    }
+
+    async fn stage_commit_session_put_validated(
+        &self,
+        key: Vec<u8>,
+        bytes: Vec<u8>,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    ) -> Result<StagedMutation> {
         self.validate_key(&key)?;
         if bytes.len() as u64 > self.format.canonical_limits.max_object_bytes {
             return Err(Error::new(
@@ -1617,9 +1856,9 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    /// Stage a bounded input window, packing non-empty payloads up to 4 KiB
-    /// into deterministic immutable segments no larger than 4 MiB. Larger and
-    /// empty payloads retain the direct content-addressed representation.
+    /// Stage a bounded input window as independent whole provider objects.
+    /// Uploads run concurrently, while the returned mutations are ordered by
+    /// logical key so publication remains deterministic.
     pub async fn stage_commit_session_put_batch(
         &self,
         session: &CommitSessionManifest,
@@ -1627,10 +1866,10 @@ impl<P: ObjectPlane> Repository<P> {
         concurrency: usize,
     ) -> Result<Vec<StagedMutation>> {
         self.validate_commit_session(session).await?;
-        if concurrency == 0 {
+        if concurrency == 0 || concurrency > 1_024 {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
-                "payload staging concurrency is zero",
+                "payload staging concurrency is outside 1..=1024",
             ));
         }
         objects.sort_by(|left, right| left.0.cmp(&right.0));
@@ -1652,50 +1891,49 @@ impl<P: ObjectPlane> Repository<P> {
             }
         }
 
-        const SMALL_OBJECT_MAX: usize = 4 * 1024;
-        const PACK_MAX: usize = 4 * 1024 * 1024;
-        let mut packed_groups = Vec::new();
-        let mut current = Vec::new();
-        let mut current_bytes = 0_usize;
-        let mut direct = Vec::new();
-        for object in objects {
-            if object.1.is_empty() || object.1.len() > SMALL_OBJECT_MAX {
-                direct.push(object);
-                continue;
-            }
-            if !current.is_empty() && current_bytes.saturating_add(object.1.len()) > PACK_MAX {
-                packed_groups.push(std::mem::take(&mut current));
-                current_bytes = 0;
-            }
-            current_bytes = current_bytes.saturating_add(object.1.len());
-            current.push(object);
-        }
-        if !current.is_empty() {
-            packed_groups.push(current);
-        }
-
-        let mut staged = Vec::new();
-        for group in packed_groups {
-            let pack_inputs = group
-                .iter()
-                .map(|(_, bytes, _, _)| (crate::codec::sha256(bytes), bytes.clone()))
-                .collect();
-            let bindings = self.payloads.put_pack(pack_inputs).await?;
-            for ((key, bytes, headers, user_metadata), binding) in group.into_iter().zip(bindings) {
-                staged.push(staged_put(key, bytes, headers, user_metadata, binding));
-            }
-        }
-        let direct = stream::iter(direct)
+        let staged = stream::iter(objects)
             .map(|(key, bytes, headers, user_metadata)| async move {
-                self.stage_commit_session_put(session, key, bytes, headers, user_metadata)
+                self.stage_commit_session_put_validated(key, bytes, headers, user_metadata)
                     .await
             })
             .buffer_unordered(concurrency)
             .collect::<Vec<_>>()
             .await;
-        staged.extend(direct.into_iter().collect::<Result<Vec<_>>>()?);
+        let mut staged = staged.into_iter().collect::<Result<Vec<_>>>()?;
         staged.sort_by(|left, right| left.key().cmp(right.key()));
         Ok(staged)
+    }
+
+    /// Stage one bounded group after validating its session once, while
+    /// preserving an independent result for every input. This is used by
+    /// ordered publication queues so one failed object does not discard
+    /// successfully prepared whole-object candidates.
+    pub async fn stage_commit_session_put_batch_results(
+        &self,
+        session: &CommitSessionManifest,
+        objects: Vec<CommitSessionPutInput>,
+        concurrency: usize,
+    ) -> Result<Vec<std::result::Result<StagedMutation, Error>>> {
+        self.validate_commit_session(session).await?;
+        if concurrency == 0 || concurrency > 1_024 {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "payload staging concurrency is outside 1..=1024",
+            ));
+        }
+        let mut staged = stream::iter(objects.into_iter().enumerate())
+            .map(|(index, (key, bytes, headers, user_metadata))| async move {
+                (
+                    index,
+                    self.stage_commit_session_put_validated(key, bytes, headers, user_metadata)
+                        .await,
+                )
+            })
+            .buffer_unordered(concurrency)
+            .collect::<Vec<_>>()
+            .await;
+        staged.sort_by_key(|(index, _)| *index);
+        Ok(staged.into_iter().map(|(_, result)| result).collect())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1722,6 +1960,86 @@ impl<P: ObjectPlane> Repository<P> {
             .payloads
             .put_file(body_path, size, checksum_sha256)
             .await?;
+        Ok(StagedMutation {
+            body: StagedMutationBody::Put(Box::new(StagedPut {
+                key,
+                size,
+                logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
+                checksums: Checksums {
+                    md5: Some(checksum_md5),
+                    sha256: Some(checksum_sha256),
+                    algorithm_values: BTreeMap::new(),
+                },
+                headers,
+                user_metadata,
+                tags: BTreeMap::new(),
+                binding,
+            })),
+        })
+    }
+
+    /// Resolve the immutable destination for one externally uploaded provider
+    /// object. Prolly defines the whole-object identity and never observes or
+    /// manages the uploader's transfer parts.
+    pub async fn commit_session_payload_path(
+        &self,
+        session: &CommitSessionManifest,
+        key: &[u8],
+        size: u64,
+        checksum_sha256: [u8; 32],
+    ) -> Result<ObjectPath> {
+        self.validate_commit_session(session).await?;
+        self.validate_key(key)?;
+        if size == 0 || size > self.format.canonical_limits.max_object_bytes {
+            return Err(Error::new(
+                ErrorCode::EntityTooLarge,
+                "external object size is outside repository limits",
+            ));
+        }
+        if checksum_sha256 == [0; 32] {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "external object requires its complete SHA-256",
+            ));
+        }
+        self.payloads.path(checksum_sha256)
+    }
+
+    /// Stage one completed provider object. The caller may use any provider
+    /// transfer manager, but only the final object enters the repository.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn stage_commit_session_existing_object(
+        &self,
+        session: &CommitSessionManifest,
+        key: Vec<u8>,
+        size: u64,
+        checksum_sha256: [u8; 32],
+        checksum_md5: [u8; 16],
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+    ) -> Result<StagedMutation> {
+        let path = self
+            .commit_session_payload_path(session, &key, size, checksum_sha256)
+            .await?;
+        let current = self.plane.head(&path).await?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::MissingClosure,
+                "completed external object is not readable",
+            )
+        })?;
+        if current.len != size || current.sha256 != checksum_sha256 || current.delete_marker {
+            return Err(Error::new(
+                ErrorCode::ChecksumMismatch,
+                "completed external object does not match its whole-object identity",
+            ));
+        }
+        let binding = crate::PayloadBinding {
+            path,
+            provider_version_id: current.token.version_id,
+            provider_etag: current.token.etag,
+            checksum_sha256,
+        };
+        binding.validate()?;
         Ok(StagedMutation {
             body: StagedMutationBody::Put(Box::new(StagedPut {
                 key,
@@ -1777,6 +2095,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
+        self.require_publication_admission_open().await?;
         let permit = self.active_permit(&session.branch, now).await?;
         if permit.stamp() != session.identity.authority {
             return Err(Error::new(
@@ -1960,6 +2279,7 @@ impl<P: ObjectPlane> Repository<P> {
                     idempotent_replay: false,
                 })
             }
+            Err(error) if error.code != ErrorCode::OutcomeUnknown => Err(error),
             Err(error) => {
                 if let Some(receipt) = self
                     .reconcile_operation(
@@ -1988,7 +2308,11 @@ impl<P: ObjectPlane> Repository<P> {
         user_metadata: BTreeMap<String, String>,
     ) -> Result<CommitReceipt> {
         let operation = self.options.ids.operation();
-        self.put_object_with_operation(branch, key, bytes, headers, user_metadata, operation)
+        // The operation ID was allocated inside this process and cannot be a
+        // retry of an earlier publication. Avoid walking the unindexed journal
+        // to prove absence on every hot-branch write; caller-stable operation
+        // IDs still take the full reconciliation path below.
+        self.put_object_inner(branch, key, bytes, headers, user_metadata, operation, false)
             .await
     }
 
@@ -2068,11 +2392,28 @@ impl<P: ObjectPlane> Repository<P> {
         user_metadata: BTreeMap<String, String>,
         operation: OperationId,
     ) -> Result<CommitReceipt> {
+        self.put_object_inner(branch, key, bytes, headers, user_metadata, operation, true)
+            .await
+    }
+
+    async fn put_object_inner(
+        &self,
+        branch: &str,
+        key: Vec<u8>,
+        bytes: Vec<u8>,
+        headers: ObjectHeaders,
+        user_metadata: BTreeMap<String, String>,
+        operation: OperationId,
+        reconcile_before_publication: bool,
+    ) -> Result<CommitReceipt> {
         if !self.writable.load(Ordering::Acquire) {
             return Err(Error::new(
                 ErrorCode::PreconditionFailed,
                 "repository is read-only",
             ));
+        }
+        if !reconcile_before_publication {
+            self.require_publication_admission_open().await?;
         }
         self.validate_key(&key)?;
         if bytes.len() as u64 > self.format.canonical_limits.max_object_bytes {
@@ -2094,20 +2435,41 @@ impl<P: ObjectPlane> Repository<P> {
             &headers_bytes,
             &metadata_bytes,
         ]);
+        // Resolve idempotent replays and reject a stale authority before any
+        // payload bytes enter the object plane. Payload upload is deliberately
+        // outside the branch publication lane: independent callers can hash
+        // and upload immutable content concurrently while only the tree update
+        // and ref CAS remain serialized.
+        let prepare_now = self.options.clock.now_millis()?;
+        let prepare_permit = self.active_permit(branch, prepare_now).await?;
+        self.authority
+            .validate_active(&prepare_permit, prepare_now)
+            .await?;
+        self.require_branch_indexes_ready(branch).await?;
+        if reconcile_before_publication {
+            if let Some(receipt) = self
+                .reconcile_operation(branch, operation, input_digest, prepare_now)
+                .await?
+            {
+                return Ok(receipt);
+            }
+            self.require_publication_admission_open().await?;
+        }
+        let binding = self.payloads.put(bytes).await?;
+
         let _lane = self.lock_branch(branch).await;
         let now = self.options.clock.now_millis()?;
-        if let Some(receipt) = self
-            .reconcile_operation(branch, operation, input_digest, now)
-            .await?
-        {
-            return Ok(receipt);
-        }
         let permit = self.active_permit(branch, now).await?;
-        // The authority check happens before payload bytes enter the object
-        // plane. A stale process therefore fails before its payload PUT.
         self.authority.validate_active(&permit, now).await?;
+        if reconcile_before_publication {
+            if let Some(receipt) = self
+                .reconcile_operation(branch, operation, input_digest, now)
+                .await?
+            {
+                return Ok(receipt);
+            }
+        }
         self.require_branch_indexes_ready(branch).await?;
-        let binding = self.payloads.put(bytes).await?;
 
         let current = self.publisher.load(branch).await?;
         let base = self.load_commit_object(current.value.target).await?.commit;
@@ -2382,33 +2744,16 @@ impl<P: ObjectPlane> Repository<P> {
                     version_id: version_id.clone(),
                 });
         let logical_range = *range.start()..=(*range.end()).min(size - 1);
-        let translated = if let Some((offset, pack_end)) = binding.pack_range {
-            let start = offset.checked_add(*logical_range.start()).ok_or_else(|| {
-                Error::new(ErrorCode::InvalidRange, "packed payload range overflow")
-            })?;
-            let end = offset
-                .checked_add(*logical_range.end())
-                .filter(|end| *end <= pack_end)
-                .ok_or_else(|| {
-                    Error::new(
-                        ErrorCode::CorruptContent,
-                        "packed payload range exceeds its logical extent",
-                    )
-                })?;
-            start..=end
-        } else {
-            logical_range.clone()
-        };
         let stored = self
             .plane
             .get(GetRequest {
                 path: binding.path.clone(),
-                range: Some(translated),
+                range: Some(logical_range.clone()),
                 physical_version,
             })
             .await?
             .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "payload is missing"))?;
-        if stored.metadata.sha256 != binding.physical_checksum_sha256()
+        if stored.metadata.sha256 != binding.checksum_sha256
             || stored.metadata.token.etag != binding.provider_etag
             || stored.metadata.token.version_id != binding.provider_version_id
         {
@@ -2527,6 +2872,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
+        self.require_publication_admission_open().await?;
         let permit = self.active_permit(branch, now).await?;
         self.authority.validate_active(&permit, now).await?;
         self.require_branch_indexes_ready(branch).await?;
@@ -3197,7 +3543,7 @@ impl<P: ObjectPlane> Repository<P> {
                 match state.as_deref() {
                     Some([1]) => {}
                     Some([0]) => {
-                        let commit = self.load_commit_object(work.commit).await?.commit;
+                        let commit = (*self.load_commit_metadata(work.commit).await?).clone();
                         mutations.push(Mutation::Upsert {
                             key: seen_key,
                             val: vec![1],
@@ -3221,7 +3567,7 @@ impl<P: ObjectPlane> Repository<P> {
                         ));
                     }
                     None => {
-                        let commit = self.load_commit_object(work.commit).await?.commit;
+                        let commit = (*self.load_commit_metadata(work.commit).await?).clone();
                         mutations.push(Mutation::Upsert {
                             key: seen_key,
                             val: vec![0],
@@ -3262,6 +3608,30 @@ impl<P: ObjectPlane> Repository<P> {
             complete,
             budget_exhausted: !complete && steps == max_steps,
         })
+    }
+
+    /// Fail fast before payload preparation or tree construction when another
+    /// process owns a durable repository-wide maintenance epoch. The mutable
+    /// control observer repeats this check under the ref-CAS barrier.
+    async fn require_publication_admission_open(&self) -> Result<()> {
+        let coordinator = self
+            .plane
+            .load_mutable(&gc_coordinator_path(&self.options.repository_prefix)?)
+            .await?
+            .map(|stored| decode_canonical::<GcCoordinator>(&stored.bytes))
+            .transpose()?;
+        if coordinator.as_ref().is_some_and(|coordinator| {
+            coordinator.repository != self.format.repository_id
+                || coordinator.active_epoch.is_some()
+                || coordinator.admission_closed
+        }) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "repository publication admission is closed for maintenance",
+            )
+            .retry(crate::RetryAdvice::After(Duration::from_millis(250))));
+        }
+        Ok(())
     }
 
     /// Start a bounded concurrent collector for immutable repository data.
@@ -3308,7 +3678,7 @@ impl<P: ObjectPlane> Repository<P> {
             return Err(error);
         }
         let work = self.gc_work_engine(epoch)?.create();
-        Ok(GcCursor {
+        let cursor = GcCursor {
             repository: self.format.repository_id,
             epoch,
             cutoff_millis,
@@ -3318,9 +3688,91 @@ impl<P: ObjectPlane> Repository<P> {
             dirty_sequence: self.gc_dirty_sequence.load(Ordering::Acquire),
             dirty_target_sequence: 0,
             initial_scan_complete: false,
+            publication_barrier_drained: false,
             sweep_after: None,
             report: crate::GcReport::default(),
-        })
+        };
+        self.persist_gc_cursor(&cursor).await?;
+        Ok(cursor)
+    }
+
+    /// Resume the active repository-wide GC epoch after a worker restart.
+    pub async fn resume_gc(&self) -> Result<Option<GcCursor>> {
+        let Some(stored) = self
+            .plane
+            .load_mutable(&gc_coordinator_path(&self.options.repository_prefix)?)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let coordinator: GcCoordinator = decode_canonical(&stored.bytes)?;
+        let Some(epoch) = coordinator.active_epoch else {
+            return Ok(None);
+        };
+        let stored = self
+            .plane
+            .load_mutable(&gc_cursor_path(&self.options.repository_prefix, epoch)?)
+            .await?
+            .ok_or_else(|| {
+                Error::new(
+                    ErrorCode::MissingClosure,
+                    "active GC epoch has no durable cursor checkpoint",
+                )
+            })?;
+        let cursor: GcCursor = decode_canonical(&stored.bytes)?;
+        self.validate_gc_cursor(&cursor)?;
+        Ok(Some(cursor))
+    }
+
+    /// Explicitly release a known active epoch when its durable checkpoint is
+    /// irrecoverably missing. The expected epoch prevents abandoning another
+    /// maintenance worker's run.
+    pub async fn abandon_gc(&self, expected_epoch: OperationId) -> Result<()> {
+        let active = *self
+            .active_gc_epoch
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))?;
+        if active != Some(expected_epoch) {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "active GC epoch does not match the requested abandonment",
+            ));
+        }
+        self.publish_gc_coordinator(None, self.options.clock.now_millis()?)
+            .await?;
+        *self
+            .active_gc_epoch
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "active GC lock poisoned"))? =
+            None;
+        Ok(())
+    }
+
+    /// Release an active legacy/crashed epoch only when no durable cursor was
+    /// ever published for it. A resumable epoch must use `resume_gc` instead.
+    pub async fn abandon_incomplete_gc(&self) -> Result<OperationId> {
+        let stored = self
+            .plane
+            .load_mutable(&gc_coordinator_path(&self.options.repository_prefix)?)
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::InvalidRevision, "GC coordinator is missing"))?;
+        let coordinator: GcCoordinator = decode_canonical(&stored.bytes)?;
+        let epoch = coordinator
+            .active_epoch
+            .ok_or_else(|| Error::new(ErrorCode::PreconditionFailed, "no GC epoch is active"))?;
+        if self
+            .plane
+            .load_mutable(&gc_cursor_path(&self.options.repository_prefix, epoch)?)
+            .await?
+            .is_some()
+        {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "active GC epoch has a durable cursor and must be resumed",
+            ));
+        }
+        self.abandon_gc(epoch).await?;
+        Ok(epoch)
     }
 
     /// Advance root discovery, reachability marking, candidate discovery, or
@@ -3350,6 +3802,21 @@ impl<P: ObjectPlane> Repository<P> {
             });
         }
         let mut next = cursor.clone();
+        if !next.publication_barrier_drained {
+            let (processed, continuation, drained) = self
+                .gc_drain_publication_tickets(next.continuation.clone(), max_steps)
+                .await?;
+            next.continuation = continuation;
+            next.publication_barrier_drained = drained;
+            let page = GcPage {
+                complete: false,
+                cursor: next,
+                processed,
+                restarted_for_new_roots: false,
+            };
+            self.persist_gc_cursor(&page.cursor).await?;
+            return Ok(page);
+        }
         let processed = match next.phase {
             GcPhase::DiscoverBranches => self.gc_discover_refs(&mut next, false, max_steps).await?,
             GcPhase::DiscoverTags => self.gc_discover_refs(&mut next, true, max_steps).await?,
@@ -3362,12 +3829,14 @@ impl<P: ObjectPlane> Repository<P> {
             GcPhase::Cleanup => self.gc_cleanup(&mut next, max_steps).await?,
             GcPhase::Ready | GcPhase::Sweeping | GcPhase::Complete => 0,
         };
-        Ok(GcPage {
+        let page = GcPage {
             complete: next.phase == GcPhase::Complete,
             cursor: next,
             processed,
             restarted_for_new_roots: false,
-        })
+        };
+        self.persist_gc_cursor(&page.cursor).await?;
+        Ok(page)
     }
 
     /// Delete at most `max_candidates` exact immutable physical versions.
@@ -3393,12 +3862,14 @@ impl<P: ObjectPlane> Repository<P> {
             next.phase = GcPhase::CatchUpDirtyRoots;
             next.dirty_target_sequence = dirty_target;
             next.continuation = None;
-            return Ok(GcPage {
+            let page = GcPage {
                 cursor: next,
                 processed: 0,
                 complete: false,
                 restarted_for_new_roots: true,
-            });
+            };
+            self.persist_gc_cursor(&page.cursor).await?;
+            return Ok(page);
         }
         let engine = self.gc_work_engine(cursor.epoch)?;
         let tree = self.tree_from_root(&cursor.work)?;
@@ -3439,12 +3910,24 @@ impl<P: ObjectPlane> Repository<P> {
             if retained {
                 next.report.skipped_reachable = next.report.skipped_reachable.saturating_add(1);
             } else {
-                match self
+                let deletion = self
                     .plane
                     .delete_exact(&candidate.path, candidate.physical_version)
-                    .await?
-                {
-                    DeleteOutcome::Deleted => {
+                    .await;
+                match deletion {
+                    Err(error) if error.code == ErrorCode::PermissionDenied => {
+                        next.report.protected_versions =
+                            next.report.protected_versions.saturating_add(1);
+                        next.report.protected_bytes =
+                            next.report.protected_bytes.saturating_add(candidate.len);
+                        *next
+                            .report
+                            .protected_by_kind
+                            .entry(candidate.kind)
+                            .or_default() += 1;
+                    }
+                    Err(error) => return Err(error),
+                    Ok(DeleteOutcome::Deleted) => {
                         next.report.deleted_versions =
                             next.report.deleted_versions.saturating_add(1);
                         next.report.deleted_bytes =
@@ -3455,10 +3938,10 @@ impl<P: ObjectPlane> Repository<P> {
                             .entry(candidate.kind)
                             .or_default() += 1;
                     }
-                    DeleteOutcome::NotFound => {
+                    Ok(DeleteOutcome::NotFound) => {
                         next.report.already_missing = next.report.already_missing.saturating_add(1);
                     }
-                    DeleteOutcome::TokenMismatch => {
+                    Ok(DeleteOutcome::TokenMismatch) => {
                         return Err(Error::new(
                             ErrorCode::PreconditionFailed,
                             "GC candidate changed before exact deletion",
@@ -3490,12 +3973,14 @@ impl<P: ObjectPlane> Repository<P> {
             next.phase = GcPhase::Cleanup;
             next.continuation = None;
         }
-        Ok(GcPage {
+        let page = GcPage {
             complete: false,
             cursor: next,
             processed,
             restarted_for_new_roots: false,
-        })
+        };
+        self.persist_gc_cursor(&page.cursor).await?;
+        Ok(page)
     }
 
     /// Start a restartable integrity check for one stable branch snapshot.
@@ -3507,15 +3992,199 @@ impl<P: ObjectPlane> Repository<P> {
         self.locator.register(branch)?;
         self.require_branch_indexes_ready(branch).await?;
         let snapshot = self.head(branch).await?;
-        Ok(FsckCursor {
+        let snapshot_commit = self.load_commit_object(snapshot).await?.commit;
+        let job = self.options.ids.operation();
+        let payloads = self.fsck_payload_engine(job)?.create();
+        let cursor = FsckCursor {
             repository: self.format.repository_id,
             branch: branch.to_string(),
             snapshot,
+            snapshot_objects: snapshot_commit.state.objects,
+            snapshot_versions: snapshot_commit.state.versions,
+            job,
+            checkpoint_generation: 1,
+            payloads: RootManifest::from_tree(&payloads)?,
             closure: self.start_commit_closure(&[snapshot]).await?,
             phase: FsckPhase::DiscoverCommits,
             after: None,
             deep,
             report: FsckReport::default(),
+        };
+        self.persist_fsck_cursor(&cursor).await?;
+        Ok(cursor)
+    }
+
+    /// Resume one integrity-check job from its authoritative durable
+    /// checkpoint. Completed jobs remain resumable until explicitly forgotten.
+    pub async fn resume_fsck(&self, job: OperationId) -> Result<Option<FsckCursor>> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck job identifier is nil",
+            ));
+        }
+        let Some(stored) = self
+            .plane
+            .load_mutable(&fsck_cursor_path(&self.options.repository_prefix, job)?)
+            .await?
+        else {
+            return Ok(None);
+        };
+        let cursor: FsckCursor = decode_canonical(&stored.bytes)?;
+        self.validate_fsck_cursor(&cursor)?;
+        if cursor.job != job {
+            return Err(Error::new(
+                ErrorCode::CorruptCommit,
+                "durable fsck cursor belongs to another job",
+            ));
+        }
+        Ok(Some(cursor))
+    }
+
+    /// Start bounded cleanup of a completed integrity-check job. The durable
+    /// completed checkpoint remains present until all immutable work objects
+    /// and its older checkpoint versions have been removed.
+    pub async fn start_fsck_cleanup(&self, job: OperationId) -> Result<FsckCleanupCursor> {
+        let cursor = self
+            .resume_fsck(job)
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::InvalidRevision, "fsck checkpoint is missing"))?;
+        if cursor.phase != FsckPhase::Complete {
+            return Err(Error::new(
+                ErrorCode::PreconditionFailed,
+                "in-progress fsck job cannot be cleaned up",
+            ));
+        }
+        Ok(FsckCleanupCursor {
+            repository: self.format.repository_id,
+            job,
+            closure_traversal: cursor.closure.traversal,
+            phase: FsckCleanupPhase::PayloadWork,
+        })
+    }
+
+    /// Exact-delete at most `max_objects` physical versions from a completed
+    /// fsck workspace. Restarting cleanup from `start_fsck_cleanup` is safe.
+    pub async fn advance_fsck_cleanup(
+        &self,
+        cursor: &FsckCleanupCursor,
+        max_objects: usize,
+    ) -> Result<FsckCleanupPage> {
+        if !(1..=1_000).contains(&max_objects) {
+            return Err(Error::new(
+                ErrorCode::InvalidLimit,
+                "fsck cleanup page size must be between 1 and 1,000",
+            ));
+        }
+        if cursor.repository != self.format.repository_id
+            || cursor.job.is_nil()
+            || cursor.closure_traversal.is_nil()
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck cleanup cursor is malformed or belongs to another repository",
+            ));
+        }
+        if cursor.phase == FsckCleanupPhase::Complete {
+            return Ok(FsckCleanupPage {
+                cursor: cursor.clone(),
+                deleted: 0,
+                complete: true,
+            });
+        }
+        let durable = self.resume_fsck(cursor.job).await?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck checkpoint is missing",
+            )
+        })?;
+        if durable.phase != FsckPhase::Complete
+            || durable.closure.traversal != cursor.closure_traversal
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck cleanup cursor does not match its completed checkpoint",
+            ));
+        }
+        let mut next = cursor.clone();
+        let deleted = match next.phase {
+            FsckCleanupPhase::PayloadWork => {
+                let prefix = format!(
+                    "{}/administration/fsck/{}/payloads/",
+                    self.options.repository_prefix, next.job
+                );
+                let deleted = self
+                    .delete_fsck_cleanup_prefix(&prefix, max_objects)
+                    .await?;
+                if deleted == 0 {
+                    next.phase = FsckCleanupPhase::ClosureWork;
+                }
+                deleted
+            }
+            FsckCleanupPhase::ClosureWork => {
+                let prefix = format!(
+                    "{}/administration/closure/{}/tree/",
+                    self.options.repository_prefix, next.closure_traversal
+                );
+                let deleted = self
+                    .delete_fsck_cleanup_prefix(&prefix, max_objects)
+                    .await?;
+                if deleted == 0 {
+                    next.phase = FsckCleanupPhase::CheckpointHistory;
+                }
+                deleted
+            }
+            FsckCleanupPhase::CheckpointHistory => {
+                let path = fsck_cursor_path(&self.options.repository_prefix, next.job)?;
+                let page = self
+                    .plane
+                    .list(ListRequest {
+                        prefix: path.as_str().to_string(),
+                        continuation: None,
+                        limit: 1_000,
+                        include_versions: true,
+                    })
+                    .await?;
+                let current = self.plane.load_mutable(&path).await?.ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InvalidContinuationToken,
+                        "fsck checkpoint is missing",
+                    )
+                })?;
+                let targets = page
+                    .entries
+                    .into_iter()
+                    .filter(|entry| {
+                        entry.path == path && entry.metadata.token != current.metadata.token
+                    })
+                    .take(max_objects)
+                    .map(physical_list_entry_target)
+                    .collect::<Vec<_>>();
+                let deleted = self.delete_fsck_cleanup_targets(targets).await?;
+                if deleted == 0 {
+                    next.phase = FsckCleanupPhase::CheckpointCurrent;
+                }
+                deleted
+            }
+            FsckCleanupPhase::CheckpointCurrent => {
+                let path = fsck_cursor_path(&self.options.repository_prefix, next.job)?;
+                let current = self.plane.load_mutable(&path).await?.ok_or_else(|| {
+                    Error::new(
+                        ErrorCode::InvalidContinuationToken,
+                        "fsck checkpoint is missing",
+                    )
+                })?;
+                let target = physical_stored_object_target(path, current);
+                let deleted = self.delete_fsck_cleanup_targets(vec![target]).await?;
+                next.phase = FsckCleanupPhase::Complete;
+                deleted
+            }
+            FsckCleanupPhase::Complete => 0,
+        };
+        Ok(FsckCleanupPage {
+            complete: next.phase == FsckCleanupPhase::Complete,
+            cursor: next,
+            deleted,
         })
     }
 
@@ -3523,21 +4192,23 @@ impl<P: ObjectPlane> Repository<P> {
     /// current objects, or logical versions. Persist the returned cursor after
     /// every page.
     pub async fn advance_fsck(&self, cursor: &FsckCursor, max_steps: usize) -> Result<FsckPage> {
-        if !(1..=1_000).contains(&max_steps) {
+        if !(1..=10_000).contains(&max_steps) {
             return Err(Error::new(
                 ErrorCode::InvalidLimit,
-                "fsck page size must be between 1 and 1,000",
+                "fsck page size must be between 1 and 10,000",
             ));
         }
-        if cursor.repository != self.format.repository_id {
-            return Err(Error::new(
-                ErrorCode::InvalidContinuationToken,
-                "fsck cursor belongs to another repository",
-            ));
+        self.validate_fsck_cursor(cursor)?;
+        self.require_current_fsck_cursor(cursor).await?;
+        if cursor.phase == FsckPhase::Complete {
+            return Ok(FsckPage {
+                cursor: cursor.clone(),
+                processed: 0,
+                complete: true,
+            });
         }
-        validate_branch(&cursor.branch)?;
-        self.validate_commit_closure_cursor(&cursor.closure)?;
         self.locator.register(&cursor.branch)?;
+        self.require_branch_indexes_ready(&cursor.branch).await?;
         let mut next = cursor.clone();
         let mut processed = 0usize;
         match next.phase {
@@ -3568,8 +4239,7 @@ impl<P: ObjectPlane> Repository<P> {
                 }
             }
             FsckPhase::VerifyObjects => {
-                let commit = self.load_commit_object(next.snapshot).await?.commit;
-                let tree = self.tree_from_root(&commit.state.objects)?;
+                let tree = self.tree_from_root(&next.snapshot_objects)?;
                 let engine = self.engine(self.node_store.clone());
                 let mut entries = match next.after.as_deref() {
                     Some(after) => engine.range_after(&tree, after, None).await?,
@@ -3584,35 +4254,57 @@ impl<P: ObjectPlane> Repository<P> {
                     let (key, encoded) = entry?;
                     let current: CurrentObject = decode_canonical(&encoded)?;
                     current.version.validate()?;
-                    let (payloads, bytes, deep_bytes) = self
-                        .verify_payload_metadata(&current.version, next.deep)
-                        .await?;
                     next.report.current_objects =
                         checked_fsck_add(next.report.current_objects, 1, "current-object")?;
-                    next.report.payloads_verified =
-                        checked_fsck_add(next.report.payloads_verified, payloads, "payload")?;
-                    next.report.payload_bytes_verified = checked_fsck_add(
-                        next.report.payload_bytes_verified,
-                        bytes,
-                        "payload-byte",
-                    )?;
-                    next.report.deep_content_bytes_verified = checked_fsck_add(
-                        next.report.deep_content_bytes_verified,
-                        deep_bytes,
-                        "deep-content-byte",
-                    )?;
+                    record_fsck_logical_payload(&mut next.report, &current.version, next.deep)?;
                     next.after = Some(key);
                     processed += 1;
                 }
             }
             FsckPhase::VerifyVersions => {
-                let commit = self.load_commit_object(next.snapshot).await?.commit;
-                let tree = self.tree_from_root(&commit.state.versions)?;
+                let tree = self.tree_from_root(&next.snapshot_versions)?;
                 let engine = self.engine(self.node_store.clone());
                 let mut entries = match next.after.as_deref() {
                     Some(after) => engine.range_after(&tree, after, None).await?,
                     None => engine.prefix(&tree, b"").await?,
                 };
+                let mut versions = Vec::with_capacity(max_steps);
+                while processed < max_steps {
+                    let Some(entry) = entries.next().await else {
+                        next.phase = FsckPhase::VerifyPayloads;
+                        next.after = None;
+                        break;
+                    };
+                    let (key, encoded) = entry?;
+                    let version: ObjectVersion = decode_canonical(&encoded)?;
+                    version.validate()?;
+                    next.report.logical_versions =
+                        checked_fsck_add(next.report.logical_versions, 1, "logical-version")?;
+                    record_fsck_logical_payload(&mut next.report, &version, next.deep)?;
+                    versions.push(version);
+                    next.after = Some(key);
+                    processed += 1;
+                }
+                next.payloads = self
+                    .stage_fsck_payloads(next.job, &next.payloads, &versions)
+                    .await?;
+                if next.deep {
+                    let deep_bytes = self.verify_fsck_logical_page(&versions).await?;
+                    next.report.deep_physical_bytes_read = checked_fsck_add(
+                        next.report.deep_physical_bytes_read,
+                        deep_bytes,
+                        "deep-physical-byte",
+                    )?;
+                }
+            }
+            FsckPhase::VerifyPayloads => {
+                let payloads = self.tree_from_root(&next.payloads)?;
+                let engine = self.fsck_payload_engine(next.job)?;
+                let mut entries = match next.after.as_deref() {
+                    Some(after) => engine.range_after(&payloads, after, None).await?,
+                    None => engine.prefix(&payloads, b"").await?,
+                };
+                let mut records = Vec::with_capacity(max_steps);
                 while processed < max_steps {
                     let Some(entry) = entries.next().await else {
                         next.phase = FsckPhase::Complete;
@@ -3620,30 +4312,47 @@ impl<P: ObjectPlane> Repository<P> {
                         break;
                     };
                     let (key, encoded) = entry?;
-                    let version: ObjectVersion = decode_canonical(&encoded)?;
-                    version.validate()?;
-                    let (payloads, bytes, deep_bytes) =
-                        self.verify_payload_metadata(&version, next.deep).await?;
-                    next.report.logical_versions =
-                        checked_fsck_add(next.report.logical_versions, 1, "logical-version")?;
-                    next.report.payloads_verified =
-                        checked_fsck_add(next.report.payloads_verified, payloads, "payload")?;
-                    next.report.payload_bytes_verified = checked_fsck_add(
-                        next.report.payload_bytes_verified,
-                        bytes,
-                        "payload-byte",
-                    )?;
-                    next.report.deep_content_bytes_verified = checked_fsck_add(
-                        next.report.deep_content_bytes_verified,
-                        deep_bytes,
-                        "deep-content-byte",
-                    )?;
+                    records.push(decode_canonical::<FsckPhysicalPayload>(&encoded)?);
                     next.after = Some(key);
                     processed += 1;
+                }
+                let deep = next.deep;
+                let verified = stream::iter(records.into_iter().map(|record| async move {
+                    if deep {
+                        Ok((record.size, 0))
+                    } else {
+                        self.verify_fsck_physical_payload(&record).await
+                    }
+                }))
+                .buffered(32)
+                .collect::<Vec<_>>()
+                .await;
+                for result in verified {
+                    let (physical_bytes, deep_bytes) = result?;
+                    next.report.physical_payloads_verified = checked_fsck_add(
+                        next.report.physical_payloads_verified,
+                        1,
+                        "physical-payload",
+                    )?;
+                    next.report.physical_payload_bytes_verified = checked_fsck_add(
+                        next.report.physical_payload_bytes_verified,
+                        physical_bytes,
+                        "physical-payload-byte",
+                    )?;
+                    next.report.deep_physical_bytes_read = checked_fsck_add(
+                        next.report.deep_physical_bytes_read,
+                        deep_bytes,
+                        "deep-physical-byte",
+                    )?;
                 }
             }
             FsckPhase::Complete => {}
         }
+        next.checkpoint_generation = next
+            .checkpoint_generation
+            .checked_add(1)
+            .ok_or_else(|| Error::new(ErrorCode::InternalInvariant, "fsck checkpoint overflow"))?;
+        self.persist_fsck_cursor(&next).await?;
         Ok(FsckPage {
             complete: next.phase == FsckPhase::Complete,
             cursor: next,
@@ -4010,6 +4719,7 @@ impl<P: ObjectPlane> Repository<P> {
         let limit = max_steps.min(remaining);
         let mut next = cursor.clone();
         let mut mutations = checkpoint.mutations;
+        let checkpointed_mutations = mutations.len();
         let processed;
         match cursor.phase {
             RepairPhase::CopySource => {
@@ -4043,33 +4753,31 @@ impl<P: ObjectPlane> Repository<P> {
                     {
                         continue;
                     }
-                    let data = source
-                        .get_object_at(&cursor.source_branch, cursor.source_snapshot, &object.key)
-                        .await?
-                        .ok_or_else(|| {
-                            Error::new(
-                                ErrorCode::CorruptCommit,
-                                "repair listing points to a missing source object",
-                            )
-                        })?;
-                    let size = u64::try_from(data.bytes.len()).map_err(|_| {
-                        Error::new(ErrorCode::EntityTooLarge, "repair payload exceeds u64")
+                    object.version.validate()?;
+                    let source_binding = object.version.binding.clone().ok_or_else(|| {
+                        Error::new(
+                            ErrorCode::CorruptCommit,
+                            "repair source live object has no payload binding",
+                        )
                     })?;
-                    let binding = self.payloads.put(data.bytes).await?;
                     let LogicalObjectVersionKind::Live {
+                        size,
                         logical_etag,
                         headers,
                         checksums,
                         user_metadata,
                         tags,
-                        ..
-                    } = data.version.body.kind
+                    } = object.version.body.kind
                     else {
                         return Err(Error::new(
                             ErrorCode::CorruptCommit,
                             "repair source current object is a delete marker",
                         ));
                     };
+                    let binding = self
+                        .payloads
+                        .transfer_from(&source.payloads, &source_binding, size)
+                        .await?;
                     mutations.push(StagedMutation {
                         body: StagedMutationBody::Put(Box::new(StagedPut {
                             key: object.key,
@@ -4140,7 +4848,12 @@ impl<P: ObjectPlane> Repository<P> {
                 )
             })?;
             let saved = self
-                .checkpoint_commit_session(&checkpoint.session, mutations, sequence)
+                .checkpoint_commit_session(
+                    &checkpoint.session,
+                    mutations[checkpointed_mutations..].to_vec(),
+                    mutations.len(),
+                    sequence,
+                )
                 .await?;
             next.checkpoint_sequence = saved.sequence;
             return Ok(RepairPage {
@@ -4151,7 +4864,13 @@ impl<P: ObjectPlane> Repository<P> {
             });
         }
         if mutations.is_empty() {
-            self.abort_commit_session(checkpoint.session, mutations, checkpoint.sequence)
+            let sequence = checkpoint.sequence.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "repair abort checkpoint sequence overflow",
+                )
+            })?;
+            self.abort_commit_session(checkpoint.session, Vec::new(), 0, sequence)
                 .await?;
             return Ok(RepairPage {
                 cursor: next,
@@ -4345,6 +5064,14 @@ impl<P: ObjectPlane> Repository<P> {
         self.require_branch_indexes_ready(branch).await?;
         let from_commit = self.load_commit_metadata(from).await?;
         let to_commit = self.load_commit_metadata(to).await?;
+        if to_commit.parents.first() == Some(&from) && to_commit.delta.changes_root.is_none() {
+            return to_commit
+                .delta
+                .changes
+                .iter()
+                .map(object_diff_from_transition)
+                .collect();
+        }
         let from_tree = self.tree_from_root(&from_commit.state.objects)?;
         let to_tree = self.tree_from_root(&to_commit.state.objects)?;
         self.engine(self.node_store.clone())
@@ -4388,6 +5115,39 @@ impl<P: ObjectPlane> Repository<P> {
         self.require_branch_indexes_ready(branch).await?;
         let from_commit = self.load_commit_metadata(from).await?;
         let to_commit = self.load_commit_metadata(to).await?;
+        // Direct children carry an exact logical transition stream, inline or
+        // in an immutable delta tree. Page that stream instead of comparing
+        // snapshot structure; tree boundary churn is irrelevant to this path.
+        if to_commit.parents.first() == Some(&from)
+            && !matches!(
+                cursor.map(|cursor| &cursor.traversal),
+                Some(ObjectDiffTraversal::Structural(_))
+            )
+        {
+            let after = match cursor.map(|cursor| &cursor.traversal) {
+                Some(ObjectDiffTraversal::Delta { after }) => Some(after.as_slice()),
+                None => None,
+                Some(ObjectDiffTraversal::Structural(_)) => unreachable!("excluded above"),
+            };
+            let (transitions, next_after) =
+                self.commit_delta_page(&to_commit, after, limit).await?;
+            let changes = transitions
+                .iter()
+                .map(object_diff_from_transition)
+                .collect::<Result<Vec<_>>>()?;
+            return Ok(ObjectDiffPage {
+                changes,
+                continuation: next_after.map(|after| ObjectDiffCursor {
+                    repository: self.format.repository_id,
+                    branch: branch.to_string(),
+                    from,
+                    to,
+                    traversal: ObjectDiffTraversal::Delta { after },
+                }),
+                compared_nodes: 0,
+                reused_subtrees: 0,
+            });
+        }
         let from_tree = self.tree_from_root(&from_commit.state.objects)?;
         let to_tree = self.tree_from_root(&to_commit.state.objects)?;
         let page = self
@@ -4395,7 +5155,10 @@ impl<P: ObjectPlane> Repository<P> {
             .structural_diff_page(
                 &from_tree,
                 &to_tree,
-                cursor.map(|cursor| &cursor.traversal),
+                cursor.map(|cursor| match &cursor.traversal {
+                    ObjectDiffTraversal::Structural(traversal) => traversal,
+                    ObjectDiffTraversal::Delta { .. } => unreachable!("handled direct delta"),
+                }),
                 limit,
             )
             .await?;
@@ -4411,7 +5174,7 @@ impl<P: ObjectPlane> Repository<P> {
                 branch: branch.to_string(),
                 from,
                 to,
-                traversal,
+                traversal: ObjectDiffTraversal::Structural(traversal),
             }),
             compared_nodes: page.stats.compared_nodes,
             reused_subtrees: page.stats.reused_subtrees,
@@ -4639,6 +5402,7 @@ impl<P: ObjectPlane> Repository<P> {
             .await?;
         let processed = page.changes.len();
         let mut mutations = checkpoint.mutations;
+        let checkpointed_mutations = mutations.len();
         for change in page.changes {
             if change.to.is_none() {
                 mutations.push(StagedMutation::delete(change.key));
@@ -4705,7 +5469,12 @@ impl<P: ObjectPlane> Repository<P> {
                 )
             })?;
             let checkpoint = self
-                .checkpoint_commit_session(&checkpoint.session, mutations, sequence)
+                .checkpoint_commit_session(
+                    &checkpoint.session,
+                    mutations[checkpointed_mutations..].to_vec(),
+                    mutations.len(),
+                    sequence,
+                )
                 .await?;
             next.checkpoint_sequence = checkpoint.sequence;
             return Ok(RestorePage {
@@ -4716,7 +5485,13 @@ impl<P: ObjectPlane> Repository<P> {
             });
         }
         if mutations.is_empty() {
-            self.abort_commit_session(checkpoint.session, mutations, checkpoint.sequence)
+            let sequence = checkpoint.sequence.checked_add(1).ok_or_else(|| {
+                Error::new(
+                    ErrorCode::InvalidLimit,
+                    "restore abort checkpoint sequence overflow",
+                )
+            })?;
+            self.abort_commit_session(checkpoint.session, Vec::new(), 0, sequence)
                 .await?;
             next.complete = true;
             return Ok(RestorePage {
@@ -5024,6 +5799,7 @@ impl<P: ObjectPlane> Repository<P> {
         {
             return Ok(receipt);
         }
+        self.require_publication_admission_open().await?;
         let current = self.publisher.load(&cursor.target_branch).await?;
         if current.value.target != cursor.ours {
             return Err(Error::new(
@@ -5212,6 +5988,7 @@ impl<P: ObjectPlane> Repository<P> {
             .remove(branch);
         let reference = self.publisher.load(branch).await?;
         self.record_branch_catalog(&reference).await?;
+        self.mark_local_index_head(branch, reference.value.target)?;
         Ok(report)
     }
 
@@ -5703,6 +6480,15 @@ impl<P: ObjectPlane> Repository<P> {
         branch: &str,
         reference: &LoadedRef,
     ) -> Result<()> {
+        if self
+            .local_index_heads
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "local-index lock poisoned"))?
+            .get(branch)
+            .is_some_and(|target| *target == reference.value.target)
+        {
+            return Ok(());
+        }
         let health = self.branch_index_health_for(branch, reference).await?;
         Self::check_branch_index_health(health)
     }
@@ -5815,10 +6601,10 @@ impl<P: ObjectPlane> Repository<P> {
         };
         let object = CommitObject::new(commit.clone(), Some(prepared.pack().clone()))?;
         let encoded = object.encode_object()?;
-        let offset = CommitObject::node_payload_offset(&encoded)?.ok_or_else(|| {
+        let offset = CommitObject::node_region_offset(&encoded)?.ok_or_else(|| {
             Error::new(
                 ErrorCode::InternalInvariant,
-                "prepared node pack has no payload offset",
+                "prepared node pack has no node-region offset",
             )
         })?;
         self.node_store.commit_node_pack(id, prepared, offset).await
@@ -5850,52 +6636,226 @@ impl<P: ObjectPlane> Repository<P> {
         })
     }
 
-    async fn verify_payload_metadata(
+    async fn stage_fsck_payloads(
         &self,
-        version: &ObjectVersion,
-        deep: bool,
-    ) -> Result<(u64, u64, u64)> {
-        let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
-            return Ok((0, 0, 0));
-        };
-        let binding = version.binding.as_ref().ok_or_else(|| {
-            Error::new(
-                ErrorCode::CorruptCommit,
-                "live object version has no payload binding",
-            )
-        })?;
-        if binding.path != self.payloads.expected_path(binding)? {
-            return Err(Error::new(
-                ErrorCode::CorruptContent,
-                "payload binding path does not match its content checksum",
-            ));
+        job: OperationId,
+        root: &RootManifest,
+        versions: &[ObjectVersion],
+    ) -> Result<RootManifest> {
+        let engine = self.fsck_payload_engine(job)?;
+        let mut tree = self.tree_from_root(root)?;
+        let mut pending = BTreeMap::<Vec<u8>, FsckPhysicalPayload>::new();
+        for version in versions {
+            let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
+                continue;
+            };
+            let binding = version.binding.as_ref().ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "live object version has no payload binding",
+                )
+            })?;
+            if binding.path != self.payloads.expected_path(binding)? {
+                return Err(Error::new(
+                    ErrorCode::CorruptContent,
+                    "payload binding path does not match its content checksum",
+                ));
+            }
+            let record = pending
+                .entry(payload_physical_key(binding))
+                .or_insert_with(|| FsckPhysicalPayload {
+                    binding: binding.clone(),
+                    size: *size,
+                });
+            validate_same_fsck_physical_binding(&record.binding, binding)?;
+            if record.size != *size {
+                return Err(Error::new(
+                    ErrorCode::ChecksumMismatch,
+                    "whole-object payload bindings disagree about object size",
+                ));
+            }
         }
+        let keys = pending.keys().cloned().collect::<Vec<_>>();
+        let existing = engine.get_many(&tree, &keys).await?;
+        let mut mutations = Vec::with_capacity(pending.len());
+        for ((key, record), existing) in pending.into_iter().zip(existing) {
+            if let Some(encoded) = existing {
+                let accumulated: FsckPhysicalPayload = decode_canonical(&encoded)?;
+                validate_same_fsck_physical_binding(&accumulated.binding, &record.binding)?;
+                if accumulated.size != record.size {
+                    return Err(Error::new(
+                        ErrorCode::ChecksumMismatch,
+                        "payload records disagree about whole-object size",
+                    ));
+                }
+                continue;
+            }
+            mutations.push(Mutation::Upsert {
+                key,
+                val: encode_canonical(&record)?,
+            });
+        }
+        if !mutations.is_empty() {
+            tree = engine.batch(&tree, mutations).await?;
+        }
+        RootManifest::from_tree(&tree)
+    }
+
+    async fn verify_fsck_physical_payload(
+        &self,
+        record: &FsckPhysicalPayload,
+    ) -> Result<(u64, u64)> {
+        let binding = &record.binding;
         let metadata =
             self.plane.head(&binding.path).await?.ok_or_else(|| {
                 Error::new(ErrorCode::MissingClosure, "immutable payload is missing")
             })?;
-        let expected_physical_len = binding
-            .pack_range
-            .map(|(_, end)| end.saturating_add(1))
-            .unwrap_or(*size);
-        if metadata.len < expected_physical_len
-            || (!binding.is_packed() && metadata.len != *size)
-            || metadata.sha256 != binding.physical_checksum_sha256()
+        if metadata.len != record.size
+            || metadata.sha256 != binding.checksum_sha256
             || metadata.token.etag != binding.provider_etag
             || metadata.token.version_id != binding.provider_version_id
         {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
-                "immutable payload metadata does not match its logical binding",
+                "immutable payload metadata does not match its physical binding",
             ));
         }
-        let deep_bytes = if deep {
-            u64::try_from(self.payloads.get(binding).await?.len())
-                .map_err(|_| Error::new(ErrorCode::EntityTooLarge, "payload length exceeds u64"))?
-        } else {
-            0
-        };
-        Ok((1, *size, deep_bytes))
+        Ok((metadata.len, 0))
+    }
+
+    async fn verify_fsck_logical_page(&self, versions: &[ObjectVersion]) -> Result<u64> {
+        let mut pending = BTreeMap::<Vec<u8>, FsckPhysicalPayload>::new();
+        for version in versions {
+            let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
+                continue;
+            };
+            let binding = version.binding.as_ref().ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "live object version has no payload binding",
+                )
+            })?;
+            let record = pending
+                .entry(payload_physical_key(binding))
+                .or_insert_with(|| FsckPhysicalPayload {
+                    binding: binding.clone(),
+                    size: *size,
+                });
+            validate_same_fsck_physical_binding(&record.binding, binding)?;
+            if record.size != *size {
+                return Err(Error::new(
+                    ErrorCode::ChecksumMismatch,
+                    "whole-object payload bindings disagree about object size",
+                ));
+            }
+        }
+        let verified = stream::iter(
+            pending
+                .into_values()
+                .map(|record| async move { self.verify_fsck_page_payload(record).await }),
+        )
+        .buffered(32)
+        .collect::<Vec<_>>()
+        .await;
+        verified.into_iter().try_fold(0_u64, |total, result| {
+            total
+                .checked_add(result?)
+                .ok_or_else(|| Error::new(ErrorCode::EntityTooLarge, "deep fsck byte overflow"))
+        })
+    }
+
+    async fn verify_fsck_page_payload(&self, record: FsckPhysicalPayload) -> Result<u64> {
+        let binding = &record.binding;
+        let physical_version =
+            binding
+                .provider_version_id
+                .as_ref()
+                .map(|version_id| PhysicalVersion::Versioned {
+                    version_id: version_id.clone(),
+                });
+        let stored = self
+            .plane
+            .get(GetRequest {
+                path: binding.path.clone(),
+                range: None,
+                physical_version,
+            })
+            .await?
+            .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "immutable payload is missing"))?;
+        if u64::try_from(stored.bytes.len()).ok() != Some(record.size)
+            || crate::codec::sha256(&stored.bytes) != binding.checksum_sha256
+        {
+            return Err(Error::new(
+                ErrorCode::CorruptContent,
+                "immutable whole-object payload checksum mismatch",
+            ));
+        }
+        u64::try_from(stored.bytes.len())
+            .map_err(|_| Error::new(ErrorCode::EntityTooLarge, "payload length exceeds u64"))
+    }
+
+    async fn gc_drain_publication_tickets(
+        &self,
+        continuation: Option<String>,
+        max_steps: usize,
+    ) -> Result<(usize, Option<String>, bool)> {
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: gc_publication_ticket_prefix(
+                    &self.options.repository_prefix,
+                    self.format.repository_id,
+                ),
+                continuation: continuation.clone(),
+                limit: max_steps.min(1_000),
+                include_versions: false,
+            })
+            .await?;
+        let now = self.options.clock.now_millis()?;
+        let mut processed = 0usize;
+        for entry in page.entries {
+            let Some(stored) = self
+                .plane
+                .get(GetRequest {
+                    path: entry.path.clone(),
+                    range: None,
+                    physical_version: None,
+                })
+                .await?
+            else {
+                continue;
+            };
+            let ticket: GcPublicationTicket = decode_canonical(&stored.bytes)?;
+            if ticket.repository != self.format.repository_id {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "publication ticket belongs to another repository",
+                ));
+            }
+            if ticket.expires_at_millis > now {
+                return Ok((processed, continuation, false));
+            }
+            let version = stored.metadata.token.version_id.clone().map_or_else(
+                || PhysicalVersion::Unversioned {
+                    token: Some(stored.metadata.token.clone()),
+                },
+                |version_id| PhysicalVersion::Versioned { version_id },
+            );
+            match self.plane.delete_exact(&entry.path, version).await? {
+                DeleteOutcome::Deleted | DeleteOutcome::NotFound => {}
+                DeleteOutcome::TokenMismatch => {
+                    return Err(Error::new(
+                        ErrorCode::PreconditionFailed,
+                        "expired publication ticket changed during maintenance admission",
+                    ));
+                }
+            }
+            processed = processed.saturating_add(1);
+        }
+        match page.continuation {
+            Some(next) => Ok((processed, Some(next), false)),
+            None => Ok((processed, None, true)),
+        }
     }
 
     fn gc_work_engine(&self, epoch: OperationId) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
@@ -5905,13 +6865,161 @@ impl<P: ObjectPlane> Repository<P> {
                 "GC epoch ID is nil",
             ));
         }
-        Ok(self.engine(ProllyObjectStore::new(
+        Ok(self.engine(ProllyObjectStore::new_cached_direct(
             self.plane.clone(),
             format!(
                 "{}/administration/gc/{epoch}/tree",
                 self.options.repository_prefix
             ),
+            self.format.repository_id,
+            tree_format_digest(&self.format.state_tree_format)?,
+            self.node_cache.clone(),
         )))
+    }
+
+    fn fsck_payload_engine(&self, job: OperationId) -> Result<AsyncProlly<ProllyObjectStore<P>>> {
+        if job.is_nil() {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck job ID is nil",
+            ));
+        }
+        Ok(self.engine(ProllyObjectStore::new_cached_direct(
+            self.plane.clone(),
+            format!(
+                "{}/administration/fsck/{job}/payloads",
+                self.options.repository_prefix
+            ),
+            self.format.repository_id,
+            tree_format_digest(&self.format.state_tree_format)?,
+            self.node_cache.clone(),
+        )))
+    }
+
+    fn validate_fsck_cursor(&self, cursor: &FsckCursor) -> Result<()> {
+        let format_digest = tree_format_digest(&self.format.state_tree_format)?;
+        if cursor.repository != self.format.repository_id
+            || cursor.job.is_nil()
+            || cursor.checkpoint_generation == 0
+            || cursor.payloads.format_digest != format_digest
+            || cursor.snapshot_objects.format_digest != format_digest
+            || cursor.snapshot_versions.format_digest != format_digest
+        {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "fsck cursor is malformed or belongs to another repository",
+            ));
+        }
+        validate_branch(&cursor.branch)?;
+        self.validate_commit_closure_cursor(&cursor.closure)?;
+        self.tree_from_root(&cursor.payloads)?;
+        self.tree_from_root(&cursor.snapshot_objects)?;
+        self.tree_from_root(&cursor.snapshot_versions)?;
+        Ok(())
+    }
+
+    async fn require_current_fsck_cursor(&self, cursor: &FsckCursor) -> Result<()> {
+        let path = fsck_cursor_path(&self.options.repository_prefix, cursor.job)?;
+        let stored = self.plane.load_mutable(&path).await?.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "durable fsck checkpoint is missing",
+            )
+        })?;
+        let durable: FsckCursor = decode_canonical(&stored.bytes)?;
+        self.validate_fsck_cursor(&durable)?;
+        if durable != *cursor {
+            return Err(Error::new(
+                ErrorCode::RefConflict,
+                "fsck cursor is stale; resume its durable checkpoint",
+            ));
+        }
+        Ok(())
+    }
+
+    async fn persist_fsck_cursor(&self, cursor: &FsckCursor) -> Result<()> {
+        self.validate_fsck_cursor(cursor)?;
+        let path = fsck_cursor_path(&self.options.repository_prefix, cursor.job)?;
+        let current = self.plane.load_mutable(&path).await?;
+        if let Some(stored) = current.as_ref() {
+            let previous: FsckCursor = decode_canonical(&stored.bytes)?;
+            self.validate_fsck_cursor(&previous)?;
+            if previous.job != cursor.job {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "durable fsck cursor belongs to another job",
+                ));
+            }
+            if previous == *cursor {
+                return Ok(());
+            }
+            if previous
+                .checkpoint_generation
+                .checked_add(1)
+                .filter(|generation| *generation == cursor.checkpoint_generation)
+                .is_none()
+            {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "durable fsck checkpoint generation changed concurrently",
+                ));
+            }
+        } else if cursor.checkpoint_generation != 1 {
+            return Err(Error::new(
+                ErrorCode::InvalidContinuationToken,
+                "durable fsck checkpoint is missing",
+            ));
+        }
+        let expected = current.map(|stored| stored.metadata.token);
+        match self
+            .maintenance_controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected,
+                bytes: encode_canonical(cursor)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(()),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "durable fsck cursor changed concurrently",
+            )),
+        }
+    }
+
+    async fn delete_fsck_cleanup_prefix(&self, prefix: &str, max_objects: usize) -> Result<usize> {
+        let page = self
+            .plane
+            .list(ListRequest {
+                prefix: prefix.to_string(),
+                continuation: None,
+                limit: max_objects,
+                include_versions: true,
+            })
+            .await?;
+        let targets = page
+            .entries
+            .into_iter()
+            .map(physical_list_entry_target)
+            .collect::<Vec<_>>();
+        self.delete_fsck_cleanup_targets(targets).await
+    }
+
+    async fn delete_fsck_cleanup_targets(
+        &self,
+        targets: Vec<(ObjectPath, PhysicalVersion)>,
+    ) -> Result<usize> {
+        let processed = targets.len();
+        for outcome in self.plane.delete_exact_batch(targets).await? {
+            if outcome == DeleteOutcome::TokenMismatch {
+                return Err(Error::new(
+                    ErrorCode::RefConflict,
+                    "fsck workspace changed during exact cleanup",
+                ));
+            }
+        }
+        Ok(processed)
     }
 
     fn validate_gc_cursor(&self, cursor: &GcCursor) -> Result<()> {
@@ -6062,84 +7170,106 @@ impl<P: ObjectPlane> Repository<P> {
     async fn gc_mark_nodes(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
         let engine = self.gc_work_engine(cursor.epoch)?;
         let mut tree = self.tree_from_root(&cursor.work)?;
-        let mut processed = 0usize;
-        while processed < max_steps {
-            let mut queue = engine.prefix(&tree, b"nq/").await?;
+        let mut queue = engine.prefix(&tree, b"nq/").await?;
+        let mut records = Vec::with_capacity(max_steps);
+        while records.len() < max_steps {
             let Some(entry) = queue.next().await else {
-                cursor.phase = if cursor.initial_scan_complete {
-                    GcPhase::CatchUpDirtyRoots
-                } else {
-                    GcPhase::ScanCandidates
-                };
                 break;
             };
             let (queue_key, encoded) = entry?;
-            drop(queue);
             let work: GcNodeWork = decode_canonical(&encoded)?;
-            let mark_key = gc_node_mark_key(&work.cid, work.scan_versions);
-            let mut mutations = vec![Mutation::Delete { key: queue_key }];
-            if engine.get(&tree, &mark_key).await?.is_none() {
-                mutations.push(Mutation::Upsert {
-                    key: mark_key,
-                    val: Vec::new(),
-                });
-                mutations.push(Mutation::Upsert {
-                    key: gc_path_mark_key(&self.node_store.direct_node_path(&work.cid)?),
-                    val: Vec::new(),
-                });
-                let bytes = self
-                    .node_store
-                    .get(work.cid.as_bytes())
-                    .await?
-                    .ok_or_else(|| {
-                        Error::new(ErrorCode::MissingClosure, "reachable node is missing")
-                    })?;
-                let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
-                    .map_err(|error| {
-                        Error::new(
-                            ErrorCode::CorruptNode,
-                            format!("reachable node could not be decoded: {error}"),
-                        )
-                    })?;
-                if node.leaf {
-                    if work.scan_versions {
-                        for encoded in node.vals {
-                            let version: ObjectVersion = decode_canonical(&encoded)?;
-                            version.validate()?;
-                            if let Some(binding) = version.binding {
-                                mutations.push(Mutation::Upsert {
-                                    key: binding.provider_version_id.as_ref().map_or_else(
-                                        || gc_path_mark_key(&binding.path),
-                                        |version| gc_physical_mark_key(&binding.path, version),
-                                    ),
-                                    val: Vec::new(),
-                                });
-                            }
-                            cursor.report.logical_versions =
-                                cursor.report.logical_versions.saturating_add(1);
-                        }
-                    }
-                } else {
-                    for child in node.vals {
-                        let cid = prolly::Cid(child.try_into().map_err(|_| {
-                            Error::new(ErrorCode::CorruptNode, "internal node child CID is invalid")
-                        })?);
-                        mutations.push(Mutation::Upsert {
-                            key: gc_node_queue_key(&cid, work.scan_versions),
-                            val: encode_canonical(&GcNodeWork {
-                                cid,
-                                scan_versions: work.scan_versions,
-                            })?,
-                        });
-                    }
-                }
-                cursor.report.nodes = cursor.report.nodes.saturating_add(1);
-            }
-            tree = engine.batch(&tree, mutations).await?;
-            processed += 1;
+            records.push((queue_key, work));
         }
+        drop(queue);
+        if records.is_empty() {
+            cursor.phase = if cursor.initial_scan_complete {
+                GcPhase::CatchUpDirtyRoots
+            } else {
+                GcPhase::ScanCandidates
+            };
+            return Ok(0);
+        }
+        let mark_keys = records
+            .iter()
+            .map(|(_, work)| gc_node_mark_key(&work.cid, work.scan_versions))
+            .collect::<Vec<_>>();
+        let marked = engine.get_many(&tree, &mark_keys).await?;
+        let pending = records
+            .iter()
+            .zip(marked)
+            .filter_map(|((_, work), marked)| marked.is_none().then_some(work.clone()))
+            .collect::<Vec<_>>();
+        let loaded = stream::iter(pending.into_iter().map(|work| async move {
+            let bytes = self
+                .node_store
+                .get(work.cid.as_bytes())
+                .await?
+                .ok_or_else(|| {
+                    Error::new(ErrorCode::MissingClosure, "reachable node is missing")
+                })?;
+            let node = Node::from_bytes_with_format(&bytes, &self.format.state_tree_format)
+                .map_err(|error| {
+                    Error::new(
+                        ErrorCode::CorruptNode,
+                        format!("reachable node could not be decoded: {error}"),
+                    )
+                })?;
+            Ok::<_, Error>((work, node))
+        }))
+        .buffered(32)
+        .collect::<Vec<_>>()
+        .await;
+        let mut mutations = records
+            .into_iter()
+            .map(|(key, _)| Mutation::Delete { key })
+            .collect::<Vec<_>>();
+        for loaded in loaded {
+            let (work, node) = loaded?;
+            mutations.push(Mutation::Upsert {
+                key: gc_node_mark_key(&work.cid, work.scan_versions),
+                val: Vec::new(),
+            });
+            mutations.push(Mutation::Upsert {
+                key: gc_path_mark_key(&self.node_store.direct_node_path(&work.cid)?),
+                val: Vec::new(),
+            });
+            if node.leaf && work.scan_versions {
+                let mut physical_marks = BTreeSet::new();
+                for encoded in node.vals {
+                    let version: ObjectVersion = decode_canonical(&encoded)?;
+                    version.validate()?;
+                    if let Some(binding) = version.binding {
+                        physical_marks.insert(binding.provider_version_id.as_ref().map_or_else(
+                            || gc_path_mark_key(&binding.path),
+                            |version| gc_physical_mark_key(&binding.path, version),
+                        ));
+                    }
+                    cursor.report.logical_versions =
+                        cursor.report.logical_versions.saturating_add(1);
+                }
+                mutations.extend(physical_marks.into_iter().map(|key| Mutation::Upsert {
+                    key,
+                    val: Vec::new(),
+                }));
+            } else if !node.leaf {
+                for child in node.vals {
+                    let cid = prolly::Cid(child.try_into().map_err(|_| {
+                        Error::new(ErrorCode::CorruptNode, "internal node child CID is invalid")
+                    })?);
+                    mutations.push(Mutation::Upsert {
+                        key: gc_node_queue_key(&cid, work.scan_versions),
+                        val: encode_canonical(&GcNodeWork {
+                            cid,
+                            scan_versions: work.scan_versions,
+                        })?,
+                    });
+                }
+            }
+            cursor.report.nodes = cursor.report.nodes.saturating_add(1);
+        }
+        tree = engine.batch(&tree, mutations).await?;
         cursor.work = RootManifest::from_tree(&tree)?;
-        Ok(processed)
+        Ok(mark_keys.len())
     }
 
     async fn gc_scan_candidates(&self, cursor: &mut GcCursor, max_steps: usize) -> Result<usize> {
@@ -6154,26 +7284,40 @@ impl<P: ObjectPlane> Repository<P> {
             .await?;
         let engine = self.gc_work_engine(cursor.epoch)?;
         let mut tree = self.tree_from_root(&cursor.work)?;
-        for entry in &page.entries {
-            let Some(kind) = gc_managed_kind(&self.options.repository_prefix, &entry.path) else {
-                continue;
-            };
-            if entry.metadata.last_modified_millis > cursor.cutoff_millis {
-                continue;
-            }
-            let path_retained = engine
-                .get(&tree, &gc_path_mark_key(&entry.path))
-                .await?
-                .is_some();
-            let physical_retained = match entry.metadata.token.version_id.as_deref() {
-                Some(version) => engine
-                    .get(&tree, &gc_physical_mark_key(&entry.path, version))
-                    .await?
-                    .is_some(),
-                None => false,
-            };
-            let retained = path_retained || physical_retained;
-            if retained {
+        let eligible = page
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                let kind = gc_managed_kind(&self.options.repository_prefix, &entry.path)?;
+                (entry.metadata.last_modified_millis <= cursor.cutoff_millis)
+                    .then_some((entry, kind))
+            })
+            .collect::<Vec<_>>();
+        let path_keys = eligible
+            .iter()
+            .map(|(entry, _)| gc_path_mark_key(&entry.path))
+            .collect::<Vec<_>>();
+        let physical_keys = eligible
+            .iter()
+            .map(|(entry, _)| {
+                entry
+                    .metadata
+                    .token
+                    .version_id
+                    .as_deref()
+                    .map(|version| gc_physical_mark_key(&entry.path, version))
+                    .unwrap_or_else(|| gc_path_mark_key(&entry.path))
+            })
+            .collect::<Vec<_>>();
+        let (path_marks, physical_marks) = futures_util::try_join!(
+            engine.get_many(&tree, &path_keys),
+            engine.get_many(&tree, &physical_keys),
+        )?;
+        let mut mutations = Vec::new();
+        for (((entry, kind), path_mark), physical_mark) in
+            eligible.into_iter().zip(path_marks).zip(physical_marks)
+        {
+            if path_mark.is_some() || physical_mark.is_some() {
                 continue;
             }
             let physical_version = entry
@@ -6193,19 +7337,21 @@ impl<P: ObjectPlane> Repository<P> {
                 kind: kind.to_string(),
             };
             let key = gc_candidate_key(&candidate)?;
-            if engine.get(&tree, &key).await?.is_none() {
-                tree = engine
-                    .put(&tree, key, encode_canonical(&candidate)?)
-                    .await?;
-                cursor.report.candidates = cursor.report.candidates.saturating_add(1);
-                cursor.report.candidate_bytes =
-                    cursor.report.candidate_bytes.saturating_add(candidate.len);
-                *cursor
-                    .report
-                    .candidates_by_kind
-                    .entry(kind.to_string())
-                    .or_default() += 1;
-            }
+            mutations.push(Mutation::Upsert {
+                key,
+                val: encode_canonical(&candidate)?,
+            });
+            cursor.report.candidates = cursor.report.candidates.saturating_add(1);
+            cursor.report.candidate_bytes =
+                cursor.report.candidate_bytes.saturating_add(candidate.len);
+            *cursor
+                .report
+                .candidates_by_kind
+                .entry(kind.to_string())
+                .or_default() += 1;
+        }
+        if !mutations.is_empty() {
+            tree = engine.batch(&tree, mutations).await?;
         }
         cursor.work = RootManifest::from_tree(&tree)?;
         cursor.continuation = page.continuation;
@@ -6378,14 +7524,11 @@ impl<P: ObjectPlane> Repository<P> {
             repository: self.format.repository_id,
             generation,
             active_epoch,
+            admission_closed: active_epoch.is_some(),
             updated_at_millis: now_millis,
         };
-        let controls = MutableControlStore::new(
-            self.plane.clone(),
-            self.options.repository_prefix.clone(),
-            self.options.mutable_control_versions_to_retain,
-        )?;
-        match controls
+        match self
+            .maintenance_controls
             .compare_exchange(CompareExchange {
                 path,
                 expected,
@@ -6397,6 +7540,36 @@ impl<P: ObjectPlane> Repository<P> {
             CompareExchangeOutcome::Conflict(_) => Err(Error::new(
                 ErrorCode::RefConflict,
                 "GC coordinator changed concurrently",
+            )),
+        }
+    }
+
+    async fn persist_gc_cursor(&self, cursor: &GcCursor) -> Result<()> {
+        let path = gc_cursor_path(&self.options.repository_prefix, cursor.epoch)?;
+        let current = self.plane.load_mutable(&path).await?;
+        if let Some(stored) = current.as_ref() {
+            let previous: GcCursor = decode_canonical(&stored.bytes)?;
+            if previous.repository != cursor.repository || previous.epoch != cursor.epoch {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "durable GC cursor belongs to another epoch",
+                ));
+            }
+        }
+        let expected = current.map(|stored| stored.metadata.token);
+        match self
+            .maintenance_controls
+            .compare_exchange(CompareExchange {
+                path,
+                expected,
+                bytes: encode_canonical(cursor)?,
+            })
+            .await?
+        {
+            CompareExchangeOutcome::Applied(_) => Ok(()),
+            CompareExchangeOutcome::Conflict(_) => Err(Error::new(
+                ErrorCode::RefConflict,
+                "durable GC cursor changed concurrently",
             )),
         }
     }
@@ -6767,13 +7940,6 @@ impl<P: ObjectPlane> Repository<P> {
                             "source live version has no payload binding",
                         )
                     })?;
-                    let bytes = source.payloads.get(source_binding).await?;
-                    if bytes.len() as u64 != *size {
-                        return Err(Error::new(
-                            ErrorCode::ChecksumMismatch,
-                            "source payload length disagrees with its logical version",
-                        ));
-                    }
                     cursor.report.copied_payloads = checked_fsck_add(
                         cursor.report.copied_payloads,
                         1,
@@ -6784,7 +7950,11 @@ impl<P: ObjectPlane> Repository<P> {
                         *size,
                         "history-transfer-payload-byte",
                     )?;
-                    Some(self.payloads.put(bytes).await?)
+                    Some(
+                        self.payloads
+                            .transfer_from(&source.payloads, source_binding, *size)
+                            .await?,
+                    )
                 }
                 LogicalObjectVersionKind::DeleteMarker => None,
             };
@@ -7381,6 +8551,9 @@ impl<P: ObjectPlane> Repository<P> {
         let mut plan_tree = self.tree_from_merge_root(&cursor.plan_root)?;
         let mut processed = 0usize;
         let mut page_mutations = Vec::new();
+        let direct_external_promotion = cursor.ours == base
+            && theirs_commit.parents.first() == Some(&base)
+            && theirs_commit.delta.changes_root.is_some();
         let mut ours_buffer = VecDeque::new();
         let mut theirs_buffer = VecDeque::new();
         if let Some(pending) = cursor.ours_pending.take() {
@@ -7389,24 +8562,83 @@ impl<P: ObjectPlane> Repository<P> {
         if let Some(pending) = cursor.theirs_pending.take() {
             theirs_buffer.push_back(pending);
         }
+        let mut theirs_delta_page = false;
+        if !cursor.ours_finished && cursor.ours_diff.is_none() {
+            if base == cursor.ours {
+                cursor.ours_finished = true;
+            } else if let Some(diffs) = self
+                .direct_parent_diffs(base, &base_commit, &ours_commit)
+                .await?
+            {
+                cursor.ours_diff =
+                    structural_cursor_with_pending(None, &base_tree, &ours_tree, diffs)
+                        .map(MergeDiffCursor::Structural);
+                cursor.ours_finished = cursor.ours_diff.is_none();
+            }
+        }
+        if !cursor.theirs_finished && cursor.theirs_diff.is_none() {
+            if base == cursor.theirs {
+                cursor.theirs_finished = true;
+            } else if let Some(diffs) = self
+                .direct_parent_diffs(base, &base_commit, &theirs_commit)
+                .await?
+            {
+                cursor.theirs_diff =
+                    structural_cursor_with_pending(None, &base_tree, &theirs_tree, diffs)
+                        .map(MergeDiffCursor::Structural);
+                cursor.theirs_finished = cursor.theirs_diff.is_none();
+            }
+        }
+        // The overwhelmingly common high-throughput merge has the target at
+        // the selected base and one direct source child. Its exact delta tree
+        // is already an ordered, restartable merge stream.
+        if cursor.ours_finished
+            && !cursor.theirs_finished
+            && theirs_commit.parents.first() == Some(&base)
+            && !matches!(cursor.theirs_diff, Some(MergeDiffCursor::Structural(_)))
+        {
+            let after = match cursor.theirs_diff.as_ref() {
+                Some(MergeDiffCursor::Delta { after }) => Some(after.as_slice()),
+                None => None,
+                Some(MergeDiffCursor::Structural(_)) => unreachable!("excluded above"),
+            };
+            let (diffs, next_after) = self
+                .direct_parent_diff_page(&base_commit, &theirs_commit, after, max_steps)
+                .await?;
+            theirs_buffer.extend(diffs);
+            cursor.theirs_diff = next_after.map(|after| MergeDiffCursor::Delta { after });
+            cursor.theirs_finished = cursor.theirs_diff.is_none();
+            theirs_delta_page = true;
+        }
         if !cursor.ours_finished {
             let page = state_engine
-                .structural_diff_page(&base_tree, &ours_tree, cursor.ours_diff.as_ref(), max_steps)
+                .structural_diff_page(
+                    &base_tree,
+                    &ours_tree,
+                    cursor.ours_diff.as_ref().map(|cursor| match cursor {
+                        MergeDiffCursor::Structural(cursor) => cursor,
+                        MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+                    }),
+                    max_steps,
+                )
                 .await?;
             ours_buffer.extend(page.diffs);
-            cursor.ours_diff = page.next_cursor;
+            cursor.ours_diff = page.next_cursor.map(MergeDiffCursor::Structural);
         }
-        if !cursor.theirs_finished {
+        if !cursor.theirs_finished && !theirs_delta_page {
             let page = state_engine
                 .structural_diff_page(
                     &base_tree,
                     &theirs_tree,
-                    cursor.theirs_diff.as_ref(),
+                    cursor.theirs_diff.as_ref().map(|cursor| match cursor {
+                        MergeDiffCursor::Structural(cursor) => cursor,
+                        MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+                    }),
                     max_steps,
                 )
                 .await?;
             theirs_buffer.extend(page.diffs);
-            cursor.theirs_diff = page.next_cursor;
+            cursor.theirs_diff = page.next_cursor.map(MergeDiffCursor::Structural);
         }
         while processed < max_steps {
             let key_order = match (ours_buffer.front(), theirs_buffer.front()) {
@@ -7464,10 +8696,12 @@ impl<P: ObjectPlane> Repository<P> {
                 conflict,
             };
             if selected != ours_value {
-                page_mutations.push(Mutation::Upsert {
-                    key: merge_change_key(&key),
-                    val: encode_canonical(&record)?,
-                });
+                if !direct_external_promotion {
+                    page_mutations.push(Mutation::Upsert {
+                        key: merge_change_key(&key),
+                        val: encode_canonical(&record)?,
+                    });
+                }
                 let change = merge_change_from_record(&record)?;
                 emitted_changes.push(change);
                 cursor.planned_changes =
@@ -7492,17 +8726,34 @@ impl<P: ObjectPlane> Repository<P> {
             processed += 1;
         }
         cursor.ours_diff = structural_cursor_with_pending(
-            cursor.ours_diff.take(),
+            cursor.ours_diff.take().map(|cursor| match cursor {
+                MergeDiffCursor::Structural(cursor) => cursor,
+                MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+            }),
             &base_tree,
             &ours_tree,
             ours_buffer.into(),
-        );
-        cursor.theirs_diff = structural_cursor_with_pending(
-            cursor.theirs_diff.take(),
-            &base_tree,
-            &theirs_tree,
-            theirs_buffer.into(),
-        );
+        )
+        .map(MergeDiffCursor::Structural);
+        if theirs_delta_page {
+            if !theirs_buffer.is_empty() {
+                return Err(Error::new(
+                    ErrorCode::InternalInvariant,
+                    "direct-child delta merge page was not fully consumed",
+                ));
+            }
+        } else {
+            cursor.theirs_diff = structural_cursor_with_pending(
+                cursor.theirs_diff.take().map(|cursor| match cursor {
+                    MergeDiffCursor::Structural(cursor) => cursor,
+                    MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+                }),
+                &base_tree,
+                &theirs_tree,
+                theirs_buffer.into(),
+            )
+            .map(MergeDiffCursor::Structural);
+        }
         cursor.ours_finished = cursor.ours_diff.is_none();
         cursor.theirs_finished = cursor.theirs_diff.is_none();
         if !page_mutations.is_empty() {
@@ -7516,6 +8767,13 @@ impl<P: ObjectPlane> Repository<P> {
         {
             if cursor.policy == MergePolicy::Fail && cursor.conflicts != 0 {
                 cursor.phase = MergePhase::Conflicted;
+            } else if direct_external_promotion {
+                cursor.final_objects = Some(theirs_commit.state.objects.clone());
+                cursor.final_versions = Some(theirs_commit.state.versions.clone());
+                cursor.delta_root = theirs_commit.delta.changes_root.clone();
+                cursor.built_changes = cursor.planned_changes;
+                cursor.version_diff_finished = true;
+                cursor.phase = MergePhase::ReadyToPublish;
             } else {
                 cursor.final_objects = Some(ours_commit.state.objects.clone());
                 cursor.final_versions = Some(ours_commit.state.versions.clone());
@@ -7527,6 +8785,201 @@ impl<P: ObjectPlane> Repository<P> {
         Ok(processed)
     }
 
+    /// Materialize the exact inline delta of a direct first-parent child.
+    /// Only the changed keys are read, so merge planning remains proportional
+    /// to a sparse publication even when the surrounding snapshot is huge.
+    async fn direct_parent_diffs(
+        &self,
+        parent: CommitId,
+        parent_commit: &BucketCommit,
+        child_commit: &BucketCommit,
+    ) -> Result<Option<Vec<Diff>>> {
+        if child_commit.parents.first() != Some(&parent)
+            || child_commit.delta.changes_root.is_some()
+        {
+            return Ok(None);
+        }
+        if child_commit.delta.changes.is_empty() {
+            return Ok(Some(Vec::new()));
+        }
+        let keys = child_commit
+            .delta
+            .changes
+            .iter()
+            .map(|transition| transition.key.as_slice())
+            .collect::<Vec<_>>();
+        let engine = self.engine(self.node_store.clone());
+        let parent_tree = self.tree_from_root(&parent_commit.state.objects)?;
+        let child_tree = self.tree_from_root(&child_commit.state.objects)?;
+        let (parent_values, child_values) = futures_util::try_join!(
+            engine.get_many(&parent_tree, &keys),
+            engine.get_many(&child_tree, &keys),
+        )?;
+        let mut diffs = Vec::with_capacity(keys.len());
+        for ((transition, before), after) in child_commit
+            .delta
+            .changes
+            .iter()
+            .zip(parent_values)
+            .zip(child_values)
+        {
+            if current_id(before.as_deref())? != transition.previous
+                || (!transition.delete_marker
+                    && current_id(after.as_deref())? != Some(transition.next))
+                || (transition.delete_marker && after.is_some())
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "inline commit delta disagrees with its state roots",
+                ));
+            }
+            let diff = match (before, after) {
+                (None, Some(val)) => Diff::Added {
+                    key: transition.key.clone(),
+                    val,
+                },
+                (Some(val), None) => Diff::Removed {
+                    key: transition.key.clone(),
+                    val,
+                },
+                (Some(old), Some(new)) => Diff::Changed {
+                    key: transition.key.clone(),
+                    old,
+                    new,
+                },
+                (None, None) => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "inline commit delta records an absent-to-absent transition",
+                    ));
+                }
+            };
+            diffs.push(diff);
+        }
+        Ok(Some(diffs))
+    }
+
+    async fn direct_parent_diff_page(
+        &self,
+        parent_commit: &BucketCommit,
+        child_commit: &BucketCommit,
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(Vec<Diff>, Option<Vec<u8>>)> {
+        let (transitions, next_after) = self.commit_delta_page(child_commit, after, limit).await?;
+        if transitions.is_empty() {
+            return Ok((Vec::new(), next_after));
+        }
+        let keys = transitions
+            .iter()
+            .map(|transition| transition.key.as_slice())
+            .collect::<Vec<_>>();
+        let engine = self.engine(self.node_store.clone());
+        let parent_tree = self.tree_from_root(&parent_commit.state.objects)?;
+        let child_tree = self.tree_from_root(&child_commit.state.objects)?;
+        let (parent_values, child_values) = futures_util::try_join!(
+            engine.get_many(&parent_tree, &keys),
+            engine.get_many(&child_tree, &keys),
+        )?;
+        let mut diffs = Vec::with_capacity(keys.len());
+        for ((transition, before), after) in
+            transitions.into_iter().zip(parent_values).zip(child_values)
+        {
+            if current_id(before.as_deref())? != transition.previous
+                || (!transition.delete_marker
+                    && current_id(after.as_deref())? != Some(transition.next))
+                || (transition.delete_marker && after.is_some())
+            {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "commit delta page disagrees with its state roots",
+                ));
+            }
+            diffs.push(match (before, after) {
+                (None, Some(val)) => Diff::Added {
+                    key: transition.key,
+                    val,
+                },
+                (Some(val), None) => Diff::Removed {
+                    key: transition.key,
+                    val,
+                },
+                (Some(old), Some(new)) => Diff::Changed {
+                    key: transition.key,
+                    old,
+                    new,
+                },
+                (None, None) => {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "commit delta page records an absent-to-absent transition",
+                    ));
+                }
+            });
+        }
+        Ok((diffs, next_after))
+    }
+
+    async fn commit_delta_page(
+        &self,
+        commit: &BucketCommit,
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(Vec<ObjectTransition>, Option<Vec<u8>>)> {
+        if let Some(root) = &commit.delta.changes_root {
+            let tree = self.tree_from_root(root)?;
+            let engine = self.engine(self.node_store.clone());
+            let mut entries = match after {
+                Some(after) => engine.range_after(&tree, after, None).await?,
+                None => engine.range(&tree, b"", None).await?,
+            };
+            let mut transitions = Vec::with_capacity(limit.saturating_add(1));
+            while transitions.len() <= limit {
+                let Some(entry) = entries.next().await else {
+                    break;
+                };
+                let (key, encoded) = entry?;
+                let transition: ObjectTransition = decode_canonical(&encoded)?;
+                if transition.key != key {
+                    return Err(Error::new(
+                        ErrorCode::CorruptCommit,
+                        "external commit delta key disagrees with its transition",
+                    ));
+                }
+                transitions.push(transition);
+            }
+            let has_more = transitions.len() > limit;
+            if has_more {
+                transitions.truncate(limit);
+            }
+            let next = has_more.then(|| {
+                transitions
+                    .last()
+                    .expect("a full delta page has a last transition")
+                    .key
+                    .clone()
+            });
+            return Ok((transitions, next));
+        }
+
+        let start = after.map_or(0, |after| {
+            commit
+                .delta
+                .changes
+                .partition_point(|transition| transition.key.as_slice() <= after)
+        });
+        let end = start.saturating_add(limit).min(commit.delta.changes.len());
+        let transitions = commit.delta.changes[start..end].to_vec();
+        let next = (end < commit.delta.changes.len()).then(|| {
+            transitions
+                .last()
+                .expect("a truncated inline delta page has a last transition")
+                .key
+                .clone()
+        });
+        Ok((transitions, next))
+    }
+
     async fn advance_merge_version_union(
         &self,
         cursor: &mut MergeCursor,
@@ -7534,6 +8987,54 @@ impl<P: ObjectPlane> Repository<P> {
     ) -> Result<usize> {
         let ours_commit = self.load_commit_metadata(cursor.ours).await?;
         let theirs_commit = self.load_commit_metadata(cursor.theirs).await?;
+        let base = cursor.selected_base.ok_or_else(|| {
+            Error::new(
+                ErrorCode::InternalInvariant,
+                "merge plan has no selected base",
+            )
+        })?;
+        if cursor.version_diff.is_none() && cursor.theirs == base {
+            cursor.version_diff_finished = true;
+            cursor.phase = MergePhase::BuildingObjects;
+            cursor.build_after = None;
+            return Ok(0);
+        }
+        if cursor.ours == base
+            && theirs_commit.parents.first() == Some(&base)
+            && !matches!(cursor.version_diff, Some(MergeDiffCursor::Structural(_)))
+        {
+            let after = match cursor.version_diff.as_ref() {
+                Some(MergeDiffCursor::Delta { after }) => Some(after.as_slice()),
+                None => None,
+                Some(MergeDiffCursor::Structural(_)) => unreachable!("excluded above"),
+            };
+            let delta_is_safe =
+                after.is_some() || !self.commit_delta_contains_delete(&theirs_commit).await?;
+            if delta_is_safe {
+                let (mutations, next_after) = self
+                    .direct_child_version_mutations_page(&theirs_commit, after, max_steps)
+                    .await?;
+                let processed = mutations.len();
+                if !mutations.is_empty() {
+                    let versions =
+                        self.tree_from_root(cursor.final_versions.as_ref().ok_or_else(|| {
+                            Error::new(ErrorCode::InternalInvariant, "merge version root is absent")
+                        })?)?;
+                    let versions = self
+                        .merge_state_engine()
+                        .batch(&versions, mutations)
+                        .await?;
+                    cursor.final_versions = Some(RootManifest::from_tree(&versions)?);
+                }
+                cursor.version_diff = next_after.map(|after| MergeDiffCursor::Delta { after });
+                if cursor.version_diff.is_none() {
+                    cursor.version_diff_finished = true;
+                    cursor.phase = MergePhase::BuildingObjects;
+                    cursor.build_after = None;
+                }
+                return Ok(processed);
+            }
+        }
         let ours_versions = self.tree_from_root(&ours_commit.state.versions)?;
         let theirs_versions = self.tree_from_root(&theirs_commit.state.versions)?;
         let read_engine = self.engine(self.node_store.clone());
@@ -7541,7 +9042,10 @@ impl<P: ObjectPlane> Repository<P> {
             .structural_diff_page(
                 &ours_versions,
                 &theirs_versions,
-                cursor.version_diff.as_ref(),
+                cursor.version_diff.as_ref().map(|cursor| match cursor {
+                    MergeDiffCursor::Structural(cursor) => cursor,
+                    MergeDiffCursor::Delta { .. } => unreachable!("delta handled separately"),
+                }),
                 max_steps,
             )
             .await?;
@@ -7568,13 +9072,90 @@ impl<P: ObjectPlane> Repository<P> {
             let versions = state_engine.batch(&versions, mutations).await?;
             cursor.final_versions = Some(RootManifest::from_tree(&versions)?);
         }
-        cursor.version_diff = page.next_cursor;
+        cursor.version_diff = page.next_cursor.map(MergeDiffCursor::Structural);
         if cursor.version_diff.is_none() {
             cursor.version_diff_finished = true;
             cursor.phase = MergePhase::BuildingObjects;
             cursor.build_after = None;
         }
         Ok(processed)
+    }
+
+    /// Build the immutable version-tree additions for an ordinary direct
+    /// child from its current-object records. Delete markers are not present
+    /// in the current-object tree, so those commits deliberately retain the
+    /// structural union fallback.
+    async fn direct_child_version_mutations_page(
+        &self,
+        child_commit: &BucketCommit,
+        after: Option<&[u8]>,
+        limit: usize,
+    ) -> Result<(Vec<Mutation>, Option<Vec<u8>>)> {
+        let (transitions, next_after) = self.commit_delta_page(child_commit, after, limit).await?;
+        let keys = transitions
+            .iter()
+            .map(|transition| transition.key.as_slice())
+            .collect::<Vec<_>>();
+        let child_tree = self.tree_from_root(&child_commit.state.objects)?;
+        let values = self
+            .engine(self.node_store.clone())
+            .get_many(&child_tree, &keys)
+            .await?;
+        let mut mutations = Vec::with_capacity(values.len());
+        for (transition, value) in transitions.iter().zip(values) {
+            if transition.delete_marker {
+                return Err(Error::new(
+                    ErrorCode::InternalInvariant,
+                    "delete delta entered the direct version-union path",
+                ));
+            }
+            let value = value.ok_or_else(|| {
+                Error::new(
+                    ErrorCode::CorruptCommit,
+                    "non-delete delta is absent from the child state",
+                )
+            })?;
+            let current: CurrentObject = decode_canonical(&value)?;
+            current.version.validate()?;
+            if current.version.id != transition.next {
+                return Err(Error::new(
+                    ErrorCode::CorruptCommit,
+                    "commit delta version disagrees with child state",
+                ));
+            }
+            mutations.push(Mutation::Upsert {
+                key: version_tree_key(
+                    &transition.key,
+                    current.version.body.order,
+                    current.version.id,
+                ),
+                val: encode_canonical(&current.version)?,
+            });
+        }
+        Ok((mutations, next_after))
+    }
+
+    async fn commit_delta_contains_delete(&self, commit: &BucketCommit) -> Result<bool> {
+        if commit.delta.changes_root.is_none() {
+            return Ok(commit
+                .delta
+                .changes
+                .iter()
+                .any(|transition| transition.delete_marker));
+        }
+        let mut after = None;
+        loop {
+            let (page, next) = self
+                .commit_delta_page(commit, after.as_deref(), 1_000)
+                .await?;
+            if page.iter().any(|transition| transition.delete_marker) {
+                return Ok(true);
+            }
+            let Some(next) = next else {
+                return Ok(false);
+            };
+            after = Some(next);
+        }
     }
 
     async fn advance_merge_object_build(
@@ -7801,6 +9382,46 @@ impl<P: ObjectPlane> Repository<P> {
                 ErrorCode::InvalidContinuationToken,
                 "merge change cursor belongs to another plan",
             ));
+        }
+        if cursor.selected_base == Some(cursor.ours) {
+            let theirs = self.load_commit_metadata(cursor.theirs).await?;
+            if theirs.parents.first() == Some(&cursor.ours)
+                && theirs.delta.changes_root.is_some()
+                && cursor.built_changes == cursor.planned_changes
+            {
+                let after = continuation
+                    .map(|continuation| {
+                        continuation
+                            .after
+                            .strip_prefix(MERGE_CHANGE_PREFIX)
+                            .ok_or_else(|| {
+                                Error::new(
+                                    ErrorCode::InvalidContinuationToken,
+                                    "direct merge change cursor has an invalid prefix",
+                                )
+                            })
+                    })
+                    .transpose()?;
+                let (transitions, next_after) =
+                    self.commit_delta_page(&theirs, after, limit).await?;
+                let changes = transitions
+                    .into_iter()
+                    .map(|transition| MergeChange {
+                        key: transition.key,
+                        from: transition.previous,
+                        to: (!transition.delete_marker).then_some(transition.next),
+                    })
+                    .collect();
+                return Ok(MergeChangePage {
+                    changes,
+                    continuation: next_after.map(|after| MergeChangeCursor {
+                        repository: cursor.repository,
+                        job: cursor.job,
+                        plan_root: cursor.plan_root.clone(),
+                        after: merge_change_key(&after),
+                    }),
+                });
+            }
         }
         let engine = self.merge_plan_engine(cursor.job)?;
         let tree = self.tree_from_merge_root(&cursor.plan_root)?;
@@ -8069,6 +9690,63 @@ fn checked_fsck_add(current: u64, add: u64, counter: &str) -> Result<u64> {
     })
 }
 
+fn record_fsck_logical_payload(
+    report: &mut FsckReport,
+    version: &ObjectVersion,
+    deep: bool,
+) -> Result<()> {
+    let LogicalObjectVersionKind::Live { size, .. } = &version.body.kind else {
+        return Ok(());
+    };
+    if version.binding.is_none() {
+        return Err(Error::new(
+            ErrorCode::CorruptCommit,
+            "live object version has no payload binding",
+        ));
+    }
+    report.payloads_verified = checked_fsck_add(report.payloads_verified, 1, "payload")?;
+    report.payload_bytes_verified =
+        checked_fsck_add(report.payload_bytes_verified, *size, "payload-byte")?;
+    if deep {
+        report.deep_content_bytes_verified = checked_fsck_add(
+            report.deep_content_bytes_verified,
+            *size,
+            "deep-content-byte",
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_same_fsck_physical_binding(
+    existing: &crate::PayloadBinding,
+    candidate: &crate::PayloadBinding,
+) -> Result<()> {
+    if existing.path != candidate.path
+        || existing.provider_etag != candidate.provider_etag
+        || existing.provider_version_id != candidate.provider_version_id
+        || existing.checksum_sha256 != candidate.checksum_sha256
+    {
+        return Err(Error::new(
+            ErrorCode::ChecksumMismatch,
+            "logical payload bindings disagree about their physical object",
+        ));
+    }
+    Ok(())
+}
+
+fn payload_physical_key(binding: &crate::PayloadBinding) -> Vec<u8> {
+    let mut identity = binding.path.as_str().as_bytes().to_vec();
+    identity.push(0);
+    if let Some(version) = binding.provider_version_id.as_deref() {
+        identity.extend_from_slice(version.as_bytes());
+    } else {
+        identity.extend_from_slice(binding.provider_etag.as_bytes());
+    }
+    let mut key = b"p/".to_vec();
+    key.extend_from_slice(&crate::codec::sha256(&identity));
+    key
+}
+
 fn history_transfer_version_operation(
     repository: crate::RepositoryId,
     source: ObjectVersionId,
@@ -8184,6 +9862,14 @@ fn object_diff_from_prolly(diff: Diff) -> Result<ObjectDiff> {
     })
 }
 
+fn object_diff_from_transition(transition: &ObjectTransition) -> Result<ObjectDiff> {
+    Ok(ObjectDiff {
+        key: transition.key.clone(),
+        from: transition.previous,
+        to: (!transition.delete_marker).then_some(transition.next),
+    })
+}
+
 fn current_id(value: Option<&[u8]>) -> Result<Option<ObjectVersionId>> {
     value
         .map(|value| {
@@ -8275,34 +9961,6 @@ fn decode_retention_pin_tag(tag: &str) -> Result<Option<String>> {
     })
 }
 
-fn staged_put(
-    key: Vec<u8>,
-    bytes: Vec<u8>,
-    headers: ObjectHeaders,
-    user_metadata: BTreeMap<String, String>,
-    binding: crate::PayloadBinding,
-) -> StagedMutation {
-    let size = bytes.len() as u64;
-    let checksum_md5: [u8; 16] = Md5::digest(&bytes).into();
-    let checksum_sha256: [u8; 32] = Sha256::digest(&bytes).into();
-    StagedMutation {
-        body: StagedMutationBody::Put(Box::new(StagedPut {
-            key,
-            size,
-            logical_etag: format!("\"{}\"", hex::encode(checksum_md5)),
-            checksums: Checksums {
-                md5: Some(checksum_md5),
-                sha256: Some(checksum_sha256),
-                algorithm_values: BTreeMap::new(),
-            },
-            headers,
-            user_metadata,
-            tags: BTreeMap::new(),
-            binding,
-        })),
-    }
-}
-
 fn validate_options(options: &RepositoryOptions) -> Result<()> {
     crate::repository::validate_branch(&options.default_branch)?;
     options.idempotency_retention.validate()?;
@@ -8357,21 +10015,71 @@ fn gc_coordinator_path(prefix: &str) -> Result<ObjectPath> {
     ObjectPath::new(format!("{prefix}/gc/coordinator.cbor"))
 }
 
+fn gc_cursor_path(prefix: &str, epoch: OperationId) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/gc/epochs/{epoch}/cursor.cbor"))
+}
+
+fn fsck_cursor_path(prefix: &str, job: OperationId) -> Result<ObjectPath> {
+    ObjectPath::new(format!("{prefix}/administration/fsck/{job}/cursor.cbor"))
+}
+
+fn physical_list_entry_target(entry: crate::PhysicalListEntry) -> (ObjectPath, PhysicalVersion) {
+    let token = entry.metadata.token;
+    let physical = token
+        .version_id
+        .clone()
+        .map(|version_id| PhysicalVersion::Versioned { version_id })
+        .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+    (entry.path, physical)
+}
+
+fn physical_stored_object_target(
+    path: ObjectPath,
+    stored: crate::StoredObject,
+) -> (ObjectPath, PhysicalVersion) {
+    let token = stored.metadata.token;
+    let physical = token
+        .version_id
+        .clone()
+        .map(|version_id| PhysicalVersion::Versioned { version_id })
+        .unwrap_or_else(|| PhysicalVersion::Unversioned { token: Some(token) });
+    (path, physical)
+}
+
+fn gc_publication_ticket_prefix(prefix: &str, repository: crate::RepositoryId) -> String {
+    format!(
+        "{prefix}/gc/publications/{}/",
+        hex::encode(repository.as_bytes())
+    )
+}
+
+fn gc_publication_ticket_path(
+    prefix: &str,
+    repository: crate::RepositoryId,
+    instance: OperationId,
+    request_digest: [u8; 32],
+) -> Result<ObjectPath> {
+    ObjectPath::new(format!(
+        "{}{instance}/{}",
+        gc_publication_ticket_prefix(prefix, repository),
+        hex::encode(request_digest)
+    ))
+}
+
+fn publication_ticket_digest(request: &CompareExchange) -> [u8; 32] {
+    crate::model::derive_input_digest(&[
+        b"publication-ticket",
+        request.path.as_str().as_bytes(),
+        &request.bytes,
+    ])
+}
+
 fn gc_dirty_root_prefix(prefix: &str, epoch: OperationId) -> String {
     format!("{prefix}/gc/dirty/{epoch}/")
 }
 
 fn gc_dirty_root_sequence_prefix(prefix: &str, epoch: OperationId, sequence: u64) -> String {
     format!("{}{sequence:020}/", gc_dirty_root_prefix(prefix, epoch))
-}
-
-fn gc_dirty_root_path(prefix: &str, event: &GcDirtyRoot, digest: [u8; 32]) -> Result<ObjectPath> {
-    ObjectPath::new(format!(
-        "{}{}/{:}",
-        gc_dirty_root_sequence_prefix(prefix, event.epoch, event.sequence),
-        event.namespace,
-        hex::encode(digest)
-    ))
 }
 
 fn commit_path(prefix: &str, id: CommitId) -> Result<ObjectPath> {
@@ -8435,7 +10143,7 @@ fn gc_managed_kind(prefix: &str, path: &ObjectPath) -> Option<&'static str> {
         Some("commits")
     } else if relative.starts_with("nodes/sha256/") {
         Some("nodes")
-    } else if relative.starts_with("payloads/") || relative.starts_with("payload-packs/") {
+    } else if relative.starts_with("payloads/") {
         Some("payloads")
     } else {
         None

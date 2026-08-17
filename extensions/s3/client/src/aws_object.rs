@@ -21,6 +21,7 @@ use prolly_s3_core::{
     StoredMetadata, StoredObject,
 };
 use sha2::{Digest, Sha256};
+const MAX_SINGLE_PUT_BYTES: u64 = 5 * 1_024 * 1_024 * 1_024;
 
 /// Object-plane calls issued to the AWS SDK and body bytes handed to or
 /// collected from it. SDK-internal HTTP retries are intentionally not counted;
@@ -310,6 +311,12 @@ impl ObjectPlane for AwsS3ObjectPlane {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
                 "immutable spool size changed before upload",
+            ));
+        }
+        if request.size > MAX_SINGLE_PUT_BYTES {
+            return Err(Error::new(
+                ErrorCode::EntityTooLarge,
+                "object exceeds S3 PutObject limits; upload the single final object with an external provider transfer manager and stage its handoff",
             ));
         }
         self.metrics.put_object.fetch_add(1, Ordering::Relaxed);

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
 
 use prolly_s3_core::{
     decode_canonical, encode_canonical, FixedClock, LogicalObjectVersionKind, MemoryObjectPlane,
@@ -383,6 +383,105 @@ async fn repository_sparse_merge_prunes_unchanged_10k_snapshot() {
 }
 
 #[tokio::test]
+async fn repository_direct_external_delta_merge_is_paged_without_state_rebuild() {
+    let plane = Arc::new(MemoryObjectPlane::new(true));
+    let clock = Arc::new(FixedClock::new(55_000));
+    let repository_options = RepositoryOptions {
+        repository_prefix: ".tests/repository-direct-external-merge".to_string(),
+        ..options(clock)
+    };
+    let repository = Repository::initialize(plane.clone(), repository_options.clone())
+        .await
+        .unwrap();
+    let base = repository.head("main").await.unwrap();
+    repository.create_branch("feature", base).await.unwrap();
+    let session = repository
+        .begin_commit_session("feature", "external source delta", 60_000)
+        .await
+        .unwrap();
+    let mut mutations = Vec::new();
+    for index in 0..129usize {
+        mutations.push(
+            repository
+                .stage_commit_session_put(
+                    &session,
+                    format!("promote/{index:03}").into_bytes(),
+                    vec![index as u8],
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                )
+                .await
+                .unwrap(),
+        );
+    }
+    let feature_head = repository
+        .publish_commit_session(session, mutations)
+        .await
+        .unwrap()
+        .id;
+
+    let mut cursor = repository
+        .start_merge(
+            "main",
+            "feature",
+            None,
+            MergePolicy::Fail,
+            "promote external delta",
+        )
+        .await
+        .unwrap();
+    let mut processed = 0usize;
+    while cursor.phase != MergePhase::ReadyToPublish {
+        let page = repository.advance_merge(&cursor, 32).await.unwrap();
+        processed += page.processed;
+        cursor = page.cursor;
+    }
+    assert_eq!(processed, 129);
+    assert_eq!(cursor.planned_changes, 129);
+    assert_eq!(cursor.built_changes, 129);
+
+    let mut continuation = None;
+    let mut reported = 0usize;
+    loop {
+        let page = repository
+            .merge_changes_page(&cursor, continuation.as_ref(), 31)
+            .await
+            .unwrap();
+        reported += page.changes.len();
+        continuation = page.continuation;
+        if continuation.is_none() {
+            break;
+        }
+    }
+    assert_eq!(reported, 129);
+    repository.publish_merge(&cursor).await.unwrap();
+    repository.advance_branch_indexes("main").await.unwrap();
+    repository
+        .delete_branch("feature", feature_head)
+        .await
+        .unwrap();
+    drop(repository);
+    let reopened = Repository::open(
+        plane,
+        RepositoryOptions {
+            read_only: true,
+            ..repository_options
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        reopened
+            .get_object("main", b"promote/128")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        vec![128]
+    );
+}
+
+#[tokio::test]
 #[ignore = "4K commit-graph skip-pointer gate"]
 async fn repository_merge_base_skips_deep_first_parent_history() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
@@ -393,7 +492,9 @@ async fn repository_merge_base_skips_deep_first_parent_history() {
         operation_index_max_unindexed_events: 8_192,
         ..options(clock.clone())
     };
-    let repository = Repository::initialize(plane, options).await.unwrap();
+    let repository = Repository::initialize(plane.clone(), options)
+        .await
+        .unwrap();
     put(&repository, "main", "counter.txt", "0").await;
     let base = repository.head("main").await.unwrap();
     repository.create_branch("stale", base).await.unwrap();
@@ -401,6 +502,8 @@ async fn repository_merge_base_skips_deep_first_parent_history() {
         put(&repository, "main", "counter.txt", &generation.to_string()).await;
     }
     repository.advance_branch_indexes("main").await.unwrap();
+    plane.reset_request_counts();
+    let started = Instant::now();
     let cursor = repository
         .start_merge(
             "stale",
@@ -411,7 +514,21 @@ async fn repository_merge_base_skips_deep_first_parent_history() {
         )
         .await
         .unwrap();
+    let elapsed = started.elapsed();
+    let requests = plane.request_snapshot();
+    eprintln!(
+        "DEEP_HISTORY_MERGE_BASE commits=4096 wall_us={} object_plane_calls={} get={} head={} list={}",
+        elapsed.as_micros(),
+        requests.total(),
+        requests.get,
+        requests.head,
+        requests.list,
+    );
     assert_eq!(cursor.phase, MergePhase::Planning);
     assert_eq!(cursor.selected_base, Some(base));
     assert_eq!(cursor.visited_commits, 0);
+    assert!(
+        requests.total() < 64,
+        "skip-pointer merge-base lookup used too many object-plane calls: {requests:?}"
+    );
 }

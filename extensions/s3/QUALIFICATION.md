@@ -58,6 +58,14 @@ Run ignored scale tests explicitly and record:
 - cold, prewarmed, and persistent-cache reads;
 - sparse diff and merge at 10K+ keys;
 - restart during staging, merge, index rebuild, and publication response loss.
+- external provider transfer-manager completion followed by whole-object
+  verification, while retaining exactly one physical S3 object per logical
+  large object;
+- crash/restart between external upload and Prolly publication, with no upload
+  ID or part lifecycle persisted by Prolly;
+- cross-process publication fencing throughout a complete GC epoch;
+- one complete provider object per distinct logical payload, with no payload
+  packs, chunk manifests, or Prolly-owned multipart state.
 
 Results must include p50/p95/p99 latency, S3 calls by operation, bytes
 transferred, CAS retries, cache hit ratio, index lag, wall time, provider
@@ -125,6 +133,29 @@ Do not promote on RustFS results alone. AWS qualification must cover:
 - cache-loss cold start;
 - lifecycle and replication interactions.
 
+Optional dedicated policy buckets extend the AWS matrix without changing
+bucket configuration during the test:
+
+- `PROLLY_S3_AWS_BUCKET_LIFECYCLE` must contain a lifecycle rule and must be
+  rejected before any probe object is written.
+- `PROLLY_S3_AWS_BUCKET_OBJECT_LOCK_DEFAULT` must have default Object Lock
+  retention and must be rejected before probe writes.
+- `PROLLY_S3_AWS_BUCKET_REPLICATED` must have active replication and must be
+  accepted with `replication_enabled=true`; destination lifecycle, ownership,
+  KMS, and replication lag remain operator assertions.
+
+The signed provider capability profile records whether replication
+configuration was readable and whether replication was enabled. Replication is
+reported rather than rejected because it does not mutate source objects, but
+its destination lifecycle, replica ownership, KMS grants, latency, and request
+cost must be included in the deployment runbook.
+
+GC treats an exact-delete `PermissionDenied` as a provider-protected physical
+version, records its count, bytes, and object kind, and continues the bounded
+sweep. This lets Object Lock retention or legal hold preserve the version
+without leaving repository publication admission closed indefinitely. Any
+other deletion error remains terminal and the durable epoch stays resumable.
+
 ## Promotion criteria
 
 Promote only when:
@@ -136,9 +167,66 @@ Promote only when:
 - no test relies on bucket listing for normal node lookup;
 - operation response loss reconciles before fencing;
 - authority renewal survives the intended deployment duration;
-- GC grace periods, external-writer quiescence, and retention policies are
-  tested in the deployment runbook.
+- GC grace periods, durable cross-process admission fencing, crash/resume, and
+  retention policies are tested in the deployment runbook. External writer
+  quiescence is not a correctness requirement for clients using the repository
+  protocol; bypass writers remain unsupported.
 
 Million- or billion-object claims require measurements at representative
 cardinality and traffic. Passing a 10K test is a regression gate, not proof of
 unbounded production capacity.
+
+The staged benchmark defaults to 10K, 20K, 50K, 100K, 500K, and 1M objects and
+records bounded whole-object ingest, point reads, full and prefix listing,
+branch creation, sparse diff, and merge for every stage. Comma-separated branch
+change counts exercise both sparse and larger deltas without changing payload
+storage:
+
+```bash
+PROLLY_RUSTFS_PERF_STAGES=100000,500000,1000000 \
+PROLLY_RUSTFS_PERF_WRITE_CONCURRENCY=512 \
+PROLLY_RUSTFS_PERF_BRANCH_CHANGES=100,10000 \
+PROLLY_RUSTFS_PERF_LIST_PREFIXES=repo/files/000,repo/files/009 \
+  cargo run --release --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --example rustfs_small_files_benchmark
+```
+
+Keep the printed repository prefix, then run a fresh process against the same
+prefix to measure reopen-cold behavior. Set `EXISTING_FILES` and a single stage
+to the repository cardinality so ingestion is skipped:
+
+```bash
+PROLLY_RUSTFS_PERF_OPEN_MODE=open \
+PROLLY_RUSTFS_PERF_PREFIX=benchmarks/small-files/<run> \
+PROLLY_RUSTFS_PERF_EXISTING_FILES=1000000 \
+PROLLY_RUSTFS_PERF_STAGES=1000000 \
+PROLLY_RUSTFS_PERF_READ_PASSES=2 \
+PROLLY_RUSTFS_PERF_LIST_PASSES=2 \
+  cargo run --release --manifest-path extensions/s3/Cargo.toml \
+  -p prolly-s3-client --example rustfs_small_files_benchmark
+```
+
+Set `PROLLY_RUSTFS_PERF_LIST_PASSES=0` and
+`PROLLY_RUSTFS_PERF_BRANCH=false` in a fresh process to measure genuinely cold
+point reads before a full traversal warms metadata. Read or list pass counts may
+be zero so each cache phase can be isolated.
+
+Use the same reopen form with `PROLLY_RUSTFS_PERF_FOYER_DIR` to qualify a
+persistent cache, `PROLLY_RUSTFS_PERF_REBUILD_INDEX=true` for index rebuild,
+and `PROLLY_RUSTFS_PERF_FSCK=deep` or `PROLLY_RUSTFS_PERF_GC=true` for the
+restartable maintenance gates. Every phase prints provider calls and bytes,
+wire attempts, cache behavior, and resident memory. Set the provider-specific
+`PROLLY_RUSTFS_PERF_{READ,WRITE,LIST,DELETE}_USD_PER_1000` rates to include an
+estimated request cost in every metrics row; zero is the default so the harness
+never assumes an AWS or S3-compatible provider's pricing.
+
+`PROLLY_RUSTFS_PERF_TREE_TARGET_ENTRIES` creates a new repository with a
+bounded experimental metadata-tree geometry (maximum eight times the target
+and a 1 MiB hard node limit). Omit it to use the canonical default. Reopen runs
+must pass the same value because tree geometry is part of repository identity;
+compare cold reads, warm full listing, write amplification, and RSS before
+promoting a new default.
+
+Set `PROLLY_RUSTFS_PERF_PREWARM_LEVELS` on a fresh reopen process to measure
+the bounded startup cost and the resulting point-read tail latency separately.
+This preloads only shared metadata-tree levels and never reads payload bodies.

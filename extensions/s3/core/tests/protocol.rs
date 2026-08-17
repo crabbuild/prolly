@@ -179,7 +179,7 @@ fn commit_envelope_is_range_readable_and_rejects_invalid_magic() {
 
     assert_eq!(decoded.commit, commit);
     assert_eq!(decoded.node_pack, Some(pack));
-    assert!(CommitObject::node_payload_offset(&encoded)
+    assert!(CommitObject::node_region_offset(&encoded)
         .unwrap()
         .is_some());
     let mut invalid_magic = encoded.clone();

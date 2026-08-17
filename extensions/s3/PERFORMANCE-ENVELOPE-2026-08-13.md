@@ -1,0 +1,312 @@
+# Prolly S3 measured performance envelope
+
+Date: 2026-08-13
+
+Provider: local RustFS 1.0.0-beta.10, versioned bucket, Apple Silicon Docker
+Desktop, 32-way client concurrency. These numbers are regression evidence for
+this machine, not AWS SLO evidence.
+
+> Architecture notice: the historical results table was collected with an
+> experimental payload-packing and Prolly-owned multipart implementation that
+> has since been removed. It remains useful as a metadata-tree baseline but does
+> not qualify the current architecture. The corrected 10K, 100K, 500K, and 1M
+> measurements in this section use one complete provider object per distinct
+> payload. Historical packed-payload rows remain labeled and must not be used
+> to qualify the current build.
+
+## Corrected whole-object baseline
+
+After removing payload packs and Prolly-owned multipart state, the 10K
+tiny-file RustFS gate stored every distinct 16-byte body as one complete
+provider object. Eliminating a redundant authority read per staged object and
+replacing cumulative checkpoints with append-only mutation windows reduced the
+run from 35.19 seconds, 10,097 calls, and 44.1 MB uploaded to 20.64 seconds,
+10,079 calls, and 19.43 MB. With 128 bounded uploads it reached 484.6 files/s.
+The 64-way and 256-way probes reached 461.8 and 477.1 files/s respectively, so
+128 is the measured local configuration. It remains just below the unchanged
+500 files/s release gate. Remaining amplification is complete logical/version
+metadata plus bounded checkpoint windows, not payload chunks or packs.
+
+The revised 10K same-branch gate now records per-commit p50/p95/p99 as well as
+throughput. A debug-build diagnostic at concurrency 32 was deliberately stopped
+after 1,000 commits took 247.35 seconds (4.04 commits/s); completing 10K would
+have consumed roughly 41 minutes before allowing for history growth. This is a
+failed scalability signal, not a completed release measurement. It confirms
+that independent one-object commits must not be the bulk-ingestion model:
+ordered group commit or multiple ingestion branches followed by structural
+merge is required. The earlier 13.44 commits/s result remains historical and
+must not be used as evidence for the current whole-object build.
+
+The metadata-only deep-history gate was rerun in release mode with 4,096
+first-parent commits. Indexed merge-base selection completed in 1.578 ms using
+27 object-plane calls and zero fallback commit visits, confirming that graph
+skip pointers avoid linear history traversal in this case.
+
+An ordered publication queue now coalesces independently submitted unique keys
+into one commit, splits repeated keys across commits, returns per-object staging
+errors, and uses constant-size acknowledgements. The first implementation
+revalidated the session per object and copied the full batch receipt to every
+caller; those defects produced 2.057 calls/file and O(N²) acknowledgement work.
+After correction, a fresh-bucket release run published 10K submissions as one
+commit with ten durable checkpoint windows, 10,083 S3 calls (1.008/file), and a
+24.84-second p99. Best throughput was 402.6 files/s at concurrency 512; 256 and
+1,024 reached 376.6 and 335.4 files/s. The unchanged 500 files/s gate therefore
+still fails. The p99 is cohort latency: every caller is acknowledged after the
+single grouped ref CAS. A same-host bulk run reached 342.0 files/s, showing the
+queue is now near the provider's current whole-object PUT envelope rather than
+limited by publication or acknowledgement copying.
+
+### Corrected whole-object 100K gate
+
+A fresh 100K run stored 100K unique 35-byte bodies in ten 10K-mutation commits.
+It completed in 250.117 seconds at 399.8 files/s, issued 101,133 calls including
+100,334 PUTs (1.0113 calls/file), uploaded 199.81 MB, downloaded 124.73 MB, and
+reached 287,328 KiB RSS. The 3.50 MB logical input therefore incurred 57.1x
+upload amplification. This is an honest one-object-per-file result and does not
+meet the unchanged 500 files/s release target.
+
+The same process listed 100K entries in 1.555 seconds at 64.3K entries/s with a
+25.9 ms page p99 and 118 KB downloaded. A fresh process with an empty 64 MiB
+node cache took 6.307 seconds at 15.9K entries/s, 138.1 ms p99, and 60.30 MB;
+its second pass took 1.466 seconds at 68.2K entries/s, 18.0 ms p99, and 121 KB.
+After populating a Foyer cache, another process retained the warm result:
+1.616 seconds, 61.9K entries/s, 19.4 ms p99, and 121 KB downloaded.
+
+A separate fresh process ran point reads before any list traversal. One thousand
+random reads completed at 340.7 reads/s with 224.5 ms p99, 4,104 GETs, and
+58.32 MB downloaded for 35 KB of logical bodies: 4.104 calls/read and about
+1,666x download amplification. This fails the cold-read target. After metadata
+was warm, the same repository reached 1,712 reads/s with 23.5 ms p99 and 1.23
+MB downloaded. A new persistent-Foyer process reached 1,594 reads/s with 49.0
+ms p99 and 1.23 MB downloaded.
+
+Tree-geometry probes at 10K rejected smaller target leaf counts. The default
+128-entry geometry reached 925 cold reads/s with 91.2 ms p99, 3,169 calls, and
+7.33 MB downloaded. Targets 64, 32, and 16 produced p99 values of 151, 120,
+and 455 ms respectively while adding traversal requests; the default remains
+canonical. A two-level 100K prewarm loaded 23 shared nodes with 64 calls and
+701 KB but reduced cold ranged leaf fetches only from 563 to 536, so bounded
+prewarm remains an opt-in deployment tool rather than the default.
+
+An exact-target local readiness marker now avoids rereading the durable journal
+index head after this process completes catch-up. A regression test fixes the
+steady read shape at one branch-ref GET plus one complete-payload GET. On the
+100K RustFS repository, a warm 1K-read pass fell from 3,000 to 2,002 calls and
+from about 1.23 MB to 744 KB downloaded; it reached 1,212 reads/s with 54.3 ms
+p99 on the now-heavily loaded shared provider. A fresh cold run likewise fell
+from 4,104 to 3,116 calls, although host contention made its latency unsuitable
+for before/after comparison. A changed branch target cannot use the marker and
+falls back to durable index validation.
+
+Branch creation took 157 ms for the 100-key case and 270 ms for the 10K-key
+case. Direct-child diff took 10.4 ms for 100 keys and 131 ms for 10K keys;
+merge took 469 ms and 1.087 seconds respectively. Preparing the 10K whole-object
+branch delta took 25.45 seconds at 393 files/s. A restartable index rebuild over
+16 publications and 2,627 nodes completed in 462 ms and subsequent catch-up
+reported zero lag.
+
+Deep fsck over the resulting 110K-object snapshot completed correctly but took
+272.9 seconds, 119,251 calls, 142.68 MB downloaded, and 269.01 MB uploaded.
+It verified 110K physical payloads totaling 3.69 MB. The 5,452 administrative
+PUTs show that the cumulative fsck dedup tree needs append-only checkpoint
+segments and bounded merging; payload storage remains whole-object.
+
+Repository-wide GC also completed correctly with zero dirty roots or reachable
+deletions, but took 512.4 seconds and 1,259 pages. It issued 17,409 calls,
+downloaded 247.29 MB, uploaded 30.44 MB, and deleted four unreachable objects
+totaling 77.6 KB. Candidate discovery performs a near-full provider inventory
+even when almost nothing is reclaimable. A durable append-only physical-object
+journal should replace repeated namespace inventory while preserving the
+maintenance barrier and whole-object payload model.
+
+### Corrected whole-object 500K gate
+
+The qualified 100K repository was extended by 400K unique 35-byte objects in
+40 grouped commits. The extension took 1,167.97 seconds at 342.5 files/s,
+issued 408,411 calls with zero retries (1.021 calls/file), uploaded 871.38 MB,
+downloaded 545.77 MB, and reached 295,888 KiB RSS. Upload amplification was
+62.2x over 14.0 MB of logical input. Correctness held across the sustained
+19.5-minute session, but throughput and metadata amplification both fail the
+release targets.
+
+With an insufficient 256 MiB in-process cache, the first full 500K list took
+26.71 seconds at 18.7K entries/s, 133 ms page p99, and 276.4 MB downloaded. A
+second pass still took 29.10 seconds and 269.9 MB because the traversal working
+set churned out of cache. A new process backed by a populated 2 GiB Foyer cache
+listed 500K in 8.18 seconds at 61.2K entries/s with 26.3 ms page p99 and only
+600 KB downloaded. It retained 5,231 node hits with zero misses.
+
+A genuine fresh-process cold point-read pass reached only 162 reads/s with 529
+ms p99, 4.061 calls/read, and 152.57 MB downloaded for 35 KB of logical bodies.
+After the working set was resident, point reads reached 1,775 reads/s with
+21.8 ms p99. A separately reopened persistent-Foyer process reached 1,825
+reads/s with 29.2 ms p99, exactly two GETs/read, and 743 KB downloaded.
+
+Branch creation took 151 ms for the 100-key case and 566 ms for the 10K-key
+case. Direct-child diff took 12.6 ms and 93.7 ms; merge took 766 ms and 2.33
+seconds respectively. Preparing the 10K whole-object delta took 30.54 seconds
+at 327 files/s. Index rebuild over 58 publications and 12,320 nodes completed
+in 1.388 seconds, after which catch-up reported zero lag.
+
+The 100K deep-fsck and GC algorithms already failed their amplification gates;
+running the unchanged algorithms over 500K would multiply provider cost without
+adding design evidence. Their next qualification follows append-only fsck work
+segments and journal-driven GC candidate enumeration.
+
+### Corrected whole-object 1M gate
+
+The qualified 500K repository was extended by another 500K unique 35-byte
+objects in 50 grouped commits. The extension took 2,093.90 seconds at 238.8
+files/s, issued 519,185 calls with zero retries (1.0384 calls/file), uploaded
+1.190 GB, downloaded 692.83 MB, and reached 254,656 KiB RSS at the stage
+boundary. Upload amplification was 68.0x over 17.5 MB of new logical input.
+Mean 10K-object commit time grew to 41.88 seconds. One complete conditional
+payload PUT remained mandatory per distinct body; the growing excess is
+metadata publication and maintenance work, not payload packing.
+
+The first full 1M list took 255.17 seconds at 3.92K entries/s with a 2.725
+second page p99, 13,337 GETs, and 578.20 MB downloaded. A cold Foyer fill was
+similarly expensive at 237.48 seconds, 4.21K entries/s, and 611.47 MB. A new
+process reopening that persistent metadata cache listed the same snapshot in
+24.11 seconds at 41.48K entries/s with a 146 ms page p99, 2,027 GETs, and 1.21
+MB downloaded. Persistence therefore removes most metadata transfer after
+warmup but does not fix the first-instance traversal envelope.
+
+A fresh process performed one thousand random reads before listing. It reached
+101.7 reads/s with 768 ms p99, 4,158 GETs, and 156.62 MB downloaded for 35 KB
+of logical bodies: 4.158 calls/read and about 4,475x download amplification.
+After the in-process metadata working set was warm, reads reached 1,467/s with
+34.5 ms p99, exactly two GETs/read, and 727 KB downloaded. Reopening the fully
+populated Foyer cache eliminated metadata misses and transferred only 757 KB,
+but this heavily loaded local provider delivered 100 reads/s with 2.38 second
+p99. The remaining branch/ref and whole-payload requests, plus provider behavior
+at one million physical objects, need an isolated real-provider matrix.
+
+For a 100-key branch, creation, write, direct-child diff, and merge took 454
+ms, 2.35 seconds, 11.7 ms, and 2.01 seconds. For a 10K-key branch they took
+1.39 seconds, 78.45 seconds, 206.5 ms, and 4.18 seconds. Diff and merge retain
+structural pruning; whole-object branch preparation remains request-rate bound.
+A restartable index rebuild over 110 publications and 24,584 nodes completed in
+9.32 seconds and subsequent catch-up reported zero lag.
+
+The unchanged deep-fsck and GC algorithms were not rerun at 1M. Their 100K
+request and byte amplification already rejected the algorithms; a larger run
+would add provider cost without testing a revised implementation.
+
+## Results
+
+| Workload | Result |
+|---|---:|
+| 4K first-parent commits plus indexed merge-base selection | 11.56 s; exact base, zero fallback commit visits |
+| 10K one-file commits on one branch | 743.9 s, 13.44 commits/s, 339,427 S3 calls, 33.94 calls/commit |
+| 10K files, one grouped commit | 2.252 s, 4,441 files/s, 65 S3 calls |
+| 10K warm random reads (1K samples) | 1,699 reads/s, p99 28.0 ms, 1.159 MB downloaded |
+| 10K full list | 38,994 entries/s, page p99 30.8 ms, 19.2 KB downloaded |
+| 10K branch / 100-key sparse diff / merge | 230 ms / 20.7 ms / 329 ms |
+| 100K files, ten grouped commits | 25.65 s, 3,899 files/s, 910 S3 calls |
+| 100K warm random reads (1K samples) | 1,738 reads/s, p99 25.4 ms, 1.701 MB downloaded |
+| 100K full list | 13,876 entries/s, page p99 113 ms, 40.7 MB downloaded |
+| 100K branch creation | 98.9 ms, 8.7 KB downloaded |
+| 100K snapshot, 100-key sparse diff | 214 ms, 2.52 MB downloaded |
+| 100K snapshot, 100-key merge | 1.148 s, 48.3 MB downloaded |
+| 500K files, 50 grouped commits | 142.0 s, 3,521 files/s, 7,416 S3 calls |
+| 500K full list, opaque snapshot cursor (clean runs) | 26.3–29.1 s, 17.2K–19.0K entries/s, page p99 97–178 ms, 343.8 MB downloaded |
+| 500K full list, opaque snapshot cursor (contended runs) | 61.8–75.5 s, 6.6K–8.1K entries/s, page p99 423–631 ms |
+| 500K random reads (100 samples, restart-cold process) | 441–545 reads/s, p99 89–105 ms, 15.4–15.7 MB downloaded |
+| 500K full list, 512 MiB in-process warm cache | 9.21 s, 54.3K entries/s, page p99 28.4 ms, 607 KB downloaded, 391 MiB RSS |
+| 500K random reads, 512 MiB in-process warm cache (1K samples) | 1,469 reads/s, p99 38.6 ms, 1.23 MB downloaded |
+| 500K full list, reopened 128 MiB + 2 GiB Foyer cache | 10.59 s, 47.2K entries/s, page p99 31.4 ms, 602 KB downloaded, 168 MiB RSS after list |
+| 500K random reads, reopened Foyer cache (1K samples) | 1,467 reads/s, p99 37.2 ms, 1.21 MB downloaded, 192 MiB RSS |
+| 500K branch creation | 72–120 ms in clean runs |
+| 500K snapshot, 100-key direct-child diff, before / after | 7.42 s, 659 MB, 7,284 calls / 9–12 ms, 22 KB, 4 calls |
+| 500K snapshot, 100-key merge, before / after | 17.28 s, 1.37 GB / 474 ms, 88.9 KB |
+| 500K snapshot, 10K-key external-delta diff | 83–208 ms, 12.9 KB, 22 calls |
+| 500K snapshot, 10K-key external-delta merge, before / after promotion | 29.6 s, 60.4 MB, 879 calls / 8.38 s, 3.53 MB, 232 calls |
+| 500K → 1M extension, 50 grouped commits | 220.3 s, 2,270 files/s, 16,075 calls, 2.68 GB uploaded, 763 MB downloaded, 480 MiB peak observed RSS |
+| 1M full list, indexed-head barrier + persistent-warm Foyer | 20.92 s, 47.8K entries/s, page p99 33.2 ms, 1.19 MB downloaded, 2,027 GETs, zero PUTs |
+| 1M random reads, persistent-warm Foyer (1K samples) | 936 reads/s, p99 76.7 ms, 1.21 MB downloaded |
+| 1M branch / 100-key direct diff / merge | 87.7 ms / 8.24 ms / 582 ms |
+
+The original 500K list failure used the compatibility API that rebuilt a
+key-based traversal on every page. The benchmark now uses one immutable,
+opaque snapshot cursor and completes all 500 pages without retries. Clean runs
+clear the 10K entries/s throughput goal; Docker/host contention can still cut
+throughput below that goal and materially widen p99. The traversal downloads
+343.8 MB and performs about 8.6K GETs, so request and byte amplification remain
+the next listing/cache target.
+
+A restartable branch-index rebuild over 56 publications and 12,404 indexed
+nodes completed in 1.42 seconds. The 512 MiB memory-cache pass had 5,231 node
+hits and zero misses on its second full traversal. A separately reopened Foyer
+process retained the same 5,231 hits and zero misses, reducing metadata download
+from 340.3 MB cold to 0.60 MB persistent-warm. Point reads still perform about
+three provider GETs each for mutable/ref and payload metadata even when every
+Prolly node hits cache; that is now the dominant warm-read request cost.
+
+The 1M extension completed every foreground functional phase. Its first list
+overlapped background index catch-up (150 PUTs), so the benchmark now executes
+and reports an explicit indexed-head barrier before resetting foreground list
+metrics. The clean rerun found zero lag in 15.3 ms, then listed 1M entries with
+2,027 GETs and zero PUTs. Peak observed RSS was 213 MiB during the read/branch
+phases of that reopened 128 MiB-memory Foyer process.
+
+Deep fsck now binds the snapshot's object/version roots into a repository-owned
+durable cursor, uses range-readable commit metadata during DAG discovery, and
+deduplicates checks by complete physical-object identity. Every returned page
+is CAS-checkpointed with a monotonic generation; a cross-process test resumes
+the work, fences a stale worker, bounds retained checkpoint versions, and
+restart-cleans the payload work tree, closure work tree, and checkpoint in
+one-object pages after completion. The former packed-payload numbers are not
+evidence for this revised whole-object fsck path; the 100K, 500K, and 1M
+performance gates must be rerun.
+
+GC now checkpoints its cursor under the repository-wide maintenance epoch at
+start and after every returned page. A new process resumed the measured 1M run
+after two forced terminations; an explicit recovery operation can abandon only
+legacy/crashed epochs that never published a cursor. Node marking dequeues a
+bounded wave, batch-checks marks, fetches nodes with concurrency 32, deduplicates
+physical payload marks within version leaves, and publishes one work-tree mutation
+per wave. Candidate scanning batch-probes reachability and publishes candidates
+once per provider page. The former packed-object GC timing is not evidence for
+the whole-object layout. Cross-process fencing and restart semantics remain,
+but clean end-to-end 100K–1M timing and deliberate mid-sweep restart must be
+rerun.
+
+The 500K grouped ingest uploaded 2.56 GB for 17.5 MB of logical content, about
+146x byte amplification. Direct-child diff now pages the exact commit delta
+rather than allowing tree boundary shifts to trigger a collected structural
+fallback. Merge uses the same restartable delta frontier and promotes an
+external direct-child state/delta without rebuilding identical object and
+version trees.
+
+## Supported envelope
+
+- Whole-object ingest, metadata listing, point reads, branch creation, and
+  100/10K-key direct-child diff/merge now have local evidence through 1M.
+  Ingest, first-instance list/read latency, and metadata byte amplification
+  fail their production gates; this is a measured ceiling, not a support claim.
+- Do not claim 1M production support until cold/warm/persistent reads, grouped
+  whole-object ingest, interrupted fsck, clean full GC, lifecycle/fencing, and
+  the real-provider cost/throttling matrix pass on the revised format.
+- One-file-per-commit history is reliable through 10K and repeated authority
+  renewal, but 13.44 commits/s and 33.94 calls/commit make it unsuitable for
+  bulk ingest.
+- Multiple ingestion branches remove same-ref serialization when independent
+  histories are acceptable, but final structural-merge cost must be included.
+
+## Remaining release gates
+
+1. Repeat 100K, 500K, and 1M on AWS with cold/warm/Foyer-cache matrices and
+   provider cost/throttling data.
+2. Reduce listing GET/byte amplification, stabilize page p99 under contention,
+   remove foreground index-maintenance PUTs during traversal, and avoid the
+   remaining two mutable/control GETs per warm page.
+3. Keep delta-driven diff/merge for direct children; add an equivalent bounded
+   change index for arbitrary non-parent snapshot pairs and divergent merges.
+4. Keep multipart and resumable-transfer state outside Prolly. A provider
+   transfer manager uploads the final content-addressed object, then hands its
+   whole-object identity back for verification and publication. Prolly must
+   not own upload IDs, part geometry, part ETags, chunk manifests, or chunk
+   garbage collection. Use native ranged GETs and provider encryption controls.
+5. Fault-inject cross-process GC ticket expiry, process death, lifecycle,
+   replication, retention, and Object Lock behavior on real providers.

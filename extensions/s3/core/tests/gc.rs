@@ -1,13 +1,13 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use prolly_s3_core::{
-    decode_canonical, encode_canonical, GcCursor, GcPhase, ImmutablePut, MemoryObjectPlane,
-    ObjectHeaders, ObjectPath, ObjectPlane, Repository, RepositoryOptions,
+    GcPhase, ImmutablePut, MemoryObjectPlane, ObjectHeaders, ObjectPath, ObjectPlane, Repository,
+    RepositoryOptions,
 };
 use sha2::{Digest, Sha256};
 
 #[tokio::test]
-async fn concurrent_gc_retains_dirty_and_pinned_roots_and_deletes_exact_orphans() {
+async fn gc_fences_cross_handle_publications_and_deletes_exact_orphans() {
     let plane = Arc::new(MemoryObjectPlane::new(true));
     let options = RepositoryOptions {
         repository_prefix: ".tests/gc".to_string(),
@@ -17,6 +17,44 @@ async fn concurrent_gc_retains_dirty_and_pinned_roots_and_deletes_exact_orphans(
     let repository = Repository::initialize(plane.clone(), options.clone())
         .await
         .unwrap();
+    let session = repository
+        .begin_commit_session("main", "independent live objects", 60_000)
+        .await
+        .unwrap();
+    let staged = repository
+        .stage_commit_session_put_batch(
+            &session,
+            vec![
+                (
+                    b"packed/a".to_vec(),
+                    b"alpha".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+                (
+                    b"packed/b".to_vec(),
+                    b"bravo".to_vec(),
+                    ObjectHeaders::default(),
+                    BTreeMap::new(),
+                ),
+            ],
+            2,
+        )
+        .await
+        .unwrap();
+    let batch_commit = repository
+        .publish_commit_session(session, staged)
+        .await
+        .unwrap();
+    let live_payload = repository
+        .head_object_at("main", batch_commit.id, b"packed/a")
+        .await
+        .unwrap()
+        .unwrap()
+        .version
+        .binding
+        .unwrap()
+        .path;
     let initial = repository.head("main").await.unwrap();
     repository.create_branch("scratch", initial).await.unwrap();
     let pinned = repository
@@ -50,19 +88,41 @@ async fn concurrent_gc_retains_dirty_and_pinned_roots_and_deletes_exact_orphans(
         })
         .await
         .unwrap();
+    let protected_path = ObjectPath::new(format!(
+        ".tests/gc/payloads/sha256/dd/dd/{}",
+        "dd".repeat(32)
+    ))
+    .unwrap();
+    let protected = b"provider-retained orphan".to_vec();
+    plane
+        .put_immutable(ImmutablePut {
+            path: protected_path.clone(),
+            expected_sha256: Sha256::digest(&protected).into(),
+            bytes: protected.clone(),
+        })
+        .await
+        .unwrap();
+    plane.protect_exact_deletes(protected_path.clone());
     tokio::time::sleep(Duration::from_millis(5)).await;
 
+    let external_writer = Repository::open(plane.clone(), options.clone())
+        .await
+        .unwrap();
     let mut gc = repository.start_gc(1).await.unwrap();
-    repository
+    let during_gc = external_writer
         .put_object(
             "main",
             b"during-gc.txt".to_vec(),
-            b"published while marking".to_vec(),
+            b"must be fenced".to_vec(),
             ObjectHeaders::default(),
             BTreeMap::new(),
         )
         .await
-        .unwrap();
+        .unwrap_err();
+    assert_eq!(
+        during_gc.code,
+        prolly_s3_core::ErrorCode::PreconditionFailed
+    );
     for _ in 0..10_000 {
         if gc.phase == GcPhase::Ready {
             break;
@@ -70,27 +130,52 @@ async fn concurrent_gc_retains_dirty_and_pinned_roots_and_deletes_exact_orphans(
         gc = repository.advance_gc(&gc, 1).await.unwrap().cursor;
     }
     assert_eq!(gc.phase, GcPhase::Ready);
-    assert!(gc.report.dirty_roots >= 1);
+    assert_eq!(gc.report.dirty_roots, 0);
     assert!(gc.report.candidates >= 1);
 
-    repository
+    let before_sweep = external_writer
         .put_object(
             "main",
             b"before-sweep.txt".to_vec(),
-            b"forces dirty-root catch-up".to_vec(),
+            b"must also be fenced".to_vec(),
             ObjectHeaders::default(),
             BTreeMap::new(),
         )
         .await
-        .unwrap();
-    let restarted = repository.sweep_gc(&gc, 1).await.unwrap();
-    assert!(restarted.restarted_for_new_roots);
-    assert_eq!(restarted.cursor.phase, GcPhase::CatchUpDirtyRoots);
-    gc = restarted.cursor;
-    let persisted = encode_canonical(&gc).unwrap();
+        .unwrap_err();
+    assert_eq!(
+        before_sweep.code,
+        prolly_s3_core::ErrorCode::PreconditionFailed
+    );
     drop(repository);
     let repository = Repository::open(plane.clone(), options).await.unwrap();
-    gc = decode_canonical::<GcCursor>(&persisted).unwrap();
+    gc = repository.resume_gc().await.unwrap().unwrap();
+    let after_restart_writer = Repository::open(
+        plane.clone(),
+        RepositoryOptions {
+            repository_prefix: ".tests/gc".to_string(),
+            provider_per_key_version_limit: prolly_s3_core::ProviderPerKeyVersionLimit::Finite(
+                10_000,
+            ),
+            ..RepositoryOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let restart_fence = after_restart_writer
+        .put_object(
+            "main",
+            b"restart-race.txt".to_vec(),
+            b"must remain fenced".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        restart_fence.code,
+        prolly_s3_core::ErrorCode::PreconditionFailed
+    );
 
     for _ in 0..10_000 {
         gc = match gc.phase {
@@ -101,16 +186,39 @@ async fn concurrent_gc_retains_dirty_and_pinned_roots_and_deletes_exact_orphans(
     }
     assert_eq!(gc.phase, GcPhase::Complete);
     assert!(gc.report.deleted_versions >= 1);
+    assert_eq!(gc.report.protected_versions, 1);
+    assert_eq!(gc.report.protected_bytes, protected.len() as u64);
     assert!(plane.head(&orphan_path).await.unwrap().is_none());
-    repository.advance_branch_indexes("main").await.unwrap();
+    assert!(plane.head(&protected_path).await.unwrap().is_some());
+    assert!(plane.head(&live_payload).await.unwrap().is_some());
     assert_eq!(
         repository
-            .get_object("main", b"during-gc.txt")
+            .get_object("main", b"packed/b")
             .await
             .unwrap()
             .unwrap()
             .bytes,
-        b"published while marking"
+        b"bravo"
+    );
+    external_writer
+        .put_object(
+            "main",
+            b"after-gc.txt".to_vec(),
+            b"publication admission reopened".to_vec(),
+            ObjectHeaders::default(),
+            BTreeMap::new(),
+        )
+        .await
+        .unwrap();
+    repository.advance_branch_indexes("main").await.unwrap();
+    assert_eq!(
+        repository
+            .get_object("main", b"after-gc.txt")
+            .await
+            .unwrap()
+            .unwrap()
+            .bytes,
+        b"publication admission reopened"
     );
     repository.commit(pinned).await.unwrap();
 }

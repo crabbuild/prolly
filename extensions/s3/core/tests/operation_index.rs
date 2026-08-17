@@ -114,6 +114,21 @@ async fn branch_local_lsm_index_catches_up_tail_merges_segments_and_prunes_reten
             )
             .await
             .unwrap();
+        plane.reset_request_counts();
+        assert!(index
+            .lookup(
+                &publisher,
+                "main",
+                operation(10_000 + u128::from(generation)),
+                1_000 + generation,
+            )
+            .await
+            .unwrap()
+            .is_none());
+        assert!(
+            plane.request_snapshot().get <= 6,
+            "one new journal event should require bounded lookup I/O"
+        );
         if generation == 2 {
             let tail = index
                 .lookup(&publisher, "main", operation(101), 1_002)

@@ -93,6 +93,20 @@ pub struct ImmutableFilePut {
     pub expected_sha256: [u8; 32],
 }
 
+/// Transfer one complete immutable object between object planes.
+///
+/// The provider adapter owns the transfer mechanism. Repository code supplies
+/// only whole-object identity and never observes multipart IDs, parts, ranges,
+/// or resumable-transfer state.
+#[derive(Clone, Debug)]
+pub struct ImmutableTransfer {
+    pub source_path: ObjectPath,
+    pub source_physical_version: Option<PhysicalVersion>,
+    pub destination_path: ObjectPath,
+    pub size: u64,
+    pub expected_sha256: [u8; 32],
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ImmutablePutOutcome {
     Created(StoredMetadata),
@@ -170,6 +184,21 @@ pub trait ObjectPlane: Send + Sync + 'static {
         })
         .await
     }
+
+    /// Transfer a complete immutable object without exposing transfer parts to
+    /// repository code. Providers should override this with a native copy or
+    /// external transfer-manager handoff when available.
+    async fn transfer_immutable_from<Q: ObjectPlane>(
+        &self,
+        source: &Q,
+        request: ImmutableTransfer,
+    ) -> Result<ImmutablePutOutcome>
+    where
+        Self: Sized,
+    {
+        transfer_immutable_via_get(self, source, request).await
+    }
+
     async fn load_mutable(&self, path: &ObjectPath) -> Result<Option<StoredObject>>;
     async fn compare_exchange(&self, request: CompareExchange) -> Result<CompareExchangeOutcome>;
     async fn list(&self, request: ListRequest) -> Result<PhysicalListPage>;
@@ -200,15 +229,50 @@ pub trait ObjectPlane: Send + Sync + 'static {
     }
 }
 
+async fn transfer_immutable_via_get<P: ObjectPlane, Q: ObjectPlane>(
+    destination: &P,
+    source: &Q,
+    request: ImmutableTransfer,
+) -> Result<ImmutablePutOutcome> {
+    let stored = source
+        .get(GetRequest {
+            path: request.source_path,
+            range: None,
+            physical_version: request.source_physical_version,
+        })
+        .await?
+        .ok_or_else(|| Error::new(ErrorCode::MissingClosure, "transfer source is missing"))?;
+    if stored.metadata.delete_marker
+        || stored.bytes.len() as u64 != request.size
+        || sha256(&stored.bytes) != request.expected_sha256
+    {
+        return Err(Error::new(
+            ErrorCode::ChecksumMismatch,
+            "transfer source does not match its whole-object identity",
+        ));
+    }
+    destination
+        .put_immutable(ImmutablePut {
+            path: request.destination_path,
+            bytes: stored.bytes,
+            expected_sha256: request.expected_sha256,
+        })
+        .await
+}
+
 #[derive(Clone)]
 pub struct MemoryObjectPlane {
     inner: Arc<RwLock<MemoryState>>,
     versioned: bool,
     requests: Arc<MemoryRequestCounters>,
     conflict_after_next_compare_exchange: Arc<AtomicBool>,
+    immutable_put_delay_millis: Arc<AtomicU64>,
+    immutable_put_in_flight: Arc<AtomicU64>,
+    immutable_put_max_in_flight: Arc<AtomicU64>,
     compare_exchange_delay_millis: Arc<AtomicU64>,
     compare_exchange_in_flight: Arc<AtomicU64>,
     compare_exchange_max_in_flight: Arc<AtomicU64>,
+    delete_protected_paths: Arc<RwLock<std::collections::BTreeSet<ObjectPath>>>,
 }
 
 struct InFlightGuard(Arc<AtomicU64>);
@@ -224,6 +288,7 @@ struct MemoryRequestCounters {
     get: AtomicU64,
     head: AtomicU64,
     immutable_put: AtomicU64,
+    immutable_transfer: AtomicU64,
     compare_exchange: AtomicU64,
     list: AtomicU64,
     delete_exact: AtomicU64,
@@ -234,6 +299,7 @@ pub struct MemoryRequestSnapshot {
     pub get: u64,
     pub head: u64,
     pub immutable_put: u64,
+    pub immutable_transfer: u64,
     pub compare_exchange: u64,
     pub list: u64,
     pub delete_exact: u64,
@@ -244,6 +310,7 @@ impl MemoryRequestSnapshot {
         self.get
             + self.head
             + self.immutable_put
+            + self.immutable_transfer
             + self.compare_exchange
             + self.list
             + self.delete_exact
@@ -269,10 +336,29 @@ impl MemoryObjectPlane {
             versioned,
             requests: Arc::new(MemoryRequestCounters::default()),
             conflict_after_next_compare_exchange: Arc::new(AtomicBool::new(false)),
+            immutable_put_delay_millis: Arc::new(AtomicU64::new(0)),
+            immutable_put_in_flight: Arc::new(AtomicU64::new(0)),
+            immutable_put_max_in_flight: Arc::new(AtomicU64::new(0)),
             compare_exchange_delay_millis: Arc::new(AtomicU64::new(0)),
             compare_exchange_in_flight: Arc::new(AtomicU64::new(0)),
             compare_exchange_max_in_flight: Arc::new(AtomicU64::new(0)),
+            delete_protected_paths: Arc::new(RwLock::new(std::collections::BTreeSet::new())),
         }
+    }
+
+    /// Test hook for proving immutable payload preparation overlaps before an
+    /// ordered publication lane.
+    pub fn set_immutable_put_delay_millis(&self, delay_millis: u64) {
+        self.immutable_put_delay_millis
+            .store(delay_millis, Ordering::Relaxed);
+    }
+
+    pub fn max_immutable_puts_in_flight(&self) -> u64 {
+        self.immutable_put_max_in_flight.load(Ordering::Relaxed)
+    }
+
+    pub fn reset_immutable_put_concurrency(&self) {
+        self.immutable_put_max_in_flight.store(0, Ordering::Relaxed);
     }
 
     /// Test hook for proving independent mutable-object publications overlap.
@@ -290,6 +376,21 @@ impl MemoryObjectPlane {
             .store(0, Ordering::Relaxed);
     }
 
+    /// Test hook modeling provider retention or Object Lock legal hold.
+    pub fn protect_exact_deletes(&self, path: ObjectPath) {
+        self.delete_protected_paths
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(path);
+    }
+
+    pub fn allow_exact_deletes(&self, path: &ObjectPath) {
+        self.delete_protected_paths
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(path);
+    }
+
     /// Test hook that applies the next successful CAS, then reports a
     /// conflict containing the applied value. This models a provider or SDK
     /// retry whose first wire attempt committed but whose response was lost.
@@ -304,6 +405,7 @@ impl MemoryObjectPlane {
             get: load(&self.requests.get),
             head: load(&self.requests.head),
             immutable_put: load(&self.requests.immutable_put),
+            immutable_transfer: load(&self.requests.immutable_transfer),
             compare_exchange: load(&self.requests.compare_exchange),
             list: load(&self.requests.list),
             delete_exact: load(&self.requests.delete_exact),
@@ -315,6 +417,7 @@ impl MemoryObjectPlane {
             &self.requests.get,
             &self.requests.head,
             &self.requests.immutable_put,
+            &self.requests.immutable_transfer,
             &self.requests.compare_exchange,
             &self.requests.list,
             &self.requests.delete_exact,
@@ -416,6 +519,14 @@ impl ObjectPlane for MemoryObjectPlane {
 
     async fn put_immutable(&self, request: ImmutablePut) -> Result<ImmutablePutOutcome> {
         self.requests.immutable_put.fetch_add(1, Ordering::Relaxed);
+        let in_flight = self.immutable_put_in_flight.fetch_add(1, Ordering::Relaxed) + 1;
+        self.immutable_put_max_in_flight
+            .fetch_max(in_flight, Ordering::Relaxed);
+        let _in_flight = InFlightGuard(self.immutable_put_in_flight.clone());
+        let delay = self.immutable_put_delay_millis.load(Ordering::Relaxed);
+        if delay > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+        }
         if sha256(&request.bytes) != request.expected_sha256 {
             return Err(Error::new(
                 ErrorCode::ChecksumMismatch,
@@ -451,6 +562,17 @@ impl ObjectPlane for MemoryObjectPlane {
                 metadata: metadata.clone(),
             });
         Ok(ImmutablePutOutcome::Created(metadata))
+    }
+
+    async fn transfer_immutable_from<Q: ObjectPlane>(
+        &self,
+        source: &Q,
+        request: ImmutableTransfer,
+    ) -> Result<ImmutablePutOutcome> {
+        self.requests
+            .immutable_transfer
+            .fetch_add(1, Ordering::Relaxed);
+        transfer_immutable_via_get(self, source, request).await
     }
 
     async fn load_mutable(&self, path: &ObjectPath) -> Result<Option<StoredObject>> {
@@ -598,6 +720,17 @@ impl ObjectPlane for MemoryObjectPlane {
         version: PhysicalVersion,
     ) -> Result<DeleteOutcome> {
         self.requests.delete_exact.fetch_add(1, Ordering::Relaxed);
+        if self
+            .delete_protected_paths
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "memory lock poisoned"))?
+            .contains(path)
+        {
+            return Err(Error::new(
+                ErrorCode::PermissionDenied,
+                "exact delete is blocked by provider retention",
+            ));
+        }
         let mut state = self
             .inner
             .write()

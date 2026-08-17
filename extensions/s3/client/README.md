@@ -120,11 +120,10 @@ assert_eq!(current.bytes, b"second revision\n");
 assert_eq!(historical.bytes, b"first revision\n");
 ```
 
-A standalone write uploads one whole content-addressed payload. Bulk ingestion
-packs non-empty files up to 4 KiB into immutable segments capped at 4 MiB;
-logical bindings retain checksums and byte extents, while empty and larger
-files keep the direct representation. Identical bytes in a segment share one
-extent, and replaying the same segment reuses its content-addressed object.
+A standalone write and bulk ingestion both upload one whole content-addressed
+payload object for every distinct non-empty file body. Prolly does not combine
+small files, split large files, or persist byte extents or multipart state.
+Identical complete bodies reuse the same content-addressed object.
 
 For safe retries, generate and persist one operation ID:
 
@@ -378,11 +377,21 @@ payload metadata. Deep mode also downloads and hashes payload bytes:
 
 ```rust
 let mut fsck = client.start_fsck(true).await?;
+let fsck_job = fsck.job;
 while fsck.phase != prolly_s3_client::core::FsckPhase::Complete {
     fsck = client.advance_fsck(&fsck, 1_000).await?.cursor;
 }
 println!("verified {} commits", fsck.report.commits);
+let mut cleanup = client.start_fsck_cleanup(fsck_job).await?;
+while cleanup.phase != prolly_s3_client::core::FsckCleanupPhase::Complete {
+    cleanup = client.advance_fsck_cleanup(&cleanup, 1_000).await?.cursor;
+}
 ```
+
+Every page is checkpointed in the repository. A new process resumes with
+`client.resume_fsck(fsck_job)`; checkpoint generations reject stale workers.
+Cleanup is permitted only after completion, is bounded, and can restart from
+`start_fsck_cleanup` after process loss.
 
 Cross-provider repair is logical. It does not copy provider version IDs. It
 downloads verified source payloads, rebinds them at the destination, preserves
@@ -488,8 +497,8 @@ while gc.phase != GcPhase::Complete {
 }
 ```
 
-The collector sweeps only immutable commit, direct-node, direct-payload, and
-payload-pack objects.
+The collector sweeps only immutable commit, direct-node, and whole-payload
+objects.
 It never sweeps mutable refs, derived indexes, publication journals, format
 markers, or administration data. Branch and tag updates during an epoch write
 dirty-root records before their CAS; sweep batches fence publication and catch
@@ -534,16 +543,20 @@ that fits the configured disk block; larger nodes are deliberately rejected
 from cache admission and continue to use the provider fallback.
 
 Use `prewarm_node_cache(snapshot)` during startup to traverse both state trees.
+Use `prewarm_node_cache_levels(snapshot, levels)` when startup should load only
+the roots and shared upper paths instead of scanning every leaf.
 Use `node_cache_snapshot()` before and after to observe hits, misses,
 insertions, corruptions, coalesced waits, ranged fetches, fetched and avoided
 bytes, and admission rejections.
 
 ## Performance model
 
-- A single-file write uploads one payload and publishes immutable metadata.
-- A tiny-file batch uploads one payload pack per segment; direct payloads use
-  bounded parallel uploads. Tree and publication requests are amortized across
-  the batch.
+- Every distinct logical payload is one complete immutable provider object.
+  Exact duplicate bodies may reuse that complete object by content hash.
+- Tiny-file batches upload those whole objects with bounded concurrency. Tree,
+  append-only checkpoint, and publication requests are amortized across the
+  batch; Prolly never combines file bodies or records payload extents. Each
+  checkpoint window contains only keys changed since its predecessor.
 - A current or historical read resolves a ref/commit/tree path and one payload.
 - Warm immutable-node caches remove most repeated metadata reads.
 - Branch creation inherits immutable derived-index roots from its source and is
@@ -551,8 +564,19 @@ bytes, and admission rejections.
   descriptors and only the node ranges on their traversal frontier.
 - Large commit deltas are external Prolly trees, keeping commit descriptors and
   restart metadata bounded independently of batch size.
+- Callers that need provider-native multipart or resumable transfer use
+  `prepare_external_object_upload`, upload the single final object with their
+  provider transfer manager, then call `stage_external_object_upload`. Prolly
+  persists no upload ID, part geometry, part ETags, chunks, or chunk manifest.
+- Metadata node packs contain only Prolly index nodes. They never contain user
+  object bodies and are not a payload storage or transfer format.
 - Same-branch writers contend on one ref CAS; different branches publish
   independently.
+- Concurrent independent callers can use `ordered_publication_queue` to apply
+  bounded backpressure, prepare complete objects concurrently, and coalesce
+  unique keys into one deterministic commit. Duplicate-key submissions cross a
+  commit boundary to preserve version order. Acknowledgements are constant-size
+  and are delivered only after the grouped ref CAS succeeds.
 
 Measure with `s3_operation_metrics` on the provider and workload you will run.
 The repository enforces configured request-shape limits, but no universal
@@ -561,13 +585,23 @@ latency or cost claim substitutes for AWS qualification.
 ## Limitations
 
 - The client must be the exclusive authority for its repository prefix.
-- One file must fit the repository and provider single-object PUT limits.
-- There is no chunked or multipart file representation.
+- One file must fit the repository and provider single-object size limits.
+- Prolly does not define or manage a chunked file representation. Its built-in
+  upload path uses one `PutObject` up to the provider's 5 GiB single-PUT limit.
+- Larger or resumable transfers must be completed by an external provider
+  transfer manager and handed back as one whole object for verification and
+  publication.
+- The convenience `put_stream` path uses a bounded disk spool because it learns
+  content identity at end-of-stream. The external-upload handoff avoids Prolly
+  transfer state but requires the complete size and whole-object checksums.
 - Concurrent writes to one branch can conflict; batch related changes.
-- Concurrent GC coordinates all writer handles in the authoritative process.
-  Do not run GC while a separately running process can publish to the same
-  repository prefix; use one authoritative writer process or quiesce external
-  writers first.
+- Concurrent GC closes publication admission through the durable repository
+  coordinator, fences writer handles in other processes, checkpoints its epoch,
+  and resumes after process restart. Writers bypassing the repository protocol
+  remain unsupported.
+- Provider-retained or legal-held versions that reject exact deletion are
+  counted in `GcReport::protected_versions`/`protected_bytes`; they remain
+  physically present while GC completes and publication admission reopens.
 - Snapshot clone/fetch/push preserves only the selected logical state. The
   `history_` variants preserve the source commit DAG, but not source commit IDs
   or reflog identity.

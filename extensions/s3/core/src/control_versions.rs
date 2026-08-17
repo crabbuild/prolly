@@ -5,9 +5,9 @@ use std::{
 
 use crate::{
     decode_canonical, CommitGraphHead, CompareExchange, CompareExchangeOutcome, DeleteOutcome,
-    Error, ErrorCode, JournalDerivedIndexHead, ListRequest, NodeIndexHead, ObjectPath, ObjectPlane,
-    OperationIndexHead, PhysicalVersion, RefCatalogHead, RefCatalogShardHead, RefValue, Result,
-    StorageToken,
+    Error, ErrorCode, FsckCursor, JournalDerivedIndexHead, ListRequest, NodeIndexHead, ObjectPath,
+    ObjectPlane, OperationIndexHead, PhysicalVersion, RefCatalogHead, RefCatalogShardHead,
+    RefValue, Result, StorageToken,
 };
 
 pub const DEFAULT_MUTABLE_CONTROL_VERSIONS_TO_RETAIN: usize = 100;
@@ -27,6 +27,8 @@ pub enum MutableControlKind {
     OperationIndexHead,
     JournalDerivedIndexHead,
     GcCoordinator,
+    GcCursor,
+    FsckCursor,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -58,6 +60,14 @@ pub trait MutableControlObserver: Send + Sync {
         kind: MutableControlKind,
         request: &CompareExchange,
     ) -> Result<()>;
+
+    async fn after_compare_exchange(
+        &self,
+        _kind: MutableControlKind,
+        _request: &CompareExchange,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl<P: ObjectPlane> MutableControlStore<P> {
@@ -115,9 +125,6 @@ impl<P: ObjectPlane> MutableControlStore<P> {
                 "compare_exchange through the mutable-control store requires a registered control path",
             )
         })?;
-        if let Some(observer) = self.observer.as_ref() {
-            observer.before_compare_exchange(kind, &request).await?;
-        }
         if let Some(expected) = request.expected.as_ref() {
             let first_update = self.is_unseen(&request.path)?;
             let ref_interval = (self.versions_to_retain / 2).max(1) as u64;
@@ -150,6 +157,10 @@ impl<P: ObjectPlane> MutableControlStore<P> {
                     let head: JournalDerivedIndexHead = decode_canonical(&request.bytes)?;
                     first_update || head.generation.is_multiple_of(ref_interval)
                 }
+                MutableControlKind::FsckCursor => {
+                    let cursor: FsckCursor = decode_canonical(&request.bytes)?;
+                    first_update || cursor.checkpoint_generation.is_multiple_of(ref_interval)
+                }
                 _ => true,
             };
             if scheduled {
@@ -160,17 +171,23 @@ impl<P: ObjectPlane> MutableControlStore<P> {
                     | MutableControlKind::RefCatalogShardHead
                     | MutableControlKind::CommitGraphHead
                     | MutableControlKind::OperationIndexHead
-                    | MutableControlKind::JournalDerivedIndexHead => {
-                        (self.versions_to_retain / 2).max(1)
-                    }
+                    | MutableControlKind::JournalDerivedIndexHead
+                    | MutableControlKind::FsckCursor => (self.versions_to_retain / 2).max(1),
                     _ => self.versions_to_retain.saturating_sub(1),
                 };
                 self.compact_if_current(&request.path, expected, target)
                     .await?;
             }
         }
+        if let Some(observer) = self.observer.as_ref() {
+            observer.before_compare_exchange(kind, &request).await?;
+        }
         let path = request.path.clone();
-        let outcome = self.plane.compare_exchange(request).await?;
+        let outcome = self.plane.compare_exchange(request.clone()).await;
+        if let Some(observer) = self.observer.as_ref() {
+            observer.after_compare_exchange(kind, &request).await?;
+        }
+        let outcome = outcome?;
         if matches!(outcome, CompareExchangeOutcome::Applied(_)) {
             self.mark_seen(path)?;
         }
@@ -374,6 +391,8 @@ pub fn classify_mutable_control_path(
         ["operation-index", "heads", _] => Some(MutableControlKind::OperationIndexHead),
         ["journal-index", "heads", _] => Some(MutableControlKind::JournalDerivedIndexHead),
         ["gc", "coordinator.cbor"] => Some(MutableControlKind::GcCoordinator),
+        ["gc", "epochs", _, "cursor.cbor"] => Some(MutableControlKind::GcCursor),
+        ["administration", "fsck", _, "cursor.cbor"] => Some(MutableControlKind::FsckCursor),
         _ => None,
     }
 }

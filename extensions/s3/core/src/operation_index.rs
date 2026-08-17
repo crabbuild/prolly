@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, RwLock},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -58,6 +61,14 @@ pub struct SegmentedOperationIndex<P: ObjectPlane> {
     leaf_entries: usize,
     merge_fanout: usize,
     max_unindexed_events: usize,
+    suffix_cache: Arc<RwLock<BTreeMap<String, OperationSuffixCache>>>,
+}
+
+#[derive(Clone)]
+struct OperationSuffixCache {
+    checkpoint: PublicationEventId,
+    frontier: PublicationEventId,
+    entries: BTreeMap<OperationId, IndexedOperation>,
 }
 
 struct LoadedHead {
@@ -118,6 +129,7 @@ impl<P: ObjectPlane> SegmentedOperationIndex<P> {
             leaf_entries,
             merge_fanout,
             max_unindexed_events,
+            suffix_cache: Arc::new(RwLock::new(BTreeMap::new())),
         })
     }
 
@@ -493,30 +505,25 @@ impl<P: ObjectPlane> SegmentedOperationIndex<P> {
         };
         self.validate_head(&head.value)?;
         if head.value.checkpoint != current.value.publication {
-            let events = self
-                .collect_unindexed_events(
+            if let Some(entry) = self
+                .lookup_unindexed_cached(
                     publisher,
                     branch,
                     head.value.checkpoint,
                     current.value.publication,
+                    operation,
                 )
-                .await?;
-            if let Some(event) = events.into_iter().find(|event| {
-                event.operation == operation
-                    && self.retention.contains(
+                .await?
+            {
+                return Ok(self
+                    .retention
+                    .contains(
                         current.value.generation,
                         now_millis,
-                        event.generation,
-                        event.created_at_millis,
+                        entry.generation,
+                        entry.created_at_millis,
                     )
-            }) {
-                return Ok(Some(IndexedOperation {
-                    operation,
-                    publication: event.id()?,
-                    target: event.new_target,
-                    generation: event.generation,
-                    created_at_millis: event.created_at_millis,
-                }));
+                    .then_some(entry));
             }
         }
         for level in &head.value.levels {
@@ -547,6 +554,66 @@ impl<P: ObjectPlane> SegmentedOperationIndex<P> {
             }
         }
         Ok(None)
+    }
+
+    /// Cache the branch-local journal suffix that has not reached the durable
+    /// operation index yet. A hot writer normally adds one event between
+    /// lookups, so retry reconciliation reads only that new event instead of
+    /// repeatedly walking the complete maintenance lag.
+    async fn lookup_unindexed_cached(
+        &self,
+        publisher: &ShardedBranchPublisher<P>,
+        branch: &str,
+        checkpoint: PublicationEventId,
+        current: PublicationEventId,
+        operation: OperationId,
+    ) -> Result<Option<IndexedOperation>> {
+        let cached = self
+            .suffix_cache
+            .read()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "operation cache poisoned"))?
+            .get(branch)
+            .cloned();
+        let (mut entries, frontier) = match cached {
+            Some(cached) if cached.checkpoint == checkpoint => (cached.entries, cached.frontier),
+            _ => (BTreeMap::new(), checkpoint),
+        };
+        if frontier != current {
+            let events = self
+                .collect_unindexed_events(publisher, branch, frontier, current)
+                .await?;
+            for event in events {
+                entries.insert(
+                    event.operation,
+                    IndexedOperation {
+                        operation: event.operation,
+                        publication: event.id()?,
+                        target: event.new_target,
+                        generation: event.generation,
+                        created_at_millis: event.created_at_millis,
+                    },
+                );
+            }
+            if entries.len() > self.max_unindexed_events {
+                return Err(Error::new(
+                    ErrorCode::HistoryLimitExceeded,
+                    "operation-index lag exceeds its bounded catch-up window; run resumable rebuild",
+                ));
+            }
+        }
+        let found = entries.get(&operation).cloned();
+        self.suffix_cache
+            .write()
+            .map_err(|_| Error::new(ErrorCode::InternalInvariant, "operation cache poisoned"))?
+            .insert(
+                branch.to_string(),
+                OperationSuffixCache {
+                    checkpoint,
+                    frontier: current,
+                    entries,
+                },
+            );
+        Ok(found)
     }
 
     async fn collect_unindexed_events(
