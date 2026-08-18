@@ -2,7 +2,7 @@ use super::codec::{put_bytes, put_varint, Reader, FORMAT_VERSION, VECTOR_ENCODIN
 use crate::prolly::error::Error;
 use crate::prolly::proximity::distance::prepare_vector;
 use crate::prolly::proximity::vector::{decode_components, encode_components};
-use crate::prolly::proximity::DistanceMetric;
+use crate::prolly::proximity::{DistanceMetric, QueryKernel};
 
 const MAGIC: &[u8; 4] = b"PRVR";
 
@@ -10,6 +10,13 @@ const MAGIC: &[u8; 4] = b"PRVR";
 pub(crate) struct EncodedVectorRef<'a> {
     pub(crate) bytes: &'a [u8],
     pub(crate) dimensions: u32,
+}
+
+impl EncodedVectorRef<'_> {
+    pub(crate) fn score(&self, kernel: QueryKernel, metric: DistanceMetric, query: &[f32]) -> f64 {
+        debug_assert_eq!(query.len(), self.dimensions as usize);
+        crate::prolly::proximity::distance::query_score_encoded(kernel, metric, query, self.bytes)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

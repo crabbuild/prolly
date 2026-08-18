@@ -12,7 +12,8 @@ use crate::prolly::proximity::{
 };
 use crate::prolly::store::Store;
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 struct Ranked {
@@ -145,7 +146,7 @@ where
         request: &request,
         stats: ProximitySearchStats::default(),
         completion: SearchCompletion::ApproximatePolicySatisfied,
-        loaded: BTreeMap::new(),
+        loaded: HashMap::new(),
         plan: plan.summary(),
     };
 
@@ -271,7 +272,6 @@ where
     let mut candidates = eligible.into_vec();
     candidates.sort();
     let mut reranked = Vec::with_capacity(candidates.len());
-    let mut vector_scratch = vec![0.0f32; map.tree().config.dimensions as usize];
     let mut directory = map.directory_manager().read(&map.tree().directory)?;
     for candidate in candidates {
         if state.distance_exhausted() {
@@ -305,12 +305,12 @@ where
             handle.value()?,
             map.tree().config.dimensions,
         )?;
-        crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
-            .copy_to_slice(&mut vector_scratch)?;
-        let Some(distance) = state.distance(&query, &vector_scratch) else {
+        if state.distance_exhausted() {
             state.completion = SearchCompletion::BudgetExhausted;
             break;
-        };
+        }
+        let distance = record.vector.score(request.kernel, index.metric, &query);
+        state.stats.distance_evaluations += 1;
         state.stats.nodes_read += 1;
         state.stats.bytes_read = state.stats.bytes_read.saturating_add(bytes);
         state.stats.committed_bytes = state.stats.committed_bytes.saturating_add(bytes);
@@ -342,7 +342,7 @@ struct SearchState<'a, S: Store> {
     request: &'a SearchRequest<'a>,
     stats: ProximitySearchStats,
     completion: SearchCompletion,
-    loaded: BTreeMap<Vec<u8>, GraphNode>,
+    loaded: HashMap<Vec<u8>, Arc<GraphNode>>,
     plan: SearchPlanSummary,
 }
 
@@ -351,9 +351,9 @@ where
     S: Store + Clone + Send + Sync,
     S::Error: Send + Sync,
 {
-    fn node(&mut self, key: &[u8]) -> Result<Option<GraphNode>, Error> {
+    fn node(&mut self, key: &[u8]) -> Result<Option<Arc<GraphNode>>, Error> {
         if let Some(node) = self.loaded.get(key) {
-            return Ok(Some(node.clone()));
+            return Ok(Some(Arc::clone(node)));
         }
         if self
             .request
@@ -405,7 +405,8 @@ where
         self.stats.nodes_read += 1;
         self.stats.bytes_read += bytes.len();
         self.stats.committed_bytes += bytes.len();
-        self.loaded.insert(key.to_vec(), node.clone());
+        let node = Arc::new(node);
+        self.loaded.insert(key.to_vec(), Arc::clone(&node));
         Ok(Some(node))
     }
 

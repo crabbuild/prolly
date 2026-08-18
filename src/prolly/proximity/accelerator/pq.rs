@@ -3,7 +3,7 @@ use crate::prolly::cid::Cid;
 use crate::prolly::config::Config;
 use crate::prolly::encoding::Encoding;
 use crate::prolly::error::Error;
-use crate::prolly::proximity::distance::{prepare_vector, query_score};
+use crate::prolly::proximity::distance::prepare_vector;
 use crate::prolly::proximity::search::{
     retained_candidate_bytes, EligibilityCardinality, PreparedFilter, RerankCandidate,
 };
@@ -585,7 +585,6 @@ where
         let shortlist = approximate.len();
 
         let mut reranked = Vec::<RerankCandidate>::with_capacity(shortlist);
-        let mut vector_scratch = vec![0.0f32; map.tree().config.dimensions as usize];
         let mut directory = map.directory_manager().read(&map.tree().directory)?;
         for candidate in approximate {
             if budget_exhausted(&request, &stats)
@@ -615,9 +614,7 @@ where
                 handle.value()?,
                 map.tree().config.dimensions,
             )?;
-            crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
-                .copy_to_slice(&mut vector_scratch)?;
-            let distance = query_score(request.kernel, self.metric, &query, &vector_scratch);
+            let distance = record.vector.score(request.kernel, self.metric, &query);
             stats.nodes_read += 1;
             stats.bytes_read = stats.bytes_read.saturating_add(bytes);
             stats.committed_bytes = stats.committed_bytes.saturating_add(bytes);
