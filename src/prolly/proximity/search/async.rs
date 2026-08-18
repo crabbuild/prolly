@@ -217,7 +217,6 @@ where
             SearchCompletion::Exact
         };
         let mut ranked = Vec::<RerankCandidate>::with_capacity(limit);
-        let mut vector_scratch = vec![0.0f32; self.tree.config.dimensions as usize];
         let mut directory = self.directory.read(&self.tree.directory).await?;
         for key in keys {
             if let Some(stopped) = stop_reason(control) {
@@ -250,14 +249,9 @@ where
                 handle.value()?,
                 self.tree.config.dimensions,
             )?;
-            crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
-                .copy_to_slice(&mut vector_scratch)?;
-            let distance = query_score(
-                request.kernel,
-                self.tree.config.metric,
-                &query,
-                &vector_scratch,
-            );
+            let distance = record
+                .vector
+                .score(request.kernel, self.tree.config.metric, &query);
             insert_reranked_top_k(
                 &mut ranked,
                 RerankCandidate::new(handle, key, distance)?,
@@ -1081,7 +1075,6 @@ where
     let mut approximate = approximate.into_vec();
     approximate.sort();
     let mut reranked = Vec::<RerankCandidate>::with_capacity(approximate.len());
-    let mut vector_scratch = vec![0.0f32; tree.config.dimensions as usize];
     let mut directory_session = directory.read(&tree.directory).await?;
     for candidate in approximate {
         if let Some(stopped) = stop_reason(control) {
@@ -1111,9 +1104,7 @@ where
             handle.value()?,
             tree.config.dimensions,
         )?;
-        crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
-            .copy_to_slice(&mut vector_scratch)?;
-        let distance = query_score(request.kernel, index.metric, &query, &vector_scratch);
+        let distance = record.vector.score(request.kernel, index.metric, &query);
         stats.nodes_read += 1;
         stats.bytes_read += bytes;
         stats.committed_bytes += bytes;
@@ -1352,7 +1343,6 @@ where
         .range(&composite.delta_tree, &[], None)
         .await?;
     let mut directory_session = directory.read(&tree.directory).await?;
-    let mut vector_scratch = vec![0.0f32; tree.config.dimensions as usize];
     let mut retained_backings = HashSet::new();
     let mut retained_bytes = 0usize;
     while let Some(entry) = delta_range.next().await {
@@ -1379,9 +1369,9 @@ where
                 &bytes,
                 tree.config.dimensions,
             )?;
-            crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
-                .copy_to_slice(&mut vector_scratch)?;
-            query_score(request.kernel, tree.config.metric, &query, &vector_scratch)
+            record
+                .vector
+                .score(request.kernel, tree.config.metric, &query)
         };
         stats.nodes_read += 1;
         stats.bytes_read += bytes.len();
@@ -1577,7 +1567,7 @@ where
         request: &request,
         stats: ProximitySearchStats::default(),
         completion: SearchCompletion::ApproximatePolicySatisfied,
-        loaded: BTreeMap::new(),
+        loaded: HashMap::new(),
     };
     let mut current = index.entry_point.clone();
     let Some(entry) = state.node(&current).await? else {
@@ -1705,7 +1695,6 @@ where
     let mut candidates = eligible.into_vec();
     candidates.sort();
     let mut reranked = Vec::<RerankCandidate>::with_capacity(candidates.len());
-    let mut vector_scratch = vec![0.0f32; tree.config.dimensions as usize];
     let mut directory_session = directory.read(&tree.directory).await?;
     for candidate in candidates {
         if let Some(stopped) = stop_reason(control) {
@@ -1735,12 +1724,17 @@ where
             handle.value()?,
             tree.config.dimensions,
         )?;
-        crate::prolly::proximity::ProximityVectorRef::from_encoded(record.vector)
-            .copy_to_slice(&mut vector_scratch)?;
-        let Some(distance) = state.distance(&query, &vector_scratch) else {
+        if state
+            .request
+            .budget
+            .max_distance_evaluations
+            .is_some_and(|limit| state.stats.distance_evaluations >= limit)
+        {
             state.completion = SearchCompletion::BudgetExhausted;
             break;
-        };
+        }
+        let distance = record.vector.score(request.kernel, index.metric, &query);
+        state.stats.distance_evaluations += 1;
         state.stats.nodes_read += 1;
         state.stats.bytes_read += bytes;
         state.stats.committed_bytes += bytes;
@@ -1777,7 +1771,7 @@ where
     request: &'a SearchRequest<'a>,
     stats: ProximitySearchStats,
     completion: SearchCompletion,
-    loaded: BTreeMap<Vec<u8>, GraphNode>,
+    loaded: HashMap<Vec<u8>, Arc<GraphNode>>,
 }
 
 impl<S> AsyncHnswState<'_, S>
@@ -1785,9 +1779,9 @@ where
     S: AsyncStore + Clone,
     S::Error: Send + Sync,
 {
-    async fn node(&mut self, key: &[u8]) -> Result<Option<GraphNode>, Error> {
+    async fn node(&mut self, key: &[u8]) -> Result<Option<Arc<GraphNode>>, Error> {
         if let Some(node) = self.loaded.get(key) {
-            return Ok(Some(node.clone()));
+            return Ok(Some(Arc::clone(node)));
         }
         if self
             .request
@@ -1837,7 +1831,8 @@ where
         self.stats.nodes_read += 1;
         self.stats.bytes_read += bytes.len();
         self.stats.committed_bytes += bytes.len();
-        self.loaded.insert(key.to_vec(), node.clone());
+        let node = Arc::new(node);
+        self.loaded.insert(key.to_vec(), Arc::clone(&node));
         Ok(Some(node))
     }
 

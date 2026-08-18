@@ -28,7 +28,7 @@ use super::{
     ProximityVerification, SearchBackend, SearchBudget, SearchCompletion, SearchIo, SearchPolicy,
     SearchRequest, SearchResult,
 };
-use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::ops::ControlFlow;
 use std::sync::{Arc, Mutex};
 
@@ -791,7 +791,6 @@ where
                 });
             }
         }
-        let mut vector_scratch = vec![0.0f32; self.tree.config.dimensions as usize];
         let mut current_directory = current
             .directory_manager()
             .read(&current.tree().directory)?;
@@ -858,13 +857,9 @@ where
                     reason: "delta vector disagrees with current source".to_owned(),
                 });
             }
-            ProximityVectorRef::from_encoded(record.vector).copy_to_slice(&mut vector_scratch)?;
-            let distance = query_score(
-                request.kernel,
-                self.tree.config.metric,
-                &query,
-                &vector_scratch,
-            );
+            let distance = record
+                .vector
+                .score(request.kernel, self.tree.config.metric, &query);
             stats.nodes_read += 1;
             stats.bytes_read += authoritative_bytes;
             stats.committed_bytes += authoritative_bytes;
@@ -962,7 +957,6 @@ where
             SearchCompletion::Exact
         };
         let mut candidates = Vec::<RerankCandidate>::with_capacity(candidate_limit);
-        let mut vector_scratch = vec![0.0f32; self.tree.config.dimensions as usize];
         let mut directory = self.directory.read(&self.tree.directory)?;
         for key in keys {
             if request
@@ -999,16 +993,12 @@ where
                 break;
             }
             let record = StoredRecordRef::decode(handle.value()?, self.tree.config.dimensions)?;
-            ProximityVectorRef::from_encoded(record.vector).copy_to_slice(&mut vector_scratch)?;
             stats.bytes_read = stats.bytes_read.saturating_add(bytes);
             stats.committed_bytes = stats.committed_bytes.saturating_add(bytes);
             stats.distance_evaluations += 1;
-            let distance = query_score(
-                request.kernel,
-                self.tree.config.metric,
-                &query,
-                &vector_scratch,
-            );
+            let distance = record
+                .vector
+                .score(request.kernel, self.tree.config.metric, &query);
             insert_reranked_top_k(
                 &mut candidates,
                 RerankCandidate::new(handle, key, distance)?,
@@ -1071,7 +1061,9 @@ where
             });
         }
         let mut candidates = Vec::<SearchCandidate>::new();
-        let mut score_cache = BTreeMap::<Vec<u8>, f64>::new();
+        // The cache is lookup-only; no iteration order contributes to the
+        // canonical traversal or tie-breaking result.
+        let mut score_cache = HashMap::<Vec<u8>, f64>::new();
         let mut visited = HashSet::new();
         let mut levels = HashSet::new();
         let mut last_fanout = 0usize;

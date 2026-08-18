@@ -23,16 +23,50 @@ fn main() {
         env_list("PROLLY_PROXIMITY_BENCH_DIMENSIONS").unwrap_or_else(|| vec![8, 128, 768, 1_536]);
     let threads = env_list("PROLLY_PROXIMITY_BENCH_THREADS").unwrap_or_else(|| vec![1, 2, 4]);
     let scale_only = env_bool("PROLLY_PROXIMITY_BENCH_SCALE_ONLY");
+    let search_repeats = env_usize("PROLLY_PROXIMITY_BENCH_SEARCH_REPEATS")
+        .unwrap_or(1)
+        .max(1);
+    let reset_search_cache = env_bool("PROLLY_PROXIMITY_BENCH_RESET_SEARCH_CACHE");
+    let simd_first = env_bool("PROLLY_PROXIMITY_BENCH_SIMD_FIRST");
     println!("prolly proximity benchmark");
     println!("records={records}");
     println!("profile={}", if scale_only { "scale" } else { "complete" });
+    println!("search_repeats={search_repeats}");
+    println!(
+        "search_cache={}",
+        if reset_search_cache { "reset" } else { "warm" }
+    );
+    println!(
+        "search_order={}",
+        if simd_first {
+            "simd-first"
+        } else {
+            "scalar-first"
+        }
+    );
     println!("operation,dimensions,threads,micros,metric_a,metric_b");
     for dimension in dimensions {
-        bench_case(records, dimension, &threads, scale_only);
+        bench_case(
+            records,
+            dimension,
+            &threads,
+            scale_only,
+            search_repeats,
+            reset_search_cache,
+            simd_first,
+        );
     }
 }
 
-fn bench_case(count: usize, dimensions: usize, threads: &[usize], scale_only: bool) {
+fn bench_case(
+    count: usize,
+    dimensions: usize,
+    threads: &[usize],
+    scale_only: bool,
+    search_repeats: usize,
+    reset_search_cache: bool,
+    simd_first: bool,
+) {
     let records = make_records(count, dimensions);
     for &workers in threads {
         let store = Arc::new(MemStore::new());
@@ -60,34 +94,62 @@ fn bench_case(count: usize, dimensions: usize, threads: &[usize], scale_only: bo
     let query = make_vector(count / 3, dimensions);
     let k = 10.min(count.max(1));
 
-    for (name, policy, kernel) in [
-        (
-            "search_exact_scalar",
-            SearchPolicy::Exact,
-            QueryKernel::ScalarDeterministic,
-        ),
-        (
-            "search_exact_simd",
-            SearchPolicy::Exact,
-            QueryKernel::SimdDeterministic,
-        ),
-        (
-            "search_adaptive_sq8",
-            SearchPolicy::Adaptive(AdaptiveQuality::Balanced),
-            QueryKernel::AutoDeterministic,
-        ),
-    ] {
+    let search_specs = if simd_first {
+        [
+            (
+                "search_exact_simd",
+                SearchPolicy::Exact,
+                QueryKernel::SimdDeterministic,
+            ),
+            (
+                "search_exact_scalar",
+                SearchPolicy::Exact,
+                QueryKernel::ScalarDeterministic,
+            ),
+            (
+                "search_adaptive_sq8",
+                SearchPolicy::Adaptive(AdaptiveQuality::Balanced),
+                QueryKernel::AutoDeterministic,
+            ),
+        ]
+    } else {
+        [
+            (
+                "search_exact_scalar",
+                SearchPolicy::Exact,
+                QueryKernel::ScalarDeterministic,
+            ),
+            (
+                "search_exact_simd",
+                SearchPolicy::Exact,
+                QueryKernel::SimdDeterministic,
+            ),
+            (
+                "search_adaptive_sq8",
+                SearchPolicy::Adaptive(AdaptiveQuality::Balanced),
+                QueryKernel::AutoDeterministic,
+            ),
+        ]
+    };
+    for (name, policy, kernel) in search_specs {
         let mut request = SearchRequest::exact(&query, k);
         request.policy = policy;
         request.kernel = kernel;
         request.filter = ProximityFilter::Prefix(b"record-");
         let started = Instant::now();
-        let result = map.search(request).unwrap();
+        let mut result = None;
+        for _ in 0..search_repeats {
+            if reset_search_cache {
+                map.clear_content_cache().unwrap();
+            }
+            result = Some(map.search(request.clone()).unwrap());
+        }
+        let result = result.expect("search repeats is positive");
         row(
             name,
             dimensions,
             0,
-            started.elapsed(),
+            started.elapsed().div_f64(search_repeats as f64),
             result.stats.nodes_read,
             result.stats.distance_evaluations + result.stats.quantized_distance_evaluations,
         );

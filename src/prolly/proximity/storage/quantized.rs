@@ -1,5 +1,6 @@
 use super::codec::{put_f32, put_varint, Reader, FORMAT_VERSION, MAX_OBJECT_ENTRIES};
 use crate::prolly::error::Error;
+use crate::prolly::proximity::distance::score_quantized;
 use crate::prolly::proximity::DistanceMetric;
 
 const MAGIC: &[u8; 4] = b"PQS8";
@@ -198,23 +199,13 @@ impl ScalarQuantized {
         }
         let start = entry * self.dimensions as usize;
         let values = &self.values[start..start + self.dimensions as usize];
-        let mut reduced = 0.0f64;
-        for (index, (&query, &value)) in query.iter().zip(values).enumerate() {
-            let reconstructed =
-                f64::from(value) * f64::from(self.scales[index / self.group_size as usize]);
-            if metric == DistanceMetric::L2Squared {
-                let delta = f64::from(query) - reconstructed;
-                reduced += delta * delta;
-            } else {
-                reduced += f64::from(query) * reconstructed;
-            }
-        }
-        let score = match metric {
-            DistanceMetric::L2Squared => reduced,
-            DistanceMetric::Cosine => 1.0 - reduced.clamp(-1.0, 1.0),
-            DistanceMetric::InnerProduct => -reduced,
-        };
-        Ok(if score == 0.0 { 0.0 } else { score })
+        Ok(score_quantized(
+            metric,
+            query,
+            values,
+            &self.scales,
+            self.group_size as usize,
+        ))
     }
 }
 
