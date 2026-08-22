@@ -291,7 +291,7 @@ RocksDB-like backends. Use async storage when reads or writes may wait on:
 Enable it:
 
 ```toml
-prolly-map = "0.7.0"
+prolly-map = "0.7.2"
 ```
 
 If you have a sync store:

@@ -46,8 +46,8 @@ canonical-root transaction remains atomic.
 
 ```toml
 [dependencies]
-prolly-map = "0.7.0"
-prolly-store-cosmosdb = "0.5.0"
+prolly-map = "0.7.2"
+prolly-store-cosmosdb = "0.5.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

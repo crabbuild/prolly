@@ -221,7 +221,7 @@ dependencies = [
 
 [[package]]
 name = "prolly-map"
-version = "0.7.0"
+version = "0.7.2"
 dependencies = [
  "futures-util",
  "js-sys",

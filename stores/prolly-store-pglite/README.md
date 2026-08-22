@@ -23,8 +23,8 @@ Add the Rust crates:
 
 ```toml
 [dependencies]
-prolly-map = "0.7.0"
-prolly-store-pglite = "0.5.0"
+prolly-map = "0.7.2"
+prolly-store-pglite = "0.5.1"
 ```
 
 Install PGlite where Node.js can resolve it:

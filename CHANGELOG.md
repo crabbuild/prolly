@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.7.2 — 2026-08-21
+
 - Add native `AsyncProlly::indexed_map(...).await` support with asynchronous
   source/index mutation, snapshot queries, bounded maintenance, retention, and
   strict one-root publication. The synchronous and async coordinators share one
@@ -19,6 +21,9 @@
 - Add a shared Tokio-backed synchronous remote-store facade and first-class
   IndexedMap store aliases for PostgreSQL, MySQL, Redis, Turso, DynamoDB,
   Cosmos DB, and Spanner.
+- Accelerate proximity-vector scoring and reranking, including quantized and
+  SIMD-backed distance paths.
+- Update every published store adapter to depend on `prolly-map 0.7.2`.
 
 ## 0.7.0 — 2026-07-30
 

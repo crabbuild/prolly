@@ -15,8 +15,8 @@ its lower minimum Rust version.
 
 ```toml
 [dependencies]
-prolly-map = "0.7.0"
-prolly-store-redb = "0.5.0"
+prolly-map = "0.7.2"
+prolly-store-redb = "0.5.1"
 ```
 
 Redb is implemented in Rust and does not require a C or C++ toolchain.

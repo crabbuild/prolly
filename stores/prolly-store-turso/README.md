@@ -58,8 +58,8 @@ backups for production data and follow Turso's release notes when upgrading.
 
 ```toml
 [dependencies]
-prolly-map = "0.7.0"
-prolly-store-turso = "0.3.0"
+prolly-map = "0.7.2"
+prolly-store-turso = "0.3.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

@@ -45,8 +45,8 @@ on the store-owned runtime.
 
 ```toml
 [dependencies]
-prolly-map = "0.7.0"
-prolly-store-postgres = "0.6.0"
+prolly-map = "0.7.2"
+prolly-store-postgres = "0.6.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 

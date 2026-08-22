@@ -44,8 +44,8 @@ the store-owned runtime.
 
 ```toml
 [dependencies]
-prolly-map = "0.7.0"
-prolly-store-mysql = "0.5.0"
+prolly-map = "0.7.2"
+prolly-store-mysql = "0.5.1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
