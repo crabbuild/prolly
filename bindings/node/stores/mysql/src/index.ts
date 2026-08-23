@@ -333,7 +333,10 @@ export class MysqlStore implements RemoteStore {
   }
 
   async #executeOnce(sql: string, values: readonly Buffer[], signal?: AbortSignal): Promise<void> {
-    await this.#withConnection(signal, (connection) => this.#execute(connection, sql, values, signal));
+    // MySQL can finish and commit an autocommit statement after the client
+    // socket is destroyed. Keep cancellable writes in an explicit transaction
+    // so disconnecting the aborted connection rolls the statement back.
+    await this.#transaction(signal, (connection) => this.#execute(connection, sql, values, signal));
   }
 
   async #queryOptional(sql: string, values: readonly Buffer[], signal?: AbortSignal): Promise<OptionalBytes> {

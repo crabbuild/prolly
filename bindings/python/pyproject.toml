@@ -36,7 +36,9 @@ bindings = "uniffi"
 manifest-path = "../uniffi/Cargo.toml"
 python-packages = ["prolly"]
 module-name = "prolly.uniffi"
-strip = true
+# UniFFI extracts metadata from exported symbols after the Rust build. ELF
+# symbol stripping removes that metadata before Linux glue generation runs.
+strip = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
