@@ -12,7 +12,7 @@
     "smoke:wasm": "node scripts/smoke-wasm.mjs"
   },
   "dependencies": {
-    "@crabbuild/prolly-wasm": "file:../../bindings/wasm",
+    "prollydb-wasm": "file:../../bindings/wasm",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },

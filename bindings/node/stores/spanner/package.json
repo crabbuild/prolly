@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@google-cloud/spanner": "8.0.0",
-    "@crabbuild/prolly-node": "file:../.."
+    "prollydb": "file:../.."
   },
   "devDependencies": {
     "@crabbuild/prolly-storetest": "file:../../storetest",

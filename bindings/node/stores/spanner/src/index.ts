@@ -21,7 +21,7 @@ import {
   type RootWrite,
   type StoreDescriptor,
   type StoreTransactionResult,
-} from "@crabbuild/prolly-node/remote-store";
+} from "prollydb/remote-store";
 
 export const SPANNER_DDL = [
   "CREATE TABLE ProllyNodes (\n  Cid BYTES(32) NOT NULL,\n  Node BYTES(MAX) NOT NULL\n) PRIMARY KEY (Cid)",

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	prolly "build.crab/prolly-go"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 )
 
 const SchemaVersion uint32 = 1

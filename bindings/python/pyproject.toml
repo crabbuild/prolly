@@ -1,12 +1,32 @@
 [build-system]
-requires = ["maturin>=1.10,<2.0", "uniffi-bindgen==0.31.0"]
+requires = ["maturin==1.14.1", "uniffi-bindgen==0.31.0"]
 build-backend = "maturin"
 
 [project]
-name = "crabbuild-prolly-binding"
+name = "prollydb"
 version = "0.1.0"
-description = "Python binding compatibility harness for prolly-map fixtures"
+description = "Native Python bindings for prolly-map"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+authors = [
+  { name = "Crabbuild Contributors", email = "opensource@crab.build" },
+]
 requires-python = ">=3.10"
+keywords = ["prolly-tree", "versioned-map", "content-addressed", "local-first"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Rust",
+  "Topic :: Database",
+  "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/crabbuild/prolly"
+Documentation = "https://github.com/crabbuild/prolly/tree/main/bindings/python#readme"
+Issues = "https://github.com/crabbuild/prolly/issues"
+Repository = "https://github.com/crabbuild/prolly.git"
 
 [project.optional-dependencies]
 test = ["pytest>=8.3"]
@@ -16,6 +36,7 @@ bindings = "uniffi"
 manifest-path = "../uniffi/Cargo.toml"
 python-packages = ["prolly"]
 module-name = "prolly.uniffi"
+strip = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

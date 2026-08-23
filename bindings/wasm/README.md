@@ -4,6 +4,10 @@ This package is the browser-oriented WebAssembly binding for the Rust
 `prolly-map` engine. It uses `wasm-bindgen` directly over the Rust memory
 engine and exposes `Uint8Array` keys and values.
 
+Install the published browser package with
+`npm install prollydb-wasm`. The package contains compiled JavaScript,
+TypeScript declarations, and its matching WebAssembly module.
+
 See `COOKBOOK.md` for browser patterns covering memory snapshots, UI paging,
 diffs, built-in merges, stats, and persistence handoff guidance.
 

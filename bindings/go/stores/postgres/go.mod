@@ -1,9 +1,9 @@
-module build.crab/prolly-go/stores/postgres
+module github.com/crabbuild/prolly/bindings/go/stores/postgres
 
 go 1.25.0
 
 require (
-	build.crab/prolly-go v0.0.0
+	github.com/crabbuild/prolly/bindings/go v0.1.0
 	github.com/jackc/pgx/v5 v5.10.0
 )
 
@@ -14,5 +14,3 @@ require (
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 )
-
-replace build.crab/prolly-go => ../..

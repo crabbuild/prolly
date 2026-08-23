@@ -1,4 +1,4 @@
-import type { WasmTreeDebugNodeRecord, WasmTreeDebugViewRecord } from '@crabbuild/prolly-wasm';
+import type { WasmTreeDebugNodeRecord, WasmTreeDebugViewRecord } from 'prollydb-wasm';
 import type { ProllyEntry, ProllyNode, RowDiff, RowValue } from './types';
 
 const DEFAULT_MIN_CHUNK_ENTRIES = 4;

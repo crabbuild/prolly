@@ -1,5 +1,17 @@
 # Prolly Go Binding
 
+Install the module from the public Go module ecosystem:
+
+```sh
+go get github.com/crabbuild/prolly/bindings/go@v0.1.0
+```
+
+The Go proxy publishes source modules from Git tags; it does not host native
+libraries. Download the matching `prolly-bindings-<target>` library from the
+same bindings release on GitHub, place it on the platform linker path, and set
+the runtime library path when it is not installed system-wide. The Go package
+and native library versions must match.
+
 ## Asynchronous remote stores
 
 `RemoteStore` is the shared version-1, context-aware protocol for host-native
@@ -77,20 +89,19 @@ Local smoke test:
 
 ```sh
 cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
-(cd bindings/go && go test ./...)
+(cd bindings/go && go test -tags prolly_dev ./...)
 ```
 
-By default the cgo wrapper links against
-`target/debug/libprolly_bindings.*` in this repository. The
-`prolly_release` build tag selects `target/release` instead. Release packages
-should ultimately replace these repository paths with CI-built native artifacts.
+Registry consumers link against `prolly_bindings` on the system library path.
+Repository development uses the `prolly_dev` build tag to link against
+`target/debug/libprolly_bindings.*` in this checkout.
 
 For performance work, build the optimized Rust library and select the release
 link target explicitly:
 
 ```sh
-cargo build --release -p prolly-bindings --target-dir target
-(cd bindings/go && go build -tags prolly_release ./cmd/prolly-compare)
+cargo build --release --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+(cd bindings/go && CGO_LDFLAGS="-L$PWD/../../target/release" go build ./cmd/prolly-compare)
 ```
 
 The repository comparison harness builds both that Go binary and the native Go
@@ -137,7 +148,7 @@ root-bound session. Explicit sessions make ownership and reuse predictable.
 ## Source Tree Layout
 
 The Go binding is intentionally small at the package boundary. The public
-module lives at `build.crab/prolly-go`, while the example programs live under
+module lives at `github.com/crabbuild/prolly/bindings/go`, while the example programs live under
 `examples/<scenario>/main.go`. Each example is self-contained: opening a single
 scenario file shows the imports, setup code, mutations, validation, and output
 for that workflow. The run-all launcher in `examples/cookbook_scenarios` starts
@@ -158,13 +169,13 @@ Run one scenario while iterating:
 
 ```sh
 cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
-(cd bindings/go && go run ./examples/local_first_state)
+(cd bindings/go && go run -tags prolly_dev ./examples/local_first_state)
 ```
 
 Run every scenario:
 
 ```sh
-(cd bindings/go && go run ./examples/cookbook_scenarios)
+(cd bindings/go && go run -tags prolly_dev ./examples/cookbook_scenarios)
 ```
 
 The scenarios cover basic maps, batch build, local-first state, resolver
@@ -226,7 +237,7 @@ after the retained roots are known.
 
 ## Testing And CI
 
-Use `go test ./...` for the binding wrapper and examples that compile as Go
+Use `go test -tags prolly_dev ./...` for the binding wrapper and examples that compile as Go
 packages. Add scenario-specific checks as ordinary `go test` tests when a bug fix
 needs a durable assertion. For CI, build the Rust native library first and set the
 library search path consistently for the runner. Keep tests deterministic by

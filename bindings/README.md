@@ -206,6 +206,7 @@ resolvers, custom CRDT resolvers, and custom merge-policy registries.
 ## More documentation
 
 - `VERIFICATION.md`: release gate and per-language test matrix
+- `PUBLISHING.md`: registry artifacts, trusted-publisher setup, and release tags
 - `*/COOKBOOK.md`: runnable application patterns for each idiomatic API surface
 
 Python, Go, Node/TypeScript, Java, Kotlin, Ruby, Swift, and WASM also include
@@ -241,7 +242,7 @@ mvn -f bindings/pom.xml test
 ### Go
 
 ```sh
-(cd bindings/go && go test ./...)
+(cd bindings/go && go test -tags prolly_dev ./...)
 ```
 
 ### Node

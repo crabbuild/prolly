@@ -35,7 +35,7 @@ Browser-safe application files include `batch-build.ts`,
 ## Create A Browser Snapshot
 
 ```ts
-import init, { WasmProllyEngine, WasmRangeCursor } from "@crabbuild/prolly-wasm";
+import init, { WasmProllyEngine, WasmRangeCursor } from "prollydb-wasm";
 
 await init();
 

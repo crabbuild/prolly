@@ -165,10 +165,10 @@ class ProllySmokeTest {
                     PublicationInterop.originCode(pointPublication));
             assertFalse(pointPublication.getNodes().isEmpty());
             assertTrue(sourceStore.supportsHintsCalls > 0);
-            assertTrue(
-                    pointPublication.getHint() != null,
-                    "supportsHints calls=" + sourceStore.supportsHintsCalls
-                            + ", stored hints=" + sourceStore.hints.size());
+            assertEquals(
+                    null,
+                    pointPublication.getHint(),
+                    "the engine must not select a backend-specific hint implicitly");
             assertEquals(
                     PublicationOrigins.GENERAL,
                     PublicationOrigins.normalizePublicationOriginCode(-1));

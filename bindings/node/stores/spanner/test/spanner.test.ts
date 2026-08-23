@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { Spanner } from "@google-cloud/spanner";
-import { StoreError, missingBytes, presentBytes, upsertNode } from "@crabbuild/prolly-node/remote-store";
+import { StoreError, missingBytes, presentBytes, upsertNode } from "prollydb/remote-store";
 import { runStoreConformance } from "@crabbuild/prolly-storetest";
 
 import { SPANNER_DDL, SpannerStore, type SpannerItemClient, type SpannerMutation, type SpannerRootRecord, type SpannerTransaction } from "../src/index.ts";

@@ -32,40 +32,40 @@ func (f IndexExtractorFunc) Extract(primaryKey, sourceValue []byte) ([]IndexEntr
 }
 
 type SecondaryIndexLimits struct {
-	MaxTermBytes                      uint64
-	MaxProjectionBytes                uint64
-	MaxAllValueBytes                  uint64
-	MaxTermsPerRecord                 uint64
-	MaxProjectedBytesPerRecord        uint64
-	MaxDerivedMutationsPerTransaction uint64
-	MaxProjectedBytesPerTransaction   uint64
-	MaxIndexes                        uint64
-	BuildPageSize                     uint64
-	MaxTemporarySortBytes             uint64
-	MaxBundleNodes                    uint64
-	MaxBundleBytes                    uint64
-	MaxVerificationEntries            uint64
-	MaxWriteRetries                   uint64
-	MaxBuildRetries                   uint64
+	MaxTermBytes                uint64
+	MaxProjectionBytes          uint64
+	MaxAllValueBytes            uint64
+	MaxTermsPerRecord           uint64
+	MaxProjectedBytesPerRecord  uint64
+	MaxDerivedMutationsPerWrite uint64
+	MaxProjectedBytesPerWrite   uint64
+	MaxIndexes                  uint64
+	BuildPageSize               uint64
+	MaxTemporarySortBytes       uint64
+	MaxBundleNodes              uint64
+	MaxBundleBytes              uint64
+	MaxVerificationEntries      uint64
+	MaxWriteRetries             uint64
+	MaxBuildRetries             uint64
 }
 
 func DefaultSecondaryIndexLimits() SecondaryIndexLimits {
 	return SecondaryIndexLimits{
-		MaxTermBytes:                      4 * 1024,
-		MaxProjectionBytes:                64 * 1024,
-		MaxAllValueBytes:                  1024 * 1024,
-		MaxTermsPerRecord:                 1024,
-		MaxProjectedBytesPerRecord:        1024 * 1024,
-		MaxDerivedMutationsPerTransaction: 100_000,
-		MaxProjectedBytesPerTransaction:   64 * 1024 * 1024,
-		MaxIndexes:                        32,
-		BuildPageSize:                     4096,
-		MaxTemporarySortBytes:             256 * 1024 * 1024,
-		MaxBundleNodes:                    1_000_000,
-		MaxBundleBytes:                    1024 * 1024 * 1024,
-		MaxVerificationEntries:            10_000_000,
-		MaxWriteRetries:                   8,
-		MaxBuildRetries:                   8,
+		MaxTermBytes:                4 * 1024,
+		MaxProjectionBytes:          64 * 1024,
+		MaxAllValueBytes:            1024 * 1024,
+		MaxTermsPerRecord:           1024,
+		MaxProjectedBytesPerRecord:  1024 * 1024,
+		MaxDerivedMutationsPerWrite: 100_000,
+		MaxProjectedBytesPerWrite:   64 * 1024 * 1024,
+		MaxIndexes:                  32,
+		BuildPageSize:               4096,
+		MaxTemporarySortBytes:       256 * 1024 * 1024,
+		MaxBundleNodes:              1_000_000,
+		MaxBundleBytes:              1024 * 1024 * 1024,
+		MaxVerificationEntries:      10_000_000,
+		MaxWriteRetries:             8,
+		MaxBuildRetries:             8,
 	}
 }
 
@@ -142,7 +142,7 @@ func encodeOptionalSecondaryIndexLimits(limits *SecondaryIndexLimits) []byte {
 	values := [...]uint64{
 		limits.MaxTermBytes, limits.MaxProjectionBytes, limits.MaxAllValueBytes,
 		limits.MaxTermsPerRecord, limits.MaxProjectedBytesPerRecord,
-		limits.MaxDerivedMutationsPerTransaction, limits.MaxProjectedBytesPerTransaction,
+		limits.MaxDerivedMutationsPerWrite, limits.MaxProjectedBytesPerWrite,
 		limits.MaxIndexes, limits.BuildPageSize, limits.MaxTemporarySortBytes,
 		limits.MaxBundleNodes, limits.MaxBundleBytes, limits.MaxVerificationEntries,
 		limits.MaxWriteRetries, limits.MaxBuildRetries,
@@ -154,14 +154,13 @@ func encodeOptionalSecondaryIndexLimits(limits *SecondaryIndexLimits) []byte {
 }
 
 type IndexedVersion struct {
-	SourceVersion  []byte
-	CatalogVersion []byte
-	IndexCount     uint64
+	SourceVersion []byte
+	StateVersion  []byte
+	IndexCount    uint64
 }
 
 type IndexedSnapshotID struct {
-	SourceVersion  []byte
-	CatalogVersion []byte
+	Snapshot []byte
 }
 
 type IndexedUpdateKind int32
@@ -179,13 +178,13 @@ type IndexedUpdate struct {
 }
 
 type IndexBuildResult struct {
-	SourceVersion  []byte
-	IndexVersion   []byte
-	CatalogVersion []byte
-	Generation     uint64
-	Entries        uint64
-	Attempts       uint64
-	Activated      bool
+	SourceVersion []byte
+	IndexVersion  []byte
+	StateVersion  []byte
+	Generation    uint64
+	Entries       uint64
+	Attempts      uint64
+	Activated     bool
 }
 
 type IndexVerification struct {
@@ -205,16 +204,17 @@ type ActiveIndexHealth struct {
 	Generation   uint64
 	Fingerprint  []byte
 	Projection   IndexProjection
-	IndexMapID   []byte
 	IndexVersion []byte
 }
 
 type IndexedMapHealth struct {
-	SourceMapID          []byte
-	SourceVersion        []byte
-	CatalogVersion       []byte
-	ActiveIndexes        []ActiveIndexHealth
-	SupportsTransactions bool
+	SourceMapID       []byte
+	SourceVersion     []byte
+	StateVersion      []byte
+	ActiveIndexes     []ActiveIndexHealth
+	ClosureValid      bool
+	RetainedSnapshots uint64
+	DurablePins       uint64
 }
 
 type IndexedMapMetrics struct {
@@ -225,9 +225,6 @@ type IndexedMapMetrics struct {
 	PhysicalUpserts           uint64
 	PhysicalDeletes           uint64
 	UnchangedEmissionsSkipped uint64
-	SourceNodesWritten        uint64
-	IndexNodesWritten         uint64
-	CatalogNodesWritten       uint64
 	Retries                   uint64
 	BuildAttempts             uint64
 	VerificationOutcomes      uint64
@@ -235,13 +232,13 @@ type IndexedMapMetrics struct {
 }
 
 type IndexedRetention struct {
-	RetainedSourceVersions   [][]byte
-	RemovedSourceVersions    [][]byte
-	RetainedIndexVersions    [][]byte
-	RemovedIndexVersions     [][]byte
-	RemovedCatalogVersions   [][]byte
-	RemovedCheckpointRecords uint64
-	RemovedNamedRoots        [][]byte
+	RetainedSourceVersions [][]byte
+	RemovedSourceVersions  [][]byte
+	RetainedIndexVersions  [][]byte
+	RemovedIndexVersions   [][]byte
+	RemovedStateVersions   [][]byte
+	RemovedSnapshotRecords uint64
+	RemovedNamedRoots      [][]byte
 }
 
 type IndexedMap struct {
@@ -860,7 +857,7 @@ func decodeIndexedVersionFrom(d *byteDecoder) (IndexedVersion, error) {
 	if err != nil {
 		return IndexedVersion{}, err
 	}
-	catalog, _, err := d.readOptionalByteArray()
+	state, err := d.readByteArray()
 	if err != nil {
 		return IndexedVersion{}, err
 	}
@@ -868,7 +865,7 @@ func decodeIndexedVersionFrom(d *byteDecoder) (IndexedVersion, error) {
 	if err != nil {
 		return IndexedVersion{}, err
 	}
-	return IndexedVersion{source, catalog, count}, nil
+	return IndexedVersion{source, state, count}, nil
 }
 
 func decodeIndexedVersion(raw []byte) (IndexedVersion, error) {
@@ -910,22 +907,17 @@ func decodeIndexedUpdate(raw []byte) (IndexedUpdate, error) {
 
 func encodeIndexedSnapshotID(id IndexedSnapshotID) []byte {
 	var out bytes.Buffer
-	encodeByteArrayInto(&out, id.SourceVersion)
-	encodeByteArrayInto(&out, id.CatalogVersion)
+	encodeByteArrayInto(&out, id.Snapshot)
 	return out.Bytes()
 }
 
 func decodeIndexedSnapshotID(raw []byte) (IndexedSnapshotID, error) {
 	d := byteDecoder{data: raw}
-	source, err := d.readByteArray()
+	snapshot, err := d.readByteArray()
 	if err != nil {
 		return IndexedSnapshotID{}, err
 	}
-	catalog, err := d.readByteArray()
-	if err != nil {
-		return IndexedSnapshotID{}, err
-	}
-	return IndexedSnapshotID{source, catalog}, d.done()
+	return IndexedSnapshotID{snapshot}, d.done()
 }
 func decodeIndexBuildResult(raw []byte) (IndexBuildResult, error) {
 	d := byteDecoder{data: raw}
@@ -980,9 +972,6 @@ func decodeActiveIndexHealth(d *byteDecoder) (ActiveIndexHealth, error) {
 		return value, err
 	}
 	value.Projection = IndexProjection(projection)
-	if value.IndexMapID, err = d.readByteArray(); err != nil {
-		return value, err
-	}
 	value.IndexVersion, err = d.readByteArray()
 	return value, err
 }
@@ -997,7 +986,7 @@ func decodeIndexedMapHealth(raw []byte) (IndexedMapHealth, error) {
 	if value.SourceVersion, _, err = d.readOptionalByteArray(); err != nil {
 		return value, err
 	}
-	if value.CatalogVersion, _, err = d.readOptionalByteArray(); err != nil {
+	if value.StateVersion, _, err = d.readOptionalByteArray(); err != nil {
 		return value, err
 	}
 	count, err := d.readInt32()
@@ -1015,7 +1004,13 @@ func decodeIndexedMapHealth(raw []byte) (IndexedMapHealth, error) {
 		}
 		value.ActiveIndexes = append(value.ActiveIndexes, index)
 	}
-	if value.SupportsTransactions, err = d.readBool(); err != nil {
+	if value.ClosureValid, err = d.readBool(); err != nil {
+		return value, err
+	}
+	if value.RetainedSnapshots, err = d.readUint64(); err != nil {
+		return value, err
+	}
+	if value.DurablePins, err = d.readUint64(); err != nil {
 		return value, err
 	}
 	return value, d.done()
@@ -1084,8 +1079,8 @@ func decodeIndexVerifications(raw []byte) ([]IndexVerification, error) {
 func decodeIndexedMapMetrics(raw []byte) (IndexedMapMetrics, error) {
 	d := byteDecoder{data: raw}
 	fields := []*uint64{
-		new(uint64), new(uint64), new(uint64), new(uint64), new(uint64), new(uint64), new(uint64),
-		new(uint64), new(uint64), new(uint64), new(uint64), new(uint64), new(uint64), new(uint64),
+		new(uint64), new(uint64), new(uint64), new(uint64), new(uint64), new(uint64),
+		new(uint64), new(uint64), new(uint64), new(uint64), new(uint64),
 	}
 	for _, field := range fields {
 		value, err := d.readUint64()
@@ -1097,9 +1092,8 @@ func decodeIndexedMapMetrics(raw []byte) (IndexedMapMetrics, error) {
 	result := IndexedMapMetrics{
 		NormalizedSourceMutations: *fields[0], RecordsExtracted: *fields[1], TermsEmitted: *fields[2],
 		ProjectedBytes: *fields[3], PhysicalUpserts: *fields[4], PhysicalDeletes: *fields[5],
-		UnchangedEmissionsSkipped: *fields[6], SourceNodesWritten: *fields[7], IndexNodesWritten: *fields[8],
-		CatalogNodesWritten: *fields[9], Retries: *fields[10], BuildAttempts: *fields[11],
-		VerificationOutcomes: *fields[12], RetainedRoots: *fields[13],
+		UnchangedEmissionsSkipped: *fields[6], Retries: *fields[7], BuildAttempts: *fields[8],
+		VerificationOutcomes: *fields[9], RetainedRoots: *fields[10],
 	}
 	return result, d.done()
 }
@@ -1120,10 +1114,10 @@ func decodeIndexedRetention(raw []byte) (IndexedRetention, error) {
 	if result.RemovedIndexVersions, err = d.readByteArraySequence(); err != nil {
 		return result, err
 	}
-	if result.RemovedCatalogVersions, err = d.readByteArraySequence(); err != nil {
+	if result.RemovedStateVersions, err = d.readByteArraySequence(); err != nil {
 		return result, err
 	}
-	if result.RemovedCheckpointRecords, err = d.readUint64(); err != nil {
+	if result.RemovedSnapshotRecords, err = d.readUint64(); err != nil {
 		return result, err
 	}
 	if result.RemovedNamedRoots, err = d.readByteArraySequence(); err != nil {

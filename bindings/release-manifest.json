@@ -1,0 +1,29 @@
+{
+  "version": "0.1.0",
+  "tag": "bindings-v0.1.0",
+  "packages": {
+    "npm": [
+      "prollydb",
+      "prollydb-wasm"
+    ],
+    "pypi": [
+      "prollydb"
+    ],
+    "go": [
+      "github.com/crabbuild/prolly/bindings/go",
+      "github.com/crabbuild/prolly/bindings/go/stores/cosmosdb",
+      "github.com/crabbuild/prolly/bindings/go/stores/dynamodb",
+      "github.com/crabbuild/prolly/bindings/go/stores/mysql",
+      "github.com/crabbuild/prolly/bindings/go/stores/postgres",
+      "github.com/crabbuild/prolly/bindings/go/stores/redis",
+      "github.com/crabbuild/prolly/bindings/go/stores/spanner",
+      "github.com/crabbuild/prolly/bindings/go/stores/sqlite"
+    ]
+  },
+  "native_targets": [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc"
+  ]
+}

@@ -1,9 +1,9 @@
-module build.crab/prolly-go/stores/sqlite
+module github.com/crabbuild/prolly/bindings/go/stores/sqlite
 
 go 1.25.0
 
 require (
-	build.crab/prolly-go v0.0.0
+	github.com/crabbuild/prolly/bindings/go v0.1.0
 	modernc.org/sqlite v1.54.0
 )
 
@@ -18,5 +18,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-replace build.crab/prolly-go => ../..

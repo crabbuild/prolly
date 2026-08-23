@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	prolly "build.crab/prolly-go"
 	awsdynamodb "github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/smithy-go"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 )
 
 const (

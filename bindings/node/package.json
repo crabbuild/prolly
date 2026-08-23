@@ -1,11 +1,48 @@
 {
-  "name": "@crabbuild/prolly-node",
+  "name": "prollydb",
   "version": "0.1.0",
   "type": "module",
-  "private": true,
-  "description": "Node/TypeScript binding compatibility harness for prolly-map fixtures",
+  "description": "Native Node.js and TypeScript bindings for prolly-map",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crabbuild/prolly.git",
+    "directory": "bindings/node"
+  },
+  "homepage": "https://github.com/crabbuild/prolly/tree/main/bindings/node#readme",
+  "bugs": "https://github.com/crabbuild/prolly/issues",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/",
+    "index.cjs",
+    "index.*.node",
+    "README.md",
+    "PROVENANCE.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "napi": {
+    "name": "index",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-pc-windows-msvc"
+      ]
+    }
+  },
   "scripts": {
-    "build:native": "CARGO_TARGET_DIR=$PWD/../../target napi build --cargo-cwd native --platform --js index.cjs",
+    "build": "tsc -p tsconfig.json",
+    "build:native": "napi build --cargo-cwd native --cargo-flags=--locked --platform --js index.cjs",
+    "build:native:release": "napi build --cargo-cwd native --cargo-flags=--locked --platform --release --js index.cjs",
     "example:agent-event-log": "node examples/agent-event-log.ts",
     "example:basic-map": "node examples/basic-map.ts",
     "example:background-compaction": "node examples/background-compaction.ts",
@@ -25,17 +62,36 @@
     "example:resolver": "node examples/resolver.ts",
     "example:secondary-index": "node examples/secondary-index.ts",
     "example:vector-sidecar": "node examples/vector-sidecar.ts",
-    "test": "node --test test/*.test.ts"
+    "prepack": "npm run build",
+    "test": "node --test test/*.test.ts",
+    "test:package": "node scripts/smoke-package.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@napi-rs/cli": "^2.18.4"
+    "@napi-rs/cli": "^2.18.4",
+    "@types/node": "^24.13.3",
+    "typescript": "^6.0.3"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./async": "./src/async.ts",
-    "./native": "./src/native.ts",
-    "./remote-async": "./src/remote-async.ts",
-    "./remote-store": "./src/remote-store.ts",
-    "./wasm": "../wasm/src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./async": {
+      "types": "./dist/async.d.ts",
+      "import": "./dist/async.js"
+    },
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "import": "./dist/native.js"
+    },
+    "./remote-async": {
+      "types": "./dist/remote-async.d.ts",
+      "import": "./dist/remote-async.js"
+    },
+    "./remote-store": {
+      "types": "./dist/remote-store.d.ts",
+      "import": "./dist/remote-store.js"
+    }
   }
 }

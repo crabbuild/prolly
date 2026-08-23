@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	prolly "build.crab/prolly-go"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 )
 
 func main() {

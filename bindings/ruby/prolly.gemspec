@@ -6,7 +6,12 @@ Gem::Specification.new do |spec|
   spec.summary = 'Ruby bindings for prolly-map'
   spec.authors = ['Crabbuild Contributors']
   spec.email = ['opensource@crab.build']
-  spec.license = 'MIT OR Apache-2.0'
+  spec.licenses = ['MIT', 'Apache-2.0']
+  spec.homepage = 'https://github.com/crabbuild/prolly'
+  spec.metadata = {
+    'source_code_uri' => 'https://github.com/crabbuild/prolly/tree/main/bindings/ruby',
+    'bug_tracker_uri' => 'https://github.com/crabbuild/prolly/issues'
+  }
   spec.required_ruby_version = '>= 2.6'
 
   spec.files = Dir['lib/**/*.rb'] + Dir['lib/**/*.md'] + ['README.md']

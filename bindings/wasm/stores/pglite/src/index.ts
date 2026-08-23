@@ -4,7 +4,7 @@ import {
   presentBytes, publishNodesWithGeneralPath, throwIfAborted, validateStoreDescriptor,
   type NamedStoreRoot, type NodeEntry, type NodeMutation, type NodePublication, type OptionalBytes, type RemoteStore,
   type RootCasResult, type RootCondition, type RootWrite, type StoreDescriptor, type StoreTransactionResult,
-} from "@crabbuild/prolly-wasm/remote-store";
+} from "prollydb-wasm/remote-store";
 
 export const PGLITE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS prolly_nodes (cid bytea PRIMARY KEY, node bytea NOT NULL);

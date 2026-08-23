@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	prolly "build.crab/prolly-go"
-	"build.crab/prolly-go/storetest"
+	prolly "github.com/crabbuild/prolly/bindings/go"
+	"github.com/crabbuild/prolly/bindings/go/storetest"
 )
 
 func TestFakeConformance(t *testing.T) {

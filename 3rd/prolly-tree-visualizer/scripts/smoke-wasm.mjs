@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { loadProllyWasm } from '@crabbuild/prolly-wasm';
+import { loadProllyWasm } from 'prollydb-wasm';
 
 const wasmBytes = readFileSync(new URL('../../../bindings/wasm/pkg/prolly_wasm_bg.wasm', import.meta.url));
 const prolly = await loadProllyWasm(undefined, wasmBytes);

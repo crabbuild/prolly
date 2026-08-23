@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	prolly "build.crab/prolly-go"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 )
 
 type Factory func(context.Context, *testing.T) prolly.RemoteStore

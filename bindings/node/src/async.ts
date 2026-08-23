@@ -430,7 +430,7 @@ export class AsyncProllyEngine {
     start: Uint8Array = new Uint8Array(),
     limit = "1024",
   ): Promise<NativeReversePageRecord> {
-    return defer(() => this.inner.reversePage(tree, cursor, start, limit));
+    return defer(() => this.inner.reversePage(tree, cursor ?? null, start, limit));
   }
 
   cursorWindow(

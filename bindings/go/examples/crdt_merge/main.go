@@ -1,9 +1,9 @@
 package main
 
 import (
-	prolly "build.crab/prolly-go"
 	"bytes"
 	"fmt"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 	"log"
 )
 

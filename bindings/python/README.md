@@ -3,6 +3,11 @@
 This package builds the Rust-backed Prolly Python binding with UniFFI and
 maturin.
 
+Install a published wheel with `python -m pip install prollydb`. The distribution
+name is `prollydb`; the Python import remains `import prolly`.
+Supported wheels contain the generated Python API and matching native library,
+so end users do not need a Rust toolchain.
+
 See `COOKBOOK.md` for Python application patterns covering SQLite-backed
 indexes, prefix queries, paging, merge callbacks, large values, sync, and custom
 stores.
@@ -13,7 +18,7 @@ stores.
 cd bindings/python
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install "maturin>=1.10,<2.0" "uniffi-bindgen==0.31.0"
+python -m pip install "maturin==1.14.1" "uniffi-bindgen==0.31.0"
 maturin develop
 python -m unittest discover -s tests
 ```
@@ -46,7 +51,9 @@ It also exposes:
 
 The source tree keeps the generated Python glue under
 `prolly/uniffi` for offline review. Native libraries produced by
-maturin are ignored and should be rebuilt locally or in release CI.
+maturin are ignored and should be rebuilt locally or in release CI. Wheel
+assembly excludes that review snapshot because maturin generates the matching
+glue and native library together for each target.
 
 When the generated native module is not built, `prolly` falls back to the
 temporary pure-Python fixture harness in `src`. That fallback exists only to
@@ -71,7 +78,7 @@ Important files:
 For installed development:
 
 ```sh
-python -m pip install "maturin>=1.10,<2.0" "uniffi-bindgen==0.31.0"
+python -m pip install "maturin==1.14.1" "uniffi-bindgen==0.31.0"
 cd bindings/python
 python -m maturin develop
 python examples/local_first_state.py

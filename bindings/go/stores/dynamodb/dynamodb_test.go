@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	prolly "build.crab/prolly-go"
-	"build.crab/prolly-go/storetest"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	awsdynamodb "github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	prolly "github.com/crabbuild/prolly/bindings/go"
+	"github.com/crabbuild/prolly/bindings/go/storetest"
 )
 
 func TestDynamoDBConformance(t *testing.T) {

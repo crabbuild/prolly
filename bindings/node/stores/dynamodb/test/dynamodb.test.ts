@@ -13,8 +13,8 @@ import {
   GetItemCommand,
   ListTablesCommand,
 } from "@aws-sdk/client-dynamodb";
-import { RemoteAsyncProllyEngine } from "@crabbuild/prolly-node/remote-async";
-import { StoreError, missingBytes, presentBytes, upsertNode } from "@crabbuild/prolly-node/remote-store";
+import { RemoteAsyncProllyEngine } from "prollydb/remote-async";
+import { StoreError, missingBytes, presentBytes, upsertNode } from "prollydb/remote-store";
 import { runStoreConformance } from "@crabbuild/prolly-storetest";
 
 import { DynamoDbStore } from "../src/index.ts";

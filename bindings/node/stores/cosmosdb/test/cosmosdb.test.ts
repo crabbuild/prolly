@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { CosmosClient } from "@azure/cosmos";
-import { StoreError, missingBytes, presentBytes, upsertNode } from "@crabbuild/prolly-node/remote-store";
+import { StoreError, missingBytes, presentBytes, upsertNode } from "prollydb/remote-store";
 import { runStoreConformance } from "@crabbuild/prolly-storetest";
 
 import { CosmosDbStore, type CosmosBatchOperation, type CosmosBatchResponse, type CosmosDocument, type CosmosItemClient, type CosmosReadResult } from "../src/index.ts";
