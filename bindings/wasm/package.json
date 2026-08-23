@@ -1,19 +1,46 @@
 {
-  "name": "@crabbuild/prolly-wasm",
+  "name": "prollydb-wasm",
   "version": "0.1.0",
   "type": "module",
-  "private": true,
-  "description": "Browser WASM binding for prolly-map",
+  "description": "Browser WebAssembly bindings for prolly-map",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crabbuild/prolly.git",
+    "directory": "bindings/wasm"
+  },
+  "homepage": "https://github.com/crabbuild/prolly/tree/main/bindings/wasm#readme",
+  "bugs": "https://github.com/crabbuild/prolly/issues",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/",
+    "pkg/",
+    "README.md",
+    "PROVENANCE.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "exports": {
-    ".": "./src/index.ts",
-    "./remote-store": "./src/remote-store.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./remote-store": {
+      "types": "./dist/remote-store.d.ts",
+      "import": "./dist/remote-store.js"
+    }
   },
   "scripts": {
+    "build": "npm run build:wasm && npm run build:ts",
+    "build:ts": "tsc -p tsconfig.json",
+    "check:rust": "cargo check --manifest-path Cargo.toml --target wasm32-unknown-unknown --target-dir ../../target",
+    "build:wasm": "cargo build --locked --manifest-path Cargo.toml --release --target wasm32-unknown-unknown --target-dir ../../target && wasm-bindgen ../../target/wasm32-unknown-unknown/release/prolly_wasm.wasm --target web --typescript --out-dir pkg",
     "example:agent-event-log": "node examples/agent-event-log.ts",
     "example:background-compaction": "node examples/background-compaction.ts",
     "example:batch-build": "node examples/batch-build.ts",
-    "check:rust": "cargo check --manifest-path Cargo.toml --target wasm32-unknown-unknown --target-dir ../../target",
-    "build:wasm": "cargo build --manifest-path Cargo.toml --release --target wasm32-unknown-unknown --target-dir ../../target && wasm-bindgen ../../target/wasm32-unknown-unknown/release/prolly_wasm.wasm --target web --typescript --out-dir pkg",
     "example:basic-map": "node examples/basic-map.ts",
     "example:browser-storage": "node examples/browser-storage.ts",
     "example:cookbook": "node examples/browser-scenarios.ts",
@@ -28,6 +55,11 @@
     "example:resolver": "node examples/resolver.ts",
     "example:secondary-index": "node examples/secondary-index.ts",
     "example:vector-sidecar": "node examples/vector-sidecar.ts",
-    "test": "node --test test/*.test.ts"
+    "prepack": "npm run build:ts",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
   }
 }

@@ -1,0 +1,4 @@
+# The source tree keeps a generated binding snapshot for review and offline
+# checks. Maturin must replace the entire directory with target-matched glue and
+# its native library when building a wheel.
+prolly/uniffi/

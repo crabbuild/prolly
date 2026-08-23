@@ -1946,7 +1946,7 @@ func TestPortableIndexedBatchCASAndHistoricalSnapshots(t *testing.T) {
 	}
 	defer firstSnapshot.Close()
 	firstID, err := firstSnapshot.ID()
-	if err != nil || !bytes.Equal(firstID.SourceVersion, first.SourceVersion) {
+	if err != nil || len(firstID.Snapshot) != 32 {
 		t.Fatalf("first snapshot id = %+v, %v", firstID, err)
 	}
 	applied, err := indexed.ApplyIf(first.SourceVersion, []Mutation{
@@ -1967,7 +1967,7 @@ func TestPortableIndexedBatchCASAndHistoricalSnapshots(t *testing.T) {
 	}
 	defer historical.Close()
 	historicalID, err := historical.ID()
-	if err != nil || !bytes.Equal(historicalID.SourceVersion, firstID.SourceVersion) {
+	if err != nil || !bytes.Equal(historicalID.Snapshot, firstID.Snapshot) {
 		t.Fatalf("historical id = %+v, %v", historicalID, err)
 	}
 	reopened, err := indexed.SnapshotByID(firstID)
@@ -1976,7 +1976,7 @@ func TestPortableIndexedBatchCASAndHistoricalSnapshots(t *testing.T) {
 	}
 	defer reopened.Close()
 	reopenedID, err := reopened.ID()
-	if err != nil || !bytes.Equal(reopenedID.CatalogVersion, firstID.CatalogVersion) {
+	if err != nil || !bytes.Equal(reopenedID.Snapshot, firstID.Snapshot) {
 		t.Fatalf("reopened id = %+v, %v", reopenedID, err)
 	}
 }

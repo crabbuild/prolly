@@ -1,8 +1,8 @@
 package main
 
 import (
-	prolly "build.crab/prolly-go"
 	"fmt"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 	"log"
 	"sort"
 	"strings"

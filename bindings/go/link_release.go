@@ -1,10 +1,10 @@
-//go:build prolly_release
+//go:build !prolly_dev
 
 package prolly
 
 /*
-#cgo darwin LDFLAGS: -L${SRCDIR}/../../target/release -Wl,-rpath,${SRCDIR}/../../target/release -lprolly_bindings
-#cgo linux LDFLAGS: -L${SRCDIR}/../../target/release -Wl,-rpath,${SRCDIR}/../../target/release -lprolly_bindings
-#cgo windows LDFLAGS: -L${SRCDIR}/../../target/release -lprolly_bindings
+#cgo darwin LDFLAGS: -lprolly_bindings
+#cgo linux LDFLAGS: -lprolly_bindings
+#cgo windows LDFLAGS: -lprolly_bindings
 */
 import "C"

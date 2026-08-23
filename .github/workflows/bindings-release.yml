@@ -1,0 +1,322 @@
+name: Publish language bindings
+
+on:
+  push:
+    tags:
+      - "bindings-v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bindings-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#bindings-v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - run: python3 scripts/check-binding-release.py --tag "${{ github.ref_name }}"
+
+  node-native:
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.89.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-node-${{ matrix.target }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: bindings/node/package-lock.json
+      - run: npm --prefix bindings/node ci
+      - run: npm --prefix bindings/node run build:native:release
+      - run: npm --prefix bindings/node run typecheck
+      - run: npm --prefix bindings/node test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node-${{ matrix.target }}
+          path: bindings/node/index.*.node
+          if-no-files-found: error
+
+  native-library:
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+            library: libprolly_bindings.dylib
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            library: libprolly_bindings.dylib
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            library: libprolly_bindings.so
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            library: prolly_bindings.dll
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.89.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-uniffi-${{ matrix.target }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+      - run: cargo build --release --locked --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+      - name: Smoke-test the published Go link mode
+        shell: bash
+        run: |
+          export CGO_LDFLAGS="-L$PWD/target/release"
+          export DYLD_LIBRARY_PATH="$PWD/target/release"
+          export LD_LIBRARY_PATH="$PWD/target/release"
+          export PATH="$PWD/target/release:$PATH"
+          (cd bindings/go && go test ./...)
+      - name: Archive native library
+        shell: bash
+        run: |
+          mkdir -p release/native
+          tar -C target/release -czf "release/native/prolly-bindings-${{ matrix.target }}.tar.gz" "${{ matrix.library }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.target }}
+          path: release/native/*.tar.gz
+          if-no-files-found: error
+
+  python-wheels:
+    needs: metadata
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: v1.14.1
+          target: ${{ matrix.target }}
+          args: --release --locked --compatibility pypi --out dist
+          manylinux: "2_17"
+          working-directory: bindings/python
+      - name: Install-test wheel
+        shell: bash
+        run: |
+          python -m pip install bindings/python/dist/*.whl
+          python -c "import os, tempfile; os.chdir(tempfile.mkdtemp()); import prolly; engine = prolly.ProllyEngine.memory(prolly.default_config()); tree = engine.put(engine.create(), b'key', b'value'); assert engine.get(tree, b'key') == b'value'"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-${{ matrix.target }}
+          path: bindings/python/dist/*.whl
+          if-no-files-found: error
+
+  wasm-package:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.89.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-wasm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: bindings/wasm/package-lock.json
+      - run: cargo install wasm-bindgen-cli --version 0.2.126 --locked
+      - run: npm --prefix bindings/wasm ci
+      - run: npm --prefix bindings/wasm run build
+      - run: npm --prefix bindings/wasm test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-package
+          path: |
+            bindings/wasm/dist
+            bindings/wasm/pkg
+          if-no-files-found: error
+
+  prepare-npm:
+    needs: [metadata, node-native, wasm-package]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            bindings/node/package-lock.json
+            bindings/wasm/package-lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: node-*
+          path: bindings/node
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-package
+          path: bindings/wasm
+      - run: npm --prefix bindings/node ci
+      - run: npm --prefix bindings/wasm ci
+      - run: npm --prefix bindings/node run build
+      - run: npm --prefix bindings/node run test:package
+      - run: npm --prefix bindings/wasm run typecheck
+      - name: Pack npm artifacts
+        shell: bash
+        run: |
+          mkdir -p release/npm
+          (cd bindings/node && npm pack --pack-destination "$GITHUB_WORKSPACE/release/npm")
+          (cd bindings/wasm && npm pack --pack-destination "$GITHUB_WORKSPACE/release/npm")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-packages
+          path: release/npm/*.tgz
+          if-no-files-found: error
+
+  publish-npm:
+    if: github.repository == 'crabbuild/prolly'
+    needs: [metadata, prepare-npm]
+    runs-on: ubuntu-24.04
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-packages
+          path: release/npm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      - run: npm install --global npm@latest
+      - run: npm publish "release/npm/prollydb-${{ needs.metadata.outputs.version }}.tgz" --access public
+      - run: npm publish "release/npm/prollydb-wasm-${{ needs.metadata.outputs.version }}.tgz" --access public
+
+  publish-pypi:
+    if: github.repository == 'crabbuild/prolly'
+    needs: [metadata, python-wheels]
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: python-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-go-tags:
+    if: github.repository == 'crabbuild/prolly'
+    needs: [metadata, native-library]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish Go module tags
+        shell: bash
+        env:
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          modules=(
+            bindings/go
+            bindings/go/stores/cosmosdb
+            bindings/go/stores/dynamodb
+            bindings/go/stores/mysql
+            bindings/go/stores/postgres
+            bindings/go/stores/redis
+            bindings/go/stores/spanner
+            bindings/go/stores/sqlite
+          )
+          for module in "${modules[@]}"; do
+            tag="$module/v$VERSION"
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+              test "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA"
+            else
+              git tag -a "$tag" "$GITHUB_SHA" -m "Release $module v$VERSION"
+              git push origin "refs/tags/$tag"
+            fi
+          done
+
+  github-release:
+    if: github.repository == 'crabbuild/prolly'
+    needs: [metadata, native-library, prepare-npm, python-wheels]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: release/assets
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-packages
+          path: release/assets
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: python-*
+          path: release/assets
+          merge-multiple: true
+      - name: Create checksums
+        working-directory: release/assets
+        run: sha256sum * > SHA256SUMS
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${{ github.ref_name }}" >/dev/null 2>&1 || \
+            gh release create "${{ github.ref_name }}" --title "Prolly bindings ${{ needs.metadata.outputs.version }}" --generate-notes
+          gh release upload "${{ github.ref_name }}" release/assets/* --clobber

@@ -357,7 +357,7 @@ export class ProllyNode {
     const childCounts: bigint[] = [];
 
     if (format.layout === "prefix") {
-      let previous = new Uint8Array();
+      let previous: Uint8Array = new Uint8Array();
       for (let entry = 0; entry < entryCount; entry++) {
         const shared = cursor.readVarintNumber();
         if (shared > previous.length) throw new Error("shared key prefix exceeds previous key");
@@ -423,7 +423,7 @@ export class ProllyNode {
     writeVarint(out, this.level);
     writeVarint(out, this.keys.length);
     if (this.layout === "prefix") {
-      let previous = new Uint8Array();
+      let previous: Uint8Array = new Uint8Array();
       for (let index = 0; index < this.keys.length; index++) {
         const key = this.keys[index];
         const value = this.vals[index];

@@ -3,6 +3,10 @@
 This package exposes the Rust `prolly-bindings` facade through a Node-API
 module, typed TypeScript declarations, and Promise-based async wrappers.
 
+Install the published package with `npm install prollydb`. Release
+packages contain compiled JavaScript, declarations, and prebuilt addons for the
+platforms listed in `../release-manifest.json`; consumers do not compile Rust.
+
 See `COOKBOOK.md` for Node and TypeScript application patterns covering:
 
 - SQLite-backed indexes, Promise wrappers, prefix queries, and paging;
@@ -107,7 +111,7 @@ only gives JavaScript code a familiar scheduling model.
 
 ## Async Store Providers
 
-Database adapters are separate packages, so installing `@crabbuild/prolly-node`
+Database adapters are separate packages, so installing `prollydb`
 does not install a database SDK. Each adapter accepts a caller-owned SDK client,
 pool, database, or container and never closes it. Initialize or validate the
 physical schema explicitly before opening a remote engine.
@@ -153,11 +157,10 @@ Run all eight adapters and the local emulators from the repository root with
 
 ## Native Loading
 
-The source tree expects a locally built addon. The release package should ship
-prebuilt `.node` artifacts for supported platforms or document exactly how
-callers build them. When debugging load failures, check the Node version, CPU
-architecture, operating system, and whether the addon was built against the same
-package sources.
+The source tree expects a locally built addon. Published packages ship prebuilt
+`.node` artifacts. When debugging load failures, check the Node version, CPU
+architecture, operating system, and whether the addon matches the JavaScript
+package version.
 
 ## Merge, Proofs, And Snapshots
 

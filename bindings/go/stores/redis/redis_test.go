@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	prolly "build.crab/prolly-go"
-	"build.crab/prolly-go/storetest"
+	prolly "github.com/crabbuild/prolly/bindings/go"
+	"github.com/crabbuild/prolly/bindings/go/storetest"
 	redisclient "github.com/redis/go-redis/v9"
 )
 

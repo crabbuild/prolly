@@ -69,9 +69,9 @@ test("wasm package declares browser memory-scope API", () => {
   assert.match(source, /WasmSnapshotNamespaceKind/);
 });
 
-test("wasm artifacts use the Crabbuild package scope", () => {
+test("wasm artifacts use the public prollydb package name", () => {
   const manifest = JSON.parse(readFileSync(packageManifestPath, "utf8"));
-  assert.equal(manifest.name, "@crabbuild/prolly-wasm");
+  assert.equal(manifest.name, "prollydb-wasm");
 });
 
 test("wasm deleteRange uses raw-byte half-open bounds", { skip: !generatedPresent }, () => {

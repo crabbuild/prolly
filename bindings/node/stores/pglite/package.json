@@ -4,7 +4,7 @@
   "type": "module",
   "files": ["src", "README.md"],
   "scripts": {"check": "tsc --noEmit", "test": "node --test test/*.test.ts"},
-  "dependencies": {"@electric-sql/pglite": "0.5.4", "@crabbuild/prolly-node": "file:../.."},
+  "dependencies": {"@electric-sql/pglite": "0.5.4", "prollydb": "file:../.."},
   "devDependencies": {"@crabbuild/prolly-storetest": "file:../../storetest", "@types/node": "20.19.25", "typescript": "5.9.3"},
   "exports": "./src/index.ts"
 }

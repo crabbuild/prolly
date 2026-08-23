@@ -6,7 +6,7 @@ library before running Go programs locally.
 ```sh
 cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
 cd bindings/go
-go test ./...
+go test -tags prolly_dev ./...
 ```
 
 Runnable scenarios live as separate `go run` targets under `examples/`,
@@ -14,9 +14,9 @@ matching the Rust example style:
 
 ```sh
 cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
-(cd bindings/go && go run ./examples/cookbook_scenarios)
-(cd bindings/go && go run ./examples/basic_map)
-(cd bindings/go && go run ./examples/secondary_index)
+(cd bindings/go && go run -tags prolly_dev ./examples/cookbook_scenarios)
+(cd bindings/go && go run -tags prolly_dev ./examples/basic_map)
+(cd bindings/go && go run -tags prolly_dev ./examples/secondary_index)
 ```
 
 Application-style directories include `batch_build`, `local_first_state`,
@@ -33,7 +33,7 @@ package main
 import (
 	"log"
 
-	prolly "build.crab/prolly-go"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 )
 
 func main() {

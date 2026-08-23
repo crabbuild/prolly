@@ -13,7 +13,7 @@
 - Protocol major is exactly `1`; provider schema version is exactly `1`.
 - Node, Kotlin, and Java support SQLite, PostgreSQL, MySQL, Redis, DynamoDB, Cosmos DB, and Spanner.
 - PGlite is Node-only; RocksDB and SlateDB remain Rust-only.
-- Provider SDK dependencies never enter `@crabbuild/prolly-node`, `build.crab:prolly-kotlin`, or `build.crab:prolly-java`.
+- Provider SDK dependencies never enter `prollydb`, `build.crab:prolly-kotlin`, or `build.crab:prolly-java`.
 - Applications own injected clients and pools; adapters never close borrowed clients.
 - Missing bytes and present empty bytes remain distinct in every language.
 - Ordered batch reads preserve input length, order, duplicates, and missing positions.

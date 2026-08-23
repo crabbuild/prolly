@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"time"
 
-	prolly "build.crab/prolly-go"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 )
 
 const (

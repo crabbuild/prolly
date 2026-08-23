@@ -37,7 +37,7 @@ import {
   type RootWrite,
   type StoreDescriptor,
   type StoreTransactionResult,
-} from "@crabbuild/prolly-node/remote-store";
+} from "prollydb/remote-store";
 
 const BATCH_GET_LIMIT = 100;
 const BATCH_WRITE_LIMIT = 25;

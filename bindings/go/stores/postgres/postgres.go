@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	prolly "build.crab/prolly-go"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"

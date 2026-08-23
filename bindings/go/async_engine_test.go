@@ -311,8 +311,8 @@ func TestAsyncEngineRoundTrip(t *testing.T) {
 	if publication.Origin != PublicationOriginPointUpsert {
 		t.Fatalf("publication origin = %d, want %d", publication.Origin, PublicationOriginPointUpsert)
 	}
-	if len(publication.Nodes) == 0 || publication.Hint == nil {
-		t.Fatalf("publication = %#v, want nodes and rightmost hint", publication)
+	if len(publication.Nodes) == 0 || publication.Hint != nil {
+		t.Fatalf("publication = %#v, want nodes without a backend-selected hint", publication)
 	}
 	value, found, err := engine.Get(ctx, tree, []byte("answer"))
 	if err != nil {

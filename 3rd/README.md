@@ -12,5 +12,5 @@ repository. Credit goes to Tim Sehn and the original contributors for the
 visualizer's design and implementation.
 
 The version vendored here replaces the original DoltLite backend with this
-repository's `@crabbuild/prolly-wasm` binding so it can render the actual trees,
+repository's `prollydb-wasm` binding so it can render the actual trees,
 content IDs, lookups, diffs, and storage behavior produced by `prolly-map`.

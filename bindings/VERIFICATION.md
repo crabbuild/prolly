@@ -60,7 +60,7 @@ tree behavior.
 | --- | --- | --- |
 | Rust UniFFI facade | `bindings/uniffi/src/lib.rs` unit tests | `cargo test --manifest-path bindings/uniffi/Cargo.toml --target-dir target` |
 | Python | `bindings/python/tests/test_uniffi_binding.py`, `test_fixtures.py` | `PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" PYTHONPATH=bindings/python python3 -m unittest discover -s bindings/python/tests` |
-| Go | `bindings/go/prolly_test.go` | `(cd bindings/go && go test ./...)` |
+| Go | `bindings/go/prolly_test.go` | `(cd bindings/go && go test -tags prolly_dev ./...)` |
 | Node/TypeScript | `bindings/node/test/*.test.ts` | `npm --prefix bindings/node run build:native && npm --prefix bindings/node test` |
 | Browser WASM | `bindings/wasm/test/wasm.test.ts` | `cargo check --manifest-path bindings/wasm/Cargo.toml --target wasm32-unknown-unknown --target-dir target && npm --prefix bindings/wasm run build:wasm && npm --prefix bindings/wasm test` |
 | Kotlin/JVM | `bindings/kotlin/src/test/kotlin/build/crab/prolly/*.kt` | `mvn -f bindings/kotlin/pom.xml test` |
@@ -162,7 +162,7 @@ replaces native file/SQLite scenarios with `browser_storage`.
 PROLLY_BINDINGS_LIBRARY="$PWD/target/debug/libprolly_bindings.dylib" \
   PYTHONPATH=bindings/python \
   python3 bindings/python/examples/cookbook_scenarios.py
-(cd bindings/go && go run ./examples/cookbook_scenarios)
+(cd bindings/go && go run -tags prolly_dev ./examples/cookbook_scenarios)
 npm --prefix bindings/node run example:cookbook
 mvn -q -f bindings/kotlin/pom.xml compile \
   -Dexec.mainClass=build.crab.prolly.examples.CookbookScenariosKt exec:java

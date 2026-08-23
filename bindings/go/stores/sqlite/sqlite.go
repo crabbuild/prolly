@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	prolly "build.crab/prolly-go"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 	_ "modernc.org/sqlite"
 )
 

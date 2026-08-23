@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
-	prolly "build.crab/prolly-go"
-	"build.crab/prolly-go/storetest"
 	gspanner "cloud.google.com/go/spanner"
 	database "cloud.google.com/go/spanner/admin/database/apiv1"
 	databasepb "cloud.google.com/go/spanner/admin/database/apiv1/databasepb"
 	instance "cloud.google.com/go/spanner/admin/instance/apiv1"
 	instancepb "cloud.google.com/go/spanner/admin/instance/apiv1/instancepb"
+	prolly "github.com/crabbuild/prolly/bindings/go"
+	"github.com/crabbuild/prolly/bindings/go/storetest"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

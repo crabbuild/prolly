@@ -6,7 +6,7 @@ import {
   type WasmTree,
   type WasmTreeDebugViewRecord,
   type WasmTreeStatsRecord,
-} from '@crabbuild/prolly-wasm';
+} from 'prollydb-wasm';
 import { bootstrapKeys, deterministicShuffle } from './bootstrap';
 import { buildTreeFromDebug, leafNodes, toHex } from './prolly';
 import type { RowValue, TreeSnapshot } from './types';
@@ -91,7 +91,7 @@ export class ProllyEngine {
   private tree: WasmTree;
   private snapshotId = 0;
   private storedNodeSizes = new Map<string, number>();
-  readonly version = '@crabbuild/prolly-wasm 0.1.0';
+  readonly version = 'prollydb-wasm 0.1.0';
 
   private constructor(wasm: ProllyWasmModule) {
     this.wasm = wasm;

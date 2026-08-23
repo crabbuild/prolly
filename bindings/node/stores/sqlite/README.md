@@ -5,7 +5,7 @@ application-owned `better-sqlite3` database.
 
 ```ts
 import Database from "better-sqlite3";
-import { RemoteAsyncProllyEngine } from "@crabbuild/prolly-node/remote-async";
+import { RemoteAsyncProllyEngine } from "prollydb/remote-async";
 import { SqliteStore } from "@crabbuild/prolly-store-sqlite";
 
 const database = new Database("prolly.db");

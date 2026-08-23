@@ -3,7 +3,7 @@ import {
   publishNodesWithGeneralPath, throwIfAborted, validateStoreDescriptor,
   type NamedStoreRoot, type NodeEntry, type NodeMutation, type NodePublication, type OptionalBytes, type RemoteStore,
   type RootCasResult, type RootCondition, type RootWrite, type StoreDescriptor, type StoreTransactionResult,
-} from "@crabbuild/prolly-wasm/remote-store";
+} from "prollydb-wasm/remote-store";
 
 export interface OpfsWritableFile { write(data: string): Promise<void>; close(): Promise<void>; abort?(): Promise<void>; }
 export interface OpfsFileHandle { getFile(): Promise<{ text(): Promise<string> }>; createWritable(): Promise<OpfsWritableFile>; }

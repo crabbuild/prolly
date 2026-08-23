@@ -1,10 +1,10 @@
-module build.crab/prolly-go/stores/spanner
+module github.com/crabbuild/prolly/bindings/go/stores/spanner
 
 go 1.25.0
 
 require (
-	build.crab/prolly-go v0.0.0
 	cloud.google.com/go/spanner v1.93.0
+	github.com/crabbuild/prolly/bindings/go v0.1.0
 	google.golang.org/api v0.289.0
 	google.golang.org/grpc v1.82.1
 )
@@ -56,5 +56,3 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
-
-replace build.crab/prolly-go => ../..

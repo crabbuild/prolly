@@ -1,4 +1,4 @@
-//go:build !prolly_release
+//go:build prolly_dev
 
 package prolly
 

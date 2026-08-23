@@ -10,3 +10,7 @@ use (
 	./spanner
 	./sqlite
 )
+
+// Provider modules intentionally require the published core version. Keep
+// pre-release workspace builds on the sibling source tree until that tag exists.
+replace github.com/crabbuild/prolly/bindings/go v0.1.0 => ..

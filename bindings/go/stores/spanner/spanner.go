@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	prolly "build.crab/prolly-go"
 	gspanner "cloud.google.com/go/spanner"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

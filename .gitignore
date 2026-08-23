@@ -209,6 +209,7 @@ debug/
 target/
 bindings/**/target/
 bindings/swift/.build/
+bindings/kotlin/.gradle/
 bindings/wasm/pkg/
 *.node
 *.dylib
@@ -224,7 +225,9 @@ performance-results/**/time-probe.*
 bindings/ruby/Gemfile.lock
 bindings/ruby/stores/*/Gemfile.lock
 bindings/swift/Package.resolved
-bindings/uniffi/Cargo.lock
+# Native language packages are released from this crate, so keep its graph
+# reproducible for wheel, gem, JVM, Swift, Go, and Node builds.
+!bindings/uniffi/Cargo.lock
 stores/prolly-store-*/Cargo.lock
 !stores/prolly-store-dynamodb/Cargo.lock
 

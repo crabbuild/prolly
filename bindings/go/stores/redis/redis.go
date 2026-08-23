@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	prolly "build.crab/prolly-go"
+	prolly "github.com/crabbuild/prolly/bindings/go"
 	redisclient "github.com/redis/go-redis/v9"
 )
 

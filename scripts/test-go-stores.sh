@@ -63,6 +63,7 @@ export PROLLY_MYSQL_DSN="prolly:prolly@tcp(127.0.0.1:$MYSQL_PORT)/prolly?parseTi
 export PROLLY_REDIS_ADDR="127.0.0.1:$REDIS_PORT"
 export PROLLY_DYNAMODB_ENDPOINT="http://127.0.0.1:$DYNAMODB_PORT"
 export SPANNER_EMULATOR_HOST="127.0.0.1:$SPANNER_GRPC_PORT"
+export GOFLAGS="${GOFLAGS:+$GOFLAGS }-tags=prolly_dev"
 
 cd "$ROOT_DIR/bindings/go"
 go test -race -count=1 ./...
