@@ -111,7 +111,7 @@ for provider in sqlite postgres mysql redis dynamodb; do
 done
 
 if [[ "${PROLLY_STORE_SKIP_INSTALL:-0}" != "1" ]]; then npm --prefix bindings/wasm ci --silent; fi
-npm --prefix bindings/wasm run build:ts
+npm --prefix bindings/wasm run build:remote-store
 for provider in indexeddb opfs pglite; do
   echo "testing browser store: $provider"
   if [[ "${PROLLY_STORE_SKIP_INSTALL:-0}" != "1" ]]; then npm --prefix "bindings/wasm/stores/$provider" ci --silent; fi
