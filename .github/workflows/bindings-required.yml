@@ -74,7 +74,11 @@ jobs:
       - run: go run -tags prolly_dev ./examples/cookbook_scenarios
         working-directory: bindings/go
       - run: python -m pip install "maturin==1.14.1"
-      - run: maturin build --release --locked --out dist
+      # Do not reuse cached UniFFI generation output: maturin consumes that
+      # output while assembling the wheel, so a stale cache can omit prolly.py.
+      - run: >-
+          maturin build --release --locked --out dist
+          --target-dir /tmp/prolly-maturin-target
         working-directory: bindings/python
       - run: |
           python -m venv /tmp/prolly-wheel-smoke
