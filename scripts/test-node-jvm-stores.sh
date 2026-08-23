@@ -76,6 +76,7 @@ node "$ROOT_DIR/scripts/verify-store-compatibility.mjs"
 if [[ "${PROLLY_STORE_SKIP_INSTALL:-0}" != "1" ]]; then
   npm --prefix "$ROOT_DIR/bindings/node" ci --silent
 fi
+npm --prefix "$ROOT_DIR/bindings/node" run build:native
 npm --prefix "$ROOT_DIR/bindings/node" run build
 
 for module in sqlite postgres mysql redis dynamodb cosmosdb spanner pglite; do

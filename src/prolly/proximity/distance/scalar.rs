@@ -86,28 +86,18 @@ pub(crate) fn score(metric: DistanceMetric, left: &[f32], right: &[f32]) -> f64 
 
 pub(crate) fn score_encoded(metric: DistanceMetric, left: &[f32], right: &[u8]) -> f64 {
     debug_assert_eq!(left.len().checked_mul(4), Some(right.len()));
+    let (right, _) = right.as_chunks::<4>();
     let result = match metric {
-        DistanceMetric::L2Squared => {
-            left.iter()
-                .zip(right.chunks_exact(4))
-                .fold(0.0, |sum, (&a, bytes)| {
-                    let b = f32::from_bits(u32::from_le_bytes(
-                        bytes.try_into().expect("four-byte vector component"),
-                    ));
-                    let delta = f64::from(a) - f64::from(b);
-                    sum + delta * delta
-                })
-        }
+        DistanceMetric::L2Squared => left.iter().zip(right).fold(0.0, |sum, (&a, bytes)| {
+            let b = f32::from_bits(u32::from_le_bytes(*bytes));
+            let delta = f64::from(a) - f64::from(b);
+            sum + delta * delta
+        }),
         DistanceMetric::Cosine | DistanceMetric::InnerProduct => {
-            let dot = left
-                .iter()
-                .zip(right.chunks_exact(4))
-                .fold(0.0, |sum, (&a, bytes)| {
-                    let b = f32::from_bits(u32::from_le_bytes(
-                        bytes.try_into().expect("four-byte vector component"),
-                    ));
-                    sum + f64::from(a) * f64::from(b)
-                });
+            let dot = left.iter().zip(right).fold(0.0, |sum, (&a, bytes)| {
+                let b = f32::from_bits(u32::from_le_bytes(*bytes));
+                sum + f64::from(a) * f64::from(b)
+            });
             if metric == DistanceMetric::Cosine {
                 1.0 - dot.clamp(-1.0, 1.0)
             } else {

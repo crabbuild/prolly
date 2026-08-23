@@ -126,7 +126,7 @@ pub fn indexed_collection_source_map_id(name: &[u8]) -> Result<Option<Vec<u8>>, 
         ));
     }
     let mut source_map_id = Vec::with_capacity(encoded.len() / 2);
-    for pair in encoded.chunks_exact(2) {
+    for pair in encoded.as_chunks::<2>().0 {
         let high = decode_hex_nibble(pair[0]).ok_or_else(|| {
             Error::InvalidVersionedMap(
                 "indexed collection root contains malformed source-map hex".to_string(),

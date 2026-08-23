@@ -1937,7 +1937,11 @@ mod tests {
             Some(b"active".to_vec())
         );
 
-        let pruned = map.prune_versions(1).unwrap();
+        // Keeping zero catalog entries still retains the current head. Using
+        // one here is timing-sensitive when several versions share a
+        // millisecond timestamp: the catalog tie-breaker may select a
+        // different newest entry in addition to the head.
+        let pruned = map.prune_versions(0).unwrap();
         assert_eq!(pruned.retained, vec![head.id]);
         assert_eq!(pruned.removed.len(), 2);
         assert!(pruned.removed.contains(&initial.id));

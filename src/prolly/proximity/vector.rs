@@ -22,8 +22,8 @@ pub(crate) fn decode_components(bytes: &[u8], dimensions: u32) -> Result<Vec<f32
         });
     }
     let mut vector = Vec::with_capacity(count);
-    for (index, chunk) in bytes.chunks_exact(4).enumerate() {
-        let bits = u32::from_le_bytes(chunk.try_into().expect("four-byte chunk"));
+    for (index, chunk) in bytes.as_chunks::<4>().0.iter().enumerate() {
+        let bits = u32::from_le_bytes(*chunk);
         let component = f32::from_bits(bits);
         if !component.is_finite() || bits == 0x8000_0000 {
             return Err(Error::InvalidProximityVector {
