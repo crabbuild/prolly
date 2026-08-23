@@ -5,6 +5,7 @@ import {
   GENERAL,
   POINT_UPSERT,
   STORE_PROTOCOL_MAJOR,
+  StoreError,
   deleteNode,
   deleteRoot,
   missingBytes,
@@ -17,6 +18,16 @@ import {
   validateStoreDescriptor,
   type StoreDescriptor,
 } from "../src/remote-store.ts";
+
+test("StoreError identity survives duplicate package copies", async () => {
+  const duplicateUrl = new URL("../src/remote-store.ts", import.meta.url);
+  duplicateUrl.searchParams.set("copy", "store-error-identity");
+  const duplicate = (await import(duplicateUrl.href)) as typeof import("../src/remote-store.ts");
+  const error = new duplicate.StoreError("cancelled", "cancelled by another package copy");
+
+  assert.ok(error instanceof StoreError);
+  assert.equal(error.code, "cancelled");
+});
 
 const descriptor = (): StoreDescriptor => ({
   protocolMajor: STORE_PROTOCOL_MAJOR,

@@ -5,7 +5,24 @@ fn source_files(root: &Path, out: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(root).unwrap() {
         let path = entry.unwrap().path();
         if path.is_dir() {
-            if path.ends_with("bindings/wasm/pkg") {
+            let generated_or_vendored = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    matches!(
+                        name,
+                        "node_modules"
+                            | "target"
+                            | "vendor"
+                            | ".venv"
+                            | ".build"
+                            | ".gradle"
+                            | ".pytest_cache"
+                            | ".mypy_cache"
+                            | "__pycache__"
+                    )
+                });
+            if generated_or_vendored || path.ends_with("bindings/wasm/pkg") {
                 continue;
             }
             source_files(&path, out);

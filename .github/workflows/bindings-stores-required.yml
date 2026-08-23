@@ -1,0 +1,74 @@
+name: Language binding stores required
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "stores/**"
+      - "bindings/**"
+      - "conformance/**"
+      - "docker-compose.store-services.yml"
+      - "scripts/test-all-language-stores.sh"
+      - "scripts/test-go-stores.sh"
+      - "scripts/test-node-jvm-stores.sh"
+      - "scripts/verify-store-compatibility.mjs"
+      - ".github/workflows/bindings-stores-required.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - "stores/**"
+      - "bindings/**"
+      - "conformance/**"
+      - "docker-compose.store-services.yml"
+      - "scripts/test-all-language-stores.sh"
+      - "scripts/test-go-stores.sh"
+      - "scripts/test-node-jvm-stores.sh"
+      - "scripts/verify-store-compatibility.mjs"
+      - ".github/workflows/bindings-stores-required.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  all-language-stores:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: all-language-stores-linux
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            bindings/node/package-lock.json
+            bindings/node/stores/*/package-lock.json
+            bindings/wasm/stores/*/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: bindings/go/go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: false
+      - run: swift --version
+      - run: docker compose version
+      - run: ./scripts/test-all-language-stores.sh

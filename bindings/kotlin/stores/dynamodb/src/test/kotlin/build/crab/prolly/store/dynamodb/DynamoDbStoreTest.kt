@@ -49,10 +49,12 @@ class DynamoDbStoreTest {
         StoreConformance.run { store }
         val description = client.describeTable(DescribeTableRequest.builder().tableName(table).build()).get().table()
         assertEquals("pk", description.keySchema().single().attributeName()); assertEquals("B", description.attributeDefinitions().single { it.attributeName() == "pk" }.attributeTypeAsString())
+        val roots = client.describeTable(DescribeTableRequest.builder().tableName("$table-roots").build()).get().table()
+        assertEquals(setOf("pk", "sk"), roots.keySchema().map { it.attributeName() }.toSet())
         val cid = specialBytes(32); val root = specialBytes(9); val namespace = specialBytes(7); val hintKey = specialBytes(5)
         store.putNode(cid, "node".bytes()); store.putRootManifest(root, "manifest".bytes()); store.putHint(namespace, hintKey, "hint".bytes())
         assertEquals("node", raw(client, table, prefix + "node:".bytes() + cid).decodeToString())
-        assertEquals("manifest", raw(client, table, prefix + "root:".bytes() + root).decodeToString())
+        assertEquals("manifest", rawRoot(client, "$table-roots", prefix, root).decodeToString())
         assertEquals("hint", raw(client, table, prefix + "hint:".bytes() + ByteBuffer.allocate(8).putLong(namespace.size.toLong()).array() + namespace + hintKey).decodeToString())
         assertTrue(store.listNodeCids().any { it.contentEquals(cid) })
     }
@@ -98,7 +100,7 @@ class DynamoDbStoreTest {
 
     private fun withStore(block: suspend (DynamoDbAsyncClient, DynamoDbStore, String, ByteArray) -> Unit) = runBlocking {
         val client = client(); val table = "prolly_kotlin_${UUID.randomUUID().toString().replace("-", "")}"; val prefix = "prolly:test:kotlin:".bytes(); val store = DynamoDbStore(client, DynamoDbStoreOptions(table, prefix)); store.initializeTable()
-        try { block(client, store, table, prefix) } finally { store.close(); runCatching { client.deleteTable(DeleteTableRequest.builder().tableName(table).build()).get() }; client.close() }
+        try { block(client, store, table, prefix) } finally { store.close(); runCatching { client.deleteTable(DeleteTableRequest.builder().tableName("$table-roots").build()).get() }; runCatching { client.deleteTable(DeleteTableRequest.builder().tableName(table).build()).get() }; client.close() }
     }
     private fun client() = DynamoDbAsyncClient.builder().endpointOverride(URI(checkNotNull(endpoint))).region(Region.US_WEST_2).credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create("local", "local"))).build()
     private fun runRustInterop(operation: String, table: String, prefix: ByteArray, root: String, key: String, value: String) { val repository = generateSequence(java.nio.file.Path.of(System.getProperty("user.dir"))) { it.parent }.first { Files.exists(it.resolve("stores/prolly-store-dynamodb/Cargo.toml")) }; val process = ProcessBuilder("cargo", "run", "--quiet", "--manifest-path", "stores/prolly-store-dynamodb/Cargo.toml", "--example", "language_interop", "--", operation, endpoint, table, prefix.hex(), root, key, value).directory(repository.toFile()).redirectErrorStream(true).start(); val output = process.inputStream.bufferedReader().use { it.readText() }; check(process.waitFor() == 0) { "Rust DynamoDB interop failed: $output" } }
@@ -107,6 +109,7 @@ class DynamoDbStoreTest {
 private fun proxyClient(handler: (String, Any?) -> Any): DynamoDbAsyncClient = Proxy.newProxyInstance(DynamoDbAsyncClient::class.java.classLoader, arrayOf(DynamoDbAsyncClient::class.java)) { _, method, args -> when (method.name) { "serviceName" -> "DynamoDb"; "close" -> Unit; else -> handler(method.name, args?.firstOrNull()).let { if (it is CompletableFuture<*>) it else CompletableFuture.completedFuture(it) } } } as DynamoDbAsyncClient
 private fun valueItem(key: Map<String, AttributeValue>): Map<String, AttributeValue> { val bytes = key["pk"]!!.b().asByteArray(); return mapOf("pk" to key["pk"]!!, "value" to AttributeValue.builder().b(SdkBytes.fromUtf8String("v${bytes.last().toUByte()}" )).build()) }
 private fun raw(client: DynamoDbAsyncClient, table: String, key: ByteArray): ByteArray = client.getItem(GetItemRequest.builder().tableName(table).key(mapOf("pk" to AttributeValue.builder().b(SdkBytes.fromByteArray(key)).build())).consistentRead(true).build()).get().item()["value"]!!.b().asByteArray()
+private fun rawRoot(client: DynamoDbAsyncClient, table: String, prefix: ByteArray, name: ByteArray): ByteArray = client.getItem(GetItemRequest.builder().tableName(table).key(mapOf("pk" to AttributeValue.builder().b(SdkBytes.fromByteArray("roots:".bytes() + prefix)).build(), "sk" to AttributeValue.builder().b(SdkBytes.fromByteArray(byteArrayOf(1) + name)).build())).consistentRead(true).build()).get().item()["value"]!!.b().asByteArray()
 private fun String.bytes() = encodeToByteArray()
 private fun ByteArray.hex() = joinToString("") { "%02x".format(it.toInt() and 0xff) }
 private fun specialBytes(length: Int) = ByteArray(length) { byteArrayOf(0, 0x7f, 0x80.toByte(), 0xff.toByte())[it % 4] }
