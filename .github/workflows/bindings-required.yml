@@ -62,6 +62,7 @@ jobs:
           ruby-version: "3.3"
           bundler-cache: false
       - run: cargo test --locked --manifest-path bindings/uniffi/Cargo.toml --target-dir target
+      - run: cargo build --locked --manifest-path bindings/uniffi/Cargo.toml --target-dir target
       - run: npm --prefix bindings/node ci
       - run: npm --prefix bindings/node run build:native:release
       - run: npm --prefix bindings/node run typecheck
