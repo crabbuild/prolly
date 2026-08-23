@@ -61,8 +61,8 @@ case "$(uname -s)" in
 esac
 export PROLLY_BINDINGS_LIBRARY="${PROLLY_BINDINGS_LIBRARY:-$ROOT_DIR/target/debug/$NATIVE_LIBRARY}"
 export PROLLY_BINDINGS_LIBRARY_DIR="${PROLLY_BINDINGS_LIBRARY_DIR:-$ROOT_DIR/target/debug}"
-export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-$ROOT_DIR/target/debug}"
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-$ROOT_DIR/target/debug}"
+export DYLD_LIBRARY_PATH="$ROOT_DIR/target/debug${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$ROOT_DIR/target/debug${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 cd "$ROOT_DIR"
 cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
