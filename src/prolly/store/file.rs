@@ -895,9 +895,7 @@ fn decode_hex(input: &str) -> Option<Vec<u8>> {
     }
     input
         .as_bytes()
-        .as_chunks::<2>()
-        .0
-        .iter()
+        .chunks_exact(2)
         .map(|pair| Some((hex_value(pair[0])? << 4) | hex_value(pair[1])?))
         .collect()
 }

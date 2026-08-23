@@ -361,11 +361,11 @@ impl<'a> ProximityVectorRef<'a> {
     }
 
     pub fn iter(&self) -> impl ExactSizeIterator<Item = f32> + '_ {
-        self.bytes
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|bytes| f32::from_bits(u32::from_le_bytes(*bytes)))
+        self.bytes.chunks_exact(4).map(|bytes| {
+            f32::from_bits(u32::from_le_bytes(
+                bytes.try_into().expect("validated vector component"),
+            ))
+        })
     }
 
     pub fn copy_to_slice(&self, output: &mut [f32]) -> Result<(), Error> {

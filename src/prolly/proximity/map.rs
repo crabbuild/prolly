@@ -1852,11 +1852,12 @@ pub(super) fn encoded_vector_matches(
     encoded.dimensions as usize == expected.len()
         && encoded
             .bytes
-            .as_chunks::<4>()
-            .0
-            .iter()
+            .chunks_exact(4)
             .zip(expected)
-            .all(|(bytes, expected)| u32::from_le_bytes(*bytes) == expected.to_bits())
+            .all(|(bytes, expected)| {
+                u32::from_le_bytes(bytes.try_into().expect("validated vector component"))
+                    == expected.to_bits()
+            })
 }
 
 pub(super) fn encoded_vectors_equal(

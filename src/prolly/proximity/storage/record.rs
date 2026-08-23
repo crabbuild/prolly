@@ -41,8 +41,10 @@ impl<'a> StoredRecordRef<'a> {
             .and_then(|value| value.checked_mul(4))
             .ok_or_else(|| reader.invalid("vector length overflow"))?;
         let vector = reader.take(vector_bytes)?;
-        for component in vector.as_chunks::<4>().0 {
-            let value = f32::from_bits(u32::from_le_bytes(*component));
+        for component in vector.chunks_exact(4) {
+            let value = f32::from_bits(u32::from_le_bytes(
+                component.try_into().expect("four-byte vector component"),
+            ));
             if !value.is_finite() || value.to_bits() == 0x8000_0000 {
                 return Err(reader.invalid("non-canonical f32"));
             }

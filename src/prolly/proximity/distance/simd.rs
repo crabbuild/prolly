@@ -436,8 +436,10 @@ fn fill_tail<const L2: bool>(left: &[f32], right: &[f32], output: &mut [f64], st
     all(target_arch = "aarch64", target_endian = "little")
 ))]
 fn fill_encoded_tail<const L2: bool>(left: &[f32], right: &[u8], output: &mut [f64]) {
-    for (index, (&a, bytes)) in left.iter().zip(right.as_chunks::<4>().0).enumerate() {
-        let b = f32::from_bits(u32::from_le_bytes(*bytes));
+    for (index, (&a, bytes)) in left.iter().zip(right.chunks_exact(4)).enumerate() {
+        let b = f32::from_bits(u32::from_le_bytes(
+            bytes.try_into().expect("four-byte vector component"),
+        ));
         output[index] = if L2 {
             let delta = f64::from(a) - f64::from(b);
             delta * delta

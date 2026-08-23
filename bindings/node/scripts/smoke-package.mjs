@@ -19,6 +19,7 @@ function run(command, args, cwd) {
 }
 
 try {
+  run("npm", ["run", "build"], packageDir);
   const pack = JSON.parse(run("npm", ["pack", "--json", "--ignore-scripts"], packageDir))[0];
   tarball = join(packageDir, pack.filename);
   run("npm", ["init", "--yes"], scratch);
