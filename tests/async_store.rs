@@ -14,13 +14,12 @@ use common::{
 };
 use futures_util::StreamExt as _;
 use prolly::{
-    catalog_map_id, control_record_key, control_root_name, ActiveIndexControl, AsyncBatchBuilder,
-    AsyncBlobStore, AsyncProlly, AsyncSortedBatchBuilder, BatchBuilder, BatchOp, BlobRef,
-    BlobStore, Cid, Config, CrdtConfig, CrdtResolution, DeletePolicy, Diff, Error, IndexControl,
+    AsyncBatchBuilder, AsyncBlobStore, AsyncProlly, AsyncSortedBatchBuilder, BatchBuilder, BatchOp,
+    BlobRef, BlobStore, Cid, Config, CrdtConfig, CrdtResolution, DeletePolicy, Diff, Error,
     LargeValueConfig, MemBlobStore, MemBlobStoreError, MemStore, MemStoreError, MultiValueSet,
     Mutation, NamedRootRetention, NamedRootUpdate, Node, NodeLayoutSpec, Prolly, RangeCursor,
-    Resolution, ReverseCursor, Store, SyncBlobStoreAsAsync, SyncStoreAsAsync, TimestampedValue,
-    ValueRef,
+    Resolution, ReverseCursor, SecondaryIndexRegistry, Store, SyncBlobStoreAsAsync,
+    SyncStoreAsAsync, TimestampedValue, ValueRef,
 };
 #[cfg(feature = "tokio")]
 use prolly::{AsyncStore, TokioBlockingBlobStore, TokioBlockingStore};
@@ -248,32 +247,14 @@ fn async_raw_versioned_map_writes_observe_the_index_control_fence() {
     block_on(async {
         let store = Arc::new(MemStore::new());
         let prolly = AsyncProlly::new(SyncStoreAsAsync::new(store), Config::default());
-        let map = prolly.versioned_map(b"users");
-        map.put(b"user-1", b"Ada").await.unwrap();
-
-        let control = IndexControl {
-            source_map_id: b"users".to_vec(),
-            catalog_map_id: catalog_map_id(b"users"),
-            active: vec![ActiveIndexControl {
-                name: b"by-status".to_vec(),
-                fingerprint: Cid([7; 32]),
-            }],
-        };
-        let control_tree = prolly
-            .put(
-                &prolly.create(),
-                control_record_key(),
-                control.to_bytes().unwrap(),
-            )
+        let indexed = prolly
+            .indexed_map(b"users", SecondaryIndexRegistry::new())
             .await
             .unwrap();
-        prolly
-            .publish_named_root(&control_root_name(b"users"), &control_tree)
-            .await
-            .unwrap();
+        indexed.put(b"user-1", b"Ada").await.unwrap();
 
         assert!(matches!(
-            map.put(b"user-2", b"Grace").await,
+            prolly.versioned_map(b"users").put(b"user-2", b"Grace").await,
             Err(Error::IndexesRequireIndexedMap { map_id, .. }) if map_id == b"users"
         ));
     });

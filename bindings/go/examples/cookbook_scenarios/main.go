@@ -25,7 +25,7 @@ var scenarios = []string{
 
 func main() {
 	for _, scenario := range scenarios {
-		cmd := exec.Command("go", "run", scenario)
+		cmd := exec.Command("go", "run", "-tags", "prolly_dev", scenario)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {

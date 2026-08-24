@@ -30,11 +30,13 @@ test("DynamoDB provider", { skip: endpoint === undefined }, async (suite) => {
       const description = await client.send(new DescribeTableCommand({ TableName: tableName }));
       assert.deepEqual(description.Table?.KeySchema, [{ AttributeName: "pk", KeyType: "HASH" }]);
       assert.ok(description.Table?.AttributeDefinitions?.some((value) => value.AttributeName === "pk" && value.AttributeType === "B"));
+      const roots = await client.send(new DescribeTableCommand({ TableName: `${tableName}-roots` }));
+      assert.deepEqual(roots.Table?.KeySchema, [{ AttributeName: "pk", KeyType: "HASH" }, { AttributeName: "sk", KeyType: "RANGE" }]);
 
       const cid = specialBytes(32); const root = specialBytes(9); const namespace = specialBytes(7); const hintKey = specialBytes(5);
       await store.putNode(cid, bytes("node")); await store.putRootManifest(root, bytes("manifest")); await store.putHint(namespace, hintKey, bytes("hint"));
       assert.equal(Buffer.from(await rawValue(client, tableName, familyKey(prefix, "node:", cid))).toString(), "node");
-      assert.equal(Buffer.from(await rawValue(client, tableName, familyKey(prefix, "root:", root))).toString(), "manifest");
+      assert.equal(Buffer.from(await rawRootValue(client, `${tableName}-roots`, prefix, root)).toString(), "manifest");
       assert.equal(Buffer.from(await rawValue(client, tableName, expectedHintKey(prefix, namespace, hintKey))).toString(), "hint");
       assert.ok((await store.listNodeCids()).some((value) => Buffer.from(value).equals(cid)));
     });
@@ -116,10 +118,11 @@ async function withStore(run: (client: DynamoDBClient, store: DynamoDbStore, tab
   const tableName = `prolly_node_${process.pid}_${Date.now()}_${Math.random().toString(16).slice(2)}`; const prefix = Buffer.from("prolly:test:node:"); const store = new DynamoDbStore(client, { tableName, keyPrefix: prefix });
   await store.initializeTable();
   try { await run(client, store, tableName, prefix); }
-  finally { await store.close(); await client.send(new DeleteTableCommand({ TableName: tableName })).catch(() => undefined); client.destroy(); }
+  finally { await store.close(); await client.send(new DeleteTableCommand({ TableName: `${tableName}-roots` })).catch(() => undefined); await client.send(new DeleteTableCommand({ TableName: tableName })).catch(() => undefined); client.destroy(); }
 }
 
 async function rawValue(client: DynamoDBClient, tableName: string, key: Uint8Array): Promise<Uint8Array> { const output = await client.send(new GetItemCommand({ TableName: tableName, Key: { pk: { B: key } }, ConsistentRead: true })); return (output.Item?.value as { B: Uint8Array }).B; }
+async function rawRootValue(client: DynamoDBClient, tableName: string, prefix: Uint8Array, name: Uint8Array): Promise<Uint8Array> { const output = await client.send(new GetItemCommand({ TableName: tableName, Key: { pk: { B: Buffer.concat([Buffer.from("roots:"), Buffer.from(prefix)]) }, sk: { B: Buffer.concat([Buffer.from([1]), Buffer.from(name)]) } }, ConsistentRead: true })); return (output.Item?.value as { B: Uint8Array }).B; }
 function familyKey(prefix: Uint8Array, family: string, suffix: Uint8Array): Buffer { return Buffer.concat([Buffer.from(prefix), Buffer.from(family), Buffer.from(suffix)]); }
 function expectedHintKey(prefix: Uint8Array, namespace: Uint8Array, key: Uint8Array): Buffer { const length = Buffer.alloc(8); length.writeBigUInt64BE(BigInt(namespace.byteLength)); return Buffer.concat([Buffer.from(prefix), Buffer.from("hint:"), length, Buffer.from(namespace), Buffer.from(key)]); }
 async function runRustInterop(operation: "write" | "verify", tableName: string, prefix: Uint8Array, root: string, key: string, value: string): Promise<void> { await execFileAsync("cargo", ["run", "--quiet", "--manifest-path", "stores/prolly-store-dynamodb/Cargo.toml", "--example", "language_interop", "--", operation, endpoint!, tableName, Buffer.from(prefix).toString("hex"), root, key, value], { cwd: repositoryRoot }); }

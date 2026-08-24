@@ -73,7 +73,17 @@ export SPANNER_EMULATOR_HOST="127.0.0.1:$SPANNER_GRPC_PORT"
 
 node "$ROOT_DIR/scripts/verify-store-compatibility.mjs"
 
+if [[ "${PROLLY_STORE_SKIP_INSTALL:-0}" != "1" ]]; then
+  npm --prefix "$ROOT_DIR/bindings/node" ci --silent
+fi
+npm --prefix "$ROOT_DIR/bindings/node" run build:native
+npm --prefix "$ROOT_DIR/bindings/node" run build
+
 for module in sqlite postgres mysql redis dynamodb cosmosdb spanner pglite; do
+  if [[ "${PROLLY_STORE_SKIP_INSTALL:-0}" != "1" ]]; then
+    echo "installing Node store: $module"
+    npm --prefix "$ROOT_DIR/bindings/node/stores/$module" ci --silent
+  fi
   echo "checking Node store: $module"
   npm --prefix "$ROOT_DIR/bindings/node/stores/$module" run check
   echo "testing Node store: $module"

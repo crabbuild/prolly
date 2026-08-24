@@ -24,11 +24,21 @@ export type StoreErrorCode =
   | "cancelled"
   | "internal";
 
+const STORE_ERROR_BRAND = Symbol.for("build.crab.prolly.StoreError");
+
 export class StoreError extends Error {
   readonly code: StoreErrorCode;
   readonly retryable: boolean;
   readonly providerCode?: string;
   override readonly cause?: unknown;
+
+  static [Symbol.hasInstance](value: unknown): boolean {
+    return (
+      typeof value === "object" &&
+      value !== null &&
+      (value as Record<PropertyKey, unknown>)[STORE_ERROR_BRAND] === true
+    );
+  }
 
   constructor(
     code: StoreErrorCode,
@@ -45,6 +55,7 @@ export class StoreError extends Error {
     this.retryable = options.retryable ?? false;
     this.providerCode = options.providerCode;
     this.cause = options.cause;
+    Object.defineProperty(this, STORE_ERROR_BRAND, { value: true });
   }
 }
 

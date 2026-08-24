@@ -54,9 +54,15 @@ export PROLLY_REDIS_URL="redis://127.0.0.1:$REDIS_PORT" PROLLY_REDIS_ADDR="127.0
 export PROLLY_DYNAMODB_ENDPOINT="http://127.0.0.1:$DYNAMODB_PORT"
 export PROLLY_STORE_DYNAMODB_ENDPOINT="$PROLLY_DYNAMODB_ENDPOINT"
 export SPANNER_EMULATOR_HOST="127.0.0.1:$SPANNER_GRPC_PORT"
-export PROLLY_BINDINGS_LIBRARY="${PROLLY_BINDINGS_LIBRARY:-$ROOT_DIR/target/debug/libprolly_bindings.dylib}"
+case "$(uname -s)" in
+  Darwin) NATIVE_LIBRARY="libprolly_bindings.dylib" ;;
+  Linux) NATIVE_LIBRARY="libprolly_bindings.so" ;;
+  *) echo "unsupported platform for the all-language store gate: $(uname -s)" >&2; exit 1 ;;
+esac
+export PROLLY_BINDINGS_LIBRARY="${PROLLY_BINDINGS_LIBRARY:-$ROOT_DIR/target/debug/$NATIVE_LIBRARY}"
 export PROLLY_BINDINGS_LIBRARY_DIR="${PROLLY_BINDINGS_LIBRARY_DIR:-$ROOT_DIR/target/debug}"
-export DYLD_LIBRARY_PATH="${DYLD_LIBRARY_PATH:-$ROOT_DIR/target/debug}"
+export DYLD_LIBRARY_PATH="$ROOT_DIR/target/debug${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$ROOT_DIR/target/debug${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 cd "$ROOT_DIR"
 cargo build --manifest-path bindings/uniffi/Cargo.toml --target-dir target
@@ -104,6 +110,8 @@ for provider in sqlite postgres mysql redis dynamodb; do
   swift run --package-path bindings/swift "prolly-store-$provider-check"
 done
 
+if [[ "${PROLLY_STORE_SKIP_INSTALL:-0}" != "1" ]]; then npm --prefix bindings/wasm ci --silent; fi
+npm --prefix bindings/wasm run build:remote-store
 for provider in indexeddb opfs pglite; do
   echo "testing browser store: $provider"
   if [[ "${PROLLY_STORE_SKIP_INSTALL:-0}" != "1" ]]; then npm --prefix "bindings/wasm/stores/$provider" ci --silent; fi

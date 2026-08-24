@@ -316,7 +316,7 @@ mod async_tests {
             MergeTraceEvent::BatchMerge {
                 right_changes: 1,
                 mutations: 1,
-                append_only: false,
+                append_only: true,
             }
         )));
         assert!(explanation.trace.events.iter().any(|event| matches!(

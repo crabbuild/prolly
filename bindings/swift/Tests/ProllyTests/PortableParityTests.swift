@@ -372,9 +372,12 @@ final class PortableParityTests: XCTestCase {
             key[0] = Character("x").asciiValue!
             let updated = try await task.value
             XCTAssertEqual(try versioned.get(Data("k".utf8)), Data("v".utf8))
-            XCTAssertEqual(try await versioned.headAsync().value?.id, updated.id)
-            let snapshot = try XCTUnwrap(try await versioned.snapshotAtAsync(updated.id).value)
-            XCTAssertEqual(try await snapshot.getAsync(Data("k".utf8)).value, Data("v".utf8))
+            let asyncHead = try await versioned.headAsync().value
+            XCTAssertEqual(asyncHead?.id, updated.id)
+            let asyncSnapshot = try await versioned.snapshotAtAsync(updated.id).value
+            let snapshot = try XCTUnwrap(asyncSnapshot)
+            let asyncSnapshotValue = try await snapshot.getAsync(Data("k".utf8)).value
+            XCTAssertEqual(asyncSnapshotValue, Data("v".utf8))
             var bundle = try await snapshot.exportAsync().value
             let imported = try engine.versionedMap(Data("async-import".utf8))
             let pendingImport = imported.importAsHeadAsync(bundle)
@@ -382,9 +385,11 @@ final class PortableParityTests: XCTestCase {
             _ = try await pendingImport.value
             XCTAssertEqual(try imported.get(Data("k".utf8)), Data("v".utf8))
             let session = try snapshot.read()
-            XCTAssertEqual(try await session.getAsync(Data("k".utf8)).value, Data("v".utf8))
+            let asyncSessionValue = try await session.getAsync(Data("k".utf8)).value
+            XCTAssertEqual(asyncSessionValue, Data("v".utf8))
             session.close()
-            XCTAssertNotNil(try await subscription.pollAsync().value)
+            let asyncEvent = try await subscription.pollAsync().value
+            XCTAssertNotNil(asyncEvent)
             snapshot.close()
             subscription.close()
         }

@@ -35,6 +35,7 @@
   },
   "scripts": {
     "build": "npm run build:wasm && npm run build:ts",
+    "build:remote-store": "tsc -p tsconfig.remote-store.json",
     "build:ts": "tsc -p tsconfig.json",
     "check:rust": "cargo check --manifest-path Cargo.toml --target wasm32-unknown-unknown --target-dir ../../target",
     "build:wasm": "cargo build --locked --manifest-path Cargo.toml --release --target wasm32-unknown-unknown --target-dir ../../target && wasm-bindgen ../../target/wasm32-unknown-unknown/release/prolly_wasm.wasm --target web --typescript --out-dir pkg",

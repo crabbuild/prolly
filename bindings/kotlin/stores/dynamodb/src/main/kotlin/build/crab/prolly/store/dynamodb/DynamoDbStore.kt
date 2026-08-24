@@ -51,6 +51,7 @@ import software.amazon.awssdk.services.dynamodb.model.KeysAndAttributes
 import software.amazon.awssdk.services.dynamodb.model.Put
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest
 import software.amazon.awssdk.services.dynamodb.model.PutRequest
+import software.amazon.awssdk.services.dynamodb.model.QueryRequest
 import software.amazon.awssdk.services.dynamodb.model.ResourceInUseException
 import software.amazon.awssdk.services.dynamodb.model.ResourceNotFoundException
 import software.amazon.awssdk.services.dynamodb.model.ReturnValuesOnConditionCheckFailure
@@ -68,6 +69,7 @@ data class DynamoDbStoreOptions(
     val keyPrefix: ByteArray = "prolly:".encodeToByteArray(),
     val adapterName: String = "dynamodb-v1",
     val readParallelism: UInt = 16u,
+    val rootTableName: String = "$tableName-roots",
 )
 
 class DynamoDbStore constructor(
@@ -77,6 +79,7 @@ class DynamoDbStore constructor(
     private val closed = AtomicBoolean(false)
     private val javaScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val tableName = options.tableName.also { require(it.isNotBlank()) { "DynamoDB table name is required" } }
+    private val rootTableName = options.rootTableName.also { require(it.isNotBlank()) { "DynamoDB root table name is required" } }
     private val keyPrefix = options.keyPrefix.copyOf()
     private val storeDescriptor = validateStoreDescriptor(StoreDescriptor(
         2u, options.adapterName.ifBlank { "dynamodb-v1" }, "dynamodb", 1u,
@@ -87,24 +90,12 @@ class DynamoDbStore constructor(
     constructor(client: DynamoDbAsyncClient, tableName: String, keyPrefix: ByteArray) : this(client, DynamoDbStoreOptions(tableName, keyPrefix))
 
     suspend fun initializeTable() = operation("initialize_table") {
-        try { validateTable(client.describeTable(DescribeTableRequest.builder().tableName(tableName).build()).await().table()); return@operation }
-        catch (_: ResourceNotFoundException) { }
-        try {
-            client.createTable(CreateTableRequest.builder().tableName(tableName)
-                .attributeDefinitions(AttributeDefinition.builder().attributeName(PK).attributeType(ScalarAttributeType.B).build())
-                .keySchema(KeySchemaElement.builder().attributeName(PK).keyType(KeyType.HASH).build())
-                .billingMode(BillingMode.PAY_PER_REQUEST).build()).await()
-        } catch (_: ResourceInUseException) { }
-        repeat(100) {
-            try { val table = client.describeTable(DescribeTableRequest.builder().tableName(tableName).build()).await().table(); if (table.tableStatus() == TableStatus.ACTIVE) { validateTable(table); return@operation } }
-            catch (_: ResourceNotFoundException) { }
-            delay(50)
-        }
-        throw StoreException(StoreError("unavailable", "DynamoDB table did not become active", true))
+        initializeOneTable(tableName, false)
+        initializeOneTable(rootTableName, true)
     }
 
     fun initializeTableAsync(): CompletableFuture<Unit> = javaScope.future { initializeTable() }
-    suspend fun deleteTable() = operation("delete_table") { try { client.deleteTable(DeleteTableRequest.builder().tableName(tableName).build()).await() } catch (_: ResourceNotFoundException) { } }
+    suspend fun deleteTable() = operation("delete_table") { for (name in listOf(rootTableName, tableName)) try { client.deleteTable(DeleteTableRequest.builder().tableName(name).build()).await() } catch (_: ResourceNotFoundException) { } }
     override suspend fun descriptor(): StoreDescriptor = operation("descriptor") { storeDescriptor }
     override suspend fun getNode(cid: ByteArray): OptionalBytes = get(familyKey(NODE, cid), "get_node")
     override suspend fun putNode(cid: ByteArray, value: ByteArray) = put(familyKey(NODE, cid), value, "put_node")
@@ -141,23 +132,28 @@ class DynamoDbStore constructor(
     override suspend fun getHint(namespace: ByteArray, key: ByteArray): OptionalBytes = get(hintKey(namespace, key), "get_hint")
     override suspend fun putHint(namespace: ByteArray, key: ByteArray, value: ByteArray) = put(hintKey(namespace, key), value, "put_hint")
     override suspend fun batchPutNodesWithHint(nodes: List<NodeEntry>, namespace: ByteArray, key: ByteArray, value: ByteArray) { batchNodes(nodes.map { NodeMutation.Upsert(it.cid, it.node) }); putHint(namespace, key, value) }
-    override suspend fun getRootManifest(name: ByteArray): OptionalBytes = get(familyKey(ROOT, name), "get_root_manifest")
-    override suspend fun putRootManifest(name: ByteArray, manifest: ByteArray) = put(familyKey(ROOT, name), manifest, "put_root_manifest")
-    override suspend fun deleteRootManifest(name: ByteArray) = delete(familyKey(ROOT, name), "delete_root_manifest")
+    override suspend fun getRootManifest(name: ByteArray): OptionalBytes = operation("get_root_manifest") { getRootRaw(name) }
+    override suspend fun putRootManifest(name: ByteArray, manifest: ByteArray) = operation("put_root_manifest") { client.putItem(PutItemRequest.builder().tableName(rootTableName).item(rootItem(name, manifest)).build()).await(); Unit }
+    override suspend fun deleteRootManifest(name: ByteArray) = operation("delete_root_manifest") { client.deleteItem(DeleteItemRequest.builder().tableName(rootTableName).key(rootKey(name)).build()).await(); Unit }
 
     override suspend fun compareAndSwapRootManifest(name: ByteArray, expected: OptionalBytes, replacement: OptionalBytes): RootCasResult {
-        val key = familyKey(ROOT, name); val wanted = OptionalBytes.of(expected.present, expected.value); val next = OptionalBytes.of(replacement.present, replacement.value)
+        val key = rootKey(name); val wanted = OptionalBytes.of(expected.present, expected.value); val next = OptionalBytes.of(replacement.present, replacement.value)
         return operation("compare_and_swap_root_manifest") {
             try {
-                if (next.present) { val builder = PutItemRequest.builder().tableName(tableName).item(item(key, next.value)).returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, wanted); client.putItem(builder.build()).await() }
-                else { val builder = DeleteItemRequest.builder().tableName(tableName).key(keyItem(key)).returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, wanted); client.deleteItem(builder.build()).await() }
+                if (next.present) { val builder = PutItemRequest.builder().tableName(rootTableName).item(rootItem(name, next.value)).returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, wanted); client.putItem(builder.build()).await() }
+                else { val builder = DeleteItemRequest.builder().tableName(rootTableName).key(key).returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, wanted); client.deleteItem(builder.build()).await() }
                 RootCasResult(true, OptionalBytes.of(next.present, next.value))
-            } catch (_: ConditionalCheckFailedException) { RootCasResult(false, getRaw(key)) }
+            } catch (_: ConditionalCheckFailedException) { RootCasResult(false, getRootRaw(name)) }
         }
     }
 
     override suspend fun listRootManifests(): List<NamedStoreRoot> = operation("list_root_manifests") {
-        val prefix = keyPrefix + ROOT; scanKeys(prefix).map { it.copyOfRange(prefix.size, it.size) }.sortedWith(BYTE_ARRAY_COMPARATOR).mapNotNull { name -> val value = getRaw(familyKey(ROOT, name)); if (value.present) NamedStoreRoot(name, value.value) else null }
+        val roots = mutableListOf<NamedStoreRoot>(); var start: Map<String, AttributeValue>? = null
+        do {
+            val output = client.query(QueryRequest.builder().tableName(rootTableName).consistentRead(true).keyConditionExpression("#pk = :pk AND begins_with(#sk, :entry)").projectionExpression("#sk, #value").expressionAttributeNames(mapOf("#pk" to PK, "#sk" to SK, "#value" to VALUE)).expressionAttributeValues(mapOf(":pk" to attribute(rootPartitionKey()), ":entry" to attribute(ROOT_ENTRY))).exclusiveStartKey(start).build()).await()
+            output.items().forEach { roots += NamedStoreRoot(binary(it, SK).copyOfRange(ROOT_ENTRY.size, binary(it, SK).size), binary(it, VALUE)) }; start = output.lastEvaluatedKey()
+        } while (!start.isNullOrEmpty())
+        roots.sortedWith(compareBy(BYTE_ARRAY_COMPARATOR) { it.name })
     }
 
     override suspend fun commitTransaction(nodes: List<NodeMutation>, conditions: List<RootCondition>, roots: List<RootWrite>): StoreTransactionResult {
@@ -166,40 +162,55 @@ class DynamoDbStore constructor(
         if (count > TRANSACTION_LIMIT) throw limit("DynamoDB transaction has $count operations, exceeding the $TRANSACTION_LIMIT operation limit")
         return operation("commit_transaction") {
             val conditionByName = ownedConditions.associateBy { it.name.hex() }; val items = mutableListOf<TransactWriteItem>()
-            ownedConditions.filter { it.name.hex() !in written }.forEach { condition -> val builder = ConditionCheck.builder().tableName(tableName).key(keyItem(familyKey(ROOT, condition.name))).returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, condition.expected); items += TransactWriteItem.builder().conditionCheck(builder.build()).build() }
+            ownedConditions.filter { it.name.hex() !in written }.forEach { condition -> val builder = ConditionCheck.builder().tableName(rootTableName).key(rootKey(condition.name)).returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, condition.expected); items += TransactWriteItem.builder().conditionCheck(builder.build()).build() }
             ownedRoots.forEach { root ->
                 val condition = conditionByName[root.name.hex()]
                 when (root) {
-                    is RootWrite.Put -> { val builder = Put.builder().tableName(tableName).item(item(familyKey(ROOT, root.name), root.manifest)); if (condition != null) { builder.returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, condition.expected) }; items += TransactWriteItem.builder().put(builder.build()).build() }
-                    is RootWrite.Delete -> { val builder = Delete.builder().tableName(tableName).key(keyItem(familyKey(ROOT, root.name))); if (condition != null) { builder.returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, condition.expected) }; items += TransactWriteItem.builder().delete(builder.build()).build() }
+                    is RootWrite.Put -> { val builder = Put.builder().tableName(rootTableName).item(rootItem(root.name, root.manifest)); if (condition != null) { builder.returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, condition.expected) }; items += TransactWriteItem.builder().put(builder.build()).build() }
+                    is RootWrite.Delete -> { val builder = Delete.builder().tableName(rootTableName).key(rootKey(root.name)); if (condition != null) { builder.returnValuesOnConditionCheckFailure(ReturnValuesOnConditionCheckFailure.ALL_OLD); applyCondition(builder, condition.expected) }; items += TransactWriteItem.builder().delete(builder.build()).build() }
                 }
             }
             ownedNodes.forEach { node -> items += when (node) { is NodeMutation.Upsert -> TransactWriteItem.builder().put(Put.builder().tableName(tableName).item(item(familyKey(NODE, node.cid), node.node)).build()).build(); is NodeMutation.Delete -> TransactWriteItem.builder().delete(Delete.builder().tableName(tableName).key(keyItem(familyKey(NODE, node.cid))).build()).build() } }
             if (items.isEmpty()) return@operation StoreTransactionResult.applied()
             try { client.transactWriteItems(TransactWriteItemsRequest.builder().transactItems(items).build()).await(); StoreTransactionResult.applied() }
             catch (error: TransactionCanceledException) {
-                ownedConditions.forEach { condition -> val current = getRaw(familyKey(ROOT, condition.name)); if (!optionalEqual(current, condition.expected)) return@operation StoreTransactionResult.conflict(StoreTransactionConflict(condition.name, condition.expected, current)) }
+                ownedConditions.forEach { condition -> val current = getRootRaw(condition.name); if (!optionalEqual(current, condition.expected)) return@operation StoreTransactionResult.conflict(StoreTransactionConflict(condition.name, condition.expected, current)) }
                 throw error
             }
         }
     }
 
-    suspend fun clearNamespace() { if (keyPrefix.isEmpty()) throw StoreException(StoreError("invalid_argument", "refusing to clear an empty DynamoDB key prefix")); operation("clear_namespace") { batchWrite(scanKeys(keyPrefix).map { WriteRequest.builder().deleteRequest(DeleteRequest.builder().key(keyItem(it)).build()).build() }) } }
+    suspend fun clearNamespace() { if (keyPrefix.isEmpty()) throw StoreException(StoreError("invalid_argument", "refusing to clear an empty DynamoDB key prefix")); operation("clear_namespace") { batchWrite(scanKeys(keyPrefix).map { WriteRequest.builder().deleteRequest(DeleteRequest.builder().key(keyItem(it)).build()).build() }); batchWrite(rootKeys().map { WriteRequest.builder().deleteRequest(DeleteRequest.builder().key(it).build()).build() }, rootTableName) } }
     override fun close() { if (closed.compareAndSet(false, true)) javaScope.cancel() }
 
     private suspend fun get(key: ByteArray, name: String) = operation(name) { getRaw(key) }
     private suspend fun getRaw(key: ByteArray): OptionalBytes { val item = client.getItem(GetItemRequest.builder().tableName(tableName).key(keyItem(key)).consistentRead(true).projectionExpression("#value").expressionAttributeNames(mapOf("#value" to VALUE)).build()).await().item(); return if (item.isEmpty()) OptionalBytes.missing() else OptionalBytes.present(binary(item, VALUE)) }
+    private suspend fun getRootRaw(name: ByteArray): OptionalBytes { val item = client.getItem(GetItemRequest.builder().tableName(rootTableName).key(rootKey(name)).consistentRead(true).projectionExpression("#value").expressionAttributeNames(mapOf("#value" to VALUE)).build()).await().item(); return if (item.isEmpty()) OptionalBytes.missing() else OptionalBytes.present(binary(item, VALUE)) }
     private suspend fun put(key: ByteArray, value: ByteArray, name: String) { val owned = value.copyOf(); operation(name) { client.putItem(PutItemRequest.builder().tableName(tableName).item(item(key, owned)).build()).await() } }
     private suspend fun delete(key: ByteArray, name: String) { operation(name) { client.deleteItem(DeleteItemRequest.builder().tableName(tableName).key(keyItem(key)).build()).await() } }
-    private suspend fun batchWrite(requests: List<WriteRequest>) { requests.chunked(BATCH_WRITE_LIMIT).forEach { chunk -> var pending = chunk; repeat(RETRY_LIMIT) { attempt -> if (pending.isEmpty()) return@repeat; val output = client.batchWriteItem(BatchWriteItemRequest.builder().requestItems(mapOf(tableName to pending)).build()).await(); pending = output.unprocessedItems()[tableName].orEmpty(); if (pending.isNotEmpty()) { if (attempt + 1 == RETRY_LIMIT) throw limit("DynamoDB batch write left ${pending.size} requests unprocessed"); delay(10L shl minOf(attempt, 6)) } } } }
+    private suspend fun batchWrite(requests: List<WriteRequest>, targetTable: String = tableName) { requests.chunked(BATCH_WRITE_LIMIT).forEach { chunk -> var pending = chunk; repeat(RETRY_LIMIT) { attempt -> if (pending.isEmpty()) return@repeat; val output = client.batchWriteItem(BatchWriteItemRequest.builder().requestItems(mapOf(targetTable to pending)).build()).await(); pending = output.unprocessedItems()[targetTable].orEmpty(); if (pending.isNotEmpty()) { if (attempt + 1 == RETRY_LIMIT) throw limit("DynamoDB batch write left ${pending.size} requests unprocessed"); delay(10L shl minOf(attempt, 6)) } } } }
     private suspend fun scanKeys(prefix: ByteArray): List<ByteArray> { val keys = mutableListOf<ByteArray>(); var start: Map<String, AttributeValue>? = null; do { val output = client.scan(ScanRequest.builder().tableName(tableName).consistentRead(true).projectionExpression("#pk").filterExpression("begins_with(#pk, :prefix)").expressionAttributeNames(mapOf("#pk" to PK)).expressionAttributeValues(mapOf(":prefix" to attribute(prefix))).exclusiveStartKey(start).build()).await(); output.items().forEach { keys += binary(it, PK) }; start = output.lastEvaluatedKey() } while (!start.isNullOrEmpty()); return keys }
     private fun familyKey(family: ByteArray, suffix: ByteArray) = keyPrefix + family + suffix.copyOf()
+    private fun rootPartitionKey() = ROOT_PARTITION + keyPrefix
+    private fun rootSortKey(name: ByteArray) = ROOT_ENTRY + name.copyOf()
+    private fun rootKey(name: ByteArray) = mapOf(PK to attribute(rootPartitionKey()), SK to attribute(rootSortKey(name)))
+    private fun rootItem(name: ByteArray, value: ByteArray) = rootKey(name) + (VALUE to attribute(value))
+    private suspend fun rootKeys(): List<Map<String, AttributeValue>> { val keys = mutableListOf<Map<String, AttributeValue>>(); var start: Map<String, AttributeValue>? = null; do { val output = client.query(QueryRequest.builder().tableName(rootTableName).consistentRead(true).keyConditionExpression("#pk = :pk").projectionExpression("#sk").expressionAttributeNames(mapOf("#pk" to PK, "#sk" to SK)).expressionAttributeValues(mapOf(":pk" to attribute(rootPartitionKey()))).exclusiveStartKey(start).build()).await(); output.items().forEach { keys += rootKey(binary(it, SK).copyOfRange(ROOT_ENTRY.size, binary(it, SK).size)) }; start = output.lastEvaluatedKey() } while (!start.isNullOrEmpty()); return keys }
+    private suspend fun initializeOneTable(name: String, root: Boolean) {
+        val validate = if (root) ::validateRootTable else ::validateTable
+        try { val table = client.describeTable(DescribeTableRequest.builder().tableName(name).build()).await().table(); validate(table); if (table.tableStatus() == TableStatus.ACTIVE) return }
+        catch (_: ResourceNotFoundException) {
+            try { client.createTable(CreateTableRequest.builder().tableName(name).attributeDefinitions(if (root) listOf(AttributeDefinition.builder().attributeName(PK).attributeType(ScalarAttributeType.B).build(), AttributeDefinition.builder().attributeName(SK).attributeType(ScalarAttributeType.B).build()) else listOf(AttributeDefinition.builder().attributeName(PK).attributeType(ScalarAttributeType.B).build())).keySchema(if (root) listOf(KeySchemaElement.builder().attributeName(PK).keyType(KeyType.HASH).build(), KeySchemaElement.builder().attributeName(SK).keyType(KeyType.RANGE).build()) else listOf(KeySchemaElement.builder().attributeName(PK).keyType(KeyType.HASH).build())).billingMode(BillingMode.PAY_PER_REQUEST).build()).await() } catch (_: ResourceInUseException) { }
+        }
+        repeat(100) { try { val table = client.describeTable(DescribeTableRequest.builder().tableName(name).build()).await().table(); if (table.tableStatus() == TableStatus.ACTIVE) { validate(table); return } } catch (_: ResourceNotFoundException) { }; delay(50) }
+        throw StoreException(StoreError("unavailable", "DynamoDB table $name did not become active", true))
+    }
     private fun hintKey(namespace: ByteArray, key: ByteArray) = keyPrefix + HINT + ByteBuffer.allocate(8).putLong(namespace.size.toLong()).array() + namespace.copyOf() + key.copyOf()
     private suspend fun <T> operation(name: String, block: suspend () -> T): T { if (closed.get()) throw StoreException(StoreError("internal", "DynamoDB store is closed")); return try { block() } catch (error: CancellationException) { throw error } catch (error: StoreException) { throw error } catch (error: Throwable) { throw dynamoError(name, unwrap(error)) } }
 }
 
-private const val PK = "pk"; private const val VALUE = "value"; private const val BATCH_GET_LIMIT = 100; private const val BATCH_WRITE_LIMIT = 25; private const val TRANSACTION_LIMIT = 100; private const val RETRY_LIMIT = 8
-private val NODE = "node:".encodeToByteArray(); private val ROOT = "root:".encodeToByteArray(); private val HINT = "hint:".encodeToByteArray()
+private const val PK = "pk"; private const val SK = "sk"; private const val VALUE = "value"; private const val BATCH_GET_LIMIT = 100; private const val BATCH_WRITE_LIMIT = 25; private const val TRANSACTION_LIMIT = 100; private const val RETRY_LIMIT = 8
+private val NODE = "node:".encodeToByteArray(); private val HINT = "hint:".encodeToByteArray(); private val ROOT_PARTITION = "roots:".encodeToByteArray(); private val ROOT_ENTRY = byteArrayOf(1)
 private fun attribute(value: ByteArray) = AttributeValue.builder().b(SdkBytes.fromByteArray(value.copyOf())).build()
 private fun keyItem(key: ByteArray) = mapOf(PK to attribute(key))
 private fun item(key: ByteArray, value: ByteArray) = mapOf(PK to attribute(key), VALUE to attribute(value))
@@ -210,6 +221,7 @@ private fun applyCondition(builder: ConditionCheck.Builder, expected: OptionalBy
 private fun applyCondition(builder: Put.Builder, expected: OptionalBytes) { if (expected.present) builder.conditionExpression("#value = :expected").expressionAttributeNames(mapOf("#value" to VALUE)).expressionAttributeValues(mapOf(":expected" to attribute(expected.value))) else builder.conditionExpression("attribute_not_exists(#pk)").expressionAttributeNames(mapOf("#pk" to PK)) }
 private fun applyCondition(builder: Delete.Builder, expected: OptionalBytes) { if (expected.present) builder.conditionExpression("#value = :expected").expressionAttributeNames(mapOf("#value" to VALUE)).expressionAttributeValues(mapOf(":expected" to attribute(expected.value))) else builder.conditionExpression("attribute_not_exists(#pk)").expressionAttributeNames(mapOf("#pk" to PK)) }
 private fun validateTable(table: TableDescription?) { if (table == null || table.keySchema().size != 1 || table.keySchema()[0].attributeName() != PK || table.keySchema()[0].keyType() != KeyType.HASH || table.attributeDefinitions().none { it.attributeName() == PK && it.attributeType() == ScalarAttributeType.B }) throw StoreException(StoreError("invalid_argument", "DynamoDB table must use one binary HASH key named pk")) }
+private fun validateRootTable(table: TableDescription?) { if (table == null || table.keySchema().size != 2 || table.keySchema().none { it.attributeName() == PK && it.keyType() == KeyType.HASH } || table.keySchema().none { it.attributeName() == SK && it.keyType() == KeyType.RANGE } || listOf(PK, SK).any { name -> table.attributeDefinitions().none { it.attributeName() == name && it.attributeType() == ScalarAttributeType.B } }) throw StoreException(StoreError("invalid_argument", "DynamoDB root table must use binary HASH pk and RANGE sk keys")) }
 private fun cloneMutation(value: NodeMutation): NodeMutation = when (value) { is NodeMutation.Upsert -> NodeMutation.Upsert(value.cid, value.node); is NodeMutation.Delete -> NodeMutation.Delete(value.cid) }
 private fun cloneRootWrite(value: RootWrite): RootWrite = when (value) { is RootWrite.Put -> RootWrite.Put(value.name, value.manifest); is RootWrite.Delete -> RootWrite.Delete(value.name) }
 private fun optionalEqual(left: OptionalBytes, right: OptionalBytes) = left.present == right.present && (!left.present || left.value.contentEquals(right.value))

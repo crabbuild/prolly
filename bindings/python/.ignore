@@ -2,3 +2,5 @@
 # checks. Maturin must replace the entire directory with target-matched glue and
 # its native library when building a wheel.
 prolly/uniffi/
+**/__pycache__/
+**/*.py[cod]

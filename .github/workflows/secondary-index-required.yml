@@ -33,7 +33,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
       - run: cargo check --all-targets
-      - run: cargo clippy --all-targets -- -D warnings
+      # Rust 1.98 promoted chunks_exact_to_as_chunks to warn-by-default. Keep
+      # the existing MSRV-compatible parsing code until that migration is
+      # reviewed separately from binding releases.
+      - run: >-
+          cargo clippy --all-targets --
+          -D warnings -A clippy::chunks-exact-to-as-chunks
       - run: cargo test --all-targets
       - run: RUSTDOCFLAGS="-D warnings" cargo test --doc
       - run: >-
