@@ -66,7 +66,9 @@ warm/cold physical I/O, and sync/async logical parity before writing an atomic
 completion record. The harness asserts neighbor, exact-distance, plan,
 completion, and complete logical-statistic parity across scalar/SIMD/automatic
 and async execution. Shard zero also records an unskipped browser-WASM build
-and test smoke gate.
+and test smoke gate. `scripts/summarize_turboquant_qualification.py` accepts
+only the complete, disjoint shard set and emits consolidated rows plus separate
+forced-backend and `Auto` gate results.
 
 Smoke command:
 

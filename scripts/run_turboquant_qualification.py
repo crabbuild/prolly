@@ -81,6 +81,12 @@ class Cell:
         )
 
 
+@dataclass(frozen=True)
+class ParsedOutput:
+    preamble: dict[str, str]
+    rows: dict[str, list[list[str]]]
+
+
 def _rerank_cases(records: int, k: int) -> Iterable[tuple[str, int]]:
     yield from (("fixed", multiplier) for multiplier in FULL_RERANK)
     if records <= 10_000:
@@ -288,7 +294,7 @@ def _expected_preamble(cell: Cell, revision: str, repeats: int) -> dict[str, str
 
 def validate_output(
     output: str, cell: Cell, revision: str, workers: Sequence[int], repeats: int
-) -> None:
+) -> ParsedOutput:
     lines = output.splitlines()
     try:
         header_index = lines.index("operation,dimensions,threads,micros,metric_a,metric_b")
@@ -394,6 +400,7 @@ def validate_output(
                     raise QualificationError(
                         f"{cell.identifier}: sync/async logical mismatch for {sync_name + suffix}"
                     )
+    return ParsedOutput(preamble, rows)
 
 
 def cell_environment(cell: Cell, output: Path, workers: Sequence[int], repeats: int) -> dict[str, str]:
@@ -486,18 +493,24 @@ def run_cell(
 
 def wasm_smoke_is_valid(output: Path, revision: str) -> bool:
     state_path = output / "wasm" / "status.json"
+    build_path = output / "wasm" / "build.log"
     test_path = output / "wasm" / "test.log"
     if not state_path.exists():
         return False
-    if not test_path.is_file():
-        raise QualificationError("WASM resume state exists without test.log")
+    if not build_path.is_file() or not test_path.is_file():
+        raise QualificationError("WASM resume state exists without build/test logs")
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
+        build_log = build_path.read_text(encoding="utf-8")
         test_log = test_path.read_text(encoding="utf-8")
     except (OSError, json.JSONDecodeError) as error:
         raise QualificationError(f"cannot validate WASM resume state: {error}") from error
     if state.get("revision") != revision:
         raise QualificationError("WASM resume revision mismatch")
+    if state.get("commands") != [["npm", "run", "build"], ["npm", "test"]]:
+        raise QualificationError("WASM resume command contract mismatch")
+    if state.get("build_sha256") != hashlib.sha256(build_log.encode()).hexdigest():
+        raise QualificationError("WASM resume build digest mismatch")
     if state.get("test_sha256") != hashlib.sha256(test_log.encode()).hexdigest():
         raise QualificationError("WASM resume test digest mismatch")
     if not _tap_summary_is_zero(test_log, "fail") or not _tap_summary_is_zero(

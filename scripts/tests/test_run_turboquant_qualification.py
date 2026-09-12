@@ -152,12 +152,18 @@ class TurboQuantQualificationTests(unittest.TestCase):
     def test_wasm_resume_requires_revision_digest_and_unskipped_pass(self):
         revision = "a" * 40
         test_log = "# tests 2\n# pass 2\n# fail 0\n# skipped 0\n"
+        build_log = "build complete\n"
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
+            qualification.atomic_write(output / "wasm" / "build.log", build_log)
             qualification.atomic_write(output / "wasm" / "test.log", test_log)
             qualification.write_json(
                 output / "wasm" / "status.json",
                 {
+                    "build_sha256": qualification.hashlib.sha256(
+                        build_log.encode()
+                    ).hexdigest(),
+                    "commands": [["npm", "run", "build"], ["npm", "test"]],
                     "revision": revision,
                     "test_sha256": qualification.hashlib.sha256(
                         test_log.encode()

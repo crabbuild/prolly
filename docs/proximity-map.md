@@ -551,7 +551,9 @@ python3 scripts/run_turboquant_qualification.py \
 The same runner's `full` profile enumerates and hash-shards the complete native
 qualification matrix, validates each cell before recording completion, and
 runs the unskipped browser-WASM TurboQuant smoke gate on shard zero. See the
-qualification ledger for resumable full-run commands and evidence rules.
+qualification ledger for resumable full-run and strict cross-shard summary
+commands. A shard is not release evidence until the summarizer proves complete
+coverage and emits separate forced-backend and `Auto` gate results.
 
 Benchmark rows are machine-specific evidence, not performance guarantees. See
 [`proximity-map-completion-audit.md`](proximity-map-completion-audit.md)

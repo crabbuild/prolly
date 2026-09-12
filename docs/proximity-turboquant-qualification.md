@@ -208,6 +208,20 @@ latency is not presented as browser performance. Production runs reject a
 tracked-dirty worktree. `--allow-dirty` exists only for the six-cell smoke
 profile and its output is never publishable qualification evidence.
 
+After every shard completes, the strict summarizer must receive the complete
+shard set. It revalidates manifests, raw/state digests, every cell, WASM logs,
+and disjoint full-matrix coverage before emitting `summary.csv`, `gates.json`,
+and `report.md`. It refuses incomplete, duplicate, mixed-provenance, or extra
+cells. The report evaluates forced-backend matrix gates separately from the
+stricter `Auto` gates and explicitly leaves legal, global binding inventory,
+and final supported-host release commands unevaluated:
+
+```sh
+python3 scripts/summarize_turboquant_qualification.py \
+  --input performance-results/proximity-turboquant/full-REV/shard-* \
+  --output performance-results/proximity-turboquant/full-REV/summary
+```
+
 ## Release gates
 
 Forced-backend GA still requires:
