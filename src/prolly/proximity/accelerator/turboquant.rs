@@ -1606,7 +1606,7 @@ pub(crate) fn score_code_value(
         kernel,
         QueryKernel::ScalarDeterministic | QueryKernel::AutoDeterministic
     ) {
-        if metric == DistanceMetric::L2Squared {
+        if matches!(metric, DistanceMetric::L2Squared | DistanceMetric::Cosine) {
             score_precomputed_centroids::<true>(packed, prepared_query, bit_width)
         } else {
             score_precomputed_centroids::<false>(packed, prepared_query, bit_width)
@@ -1629,7 +1629,7 @@ pub(crate) fn score_code_value(
                 codebook,
                 &mut centroids[..end - start],
             );
-            if metric == DistanceMetric::L2Squared {
+            if matches!(metric, DistanceMetric::L2Squared | DistanceMetric::Cosine) {
                 for &centroid in &centroids[..end - start] {
                     let reconstructed = centroid * inverse_sqrt_dimensions;
                     reconstructed_norm_squared += reconstructed * reconstructed;
@@ -1661,7 +1661,14 @@ pub(crate) fn score_code_value(
             (prepared_query.norm_squared + norm * norm * reconstructed_norm_squared - 2.0 * dot)
                 .max(0.0)
         }
-        DistanceMetric::Cosine => 1.0 - dot.clamp(-1.0, 1.0),
+        DistanceMetric::Cosine => {
+            let similarity = if norm == 0.0 {
+                0.0
+            } else {
+                dot / sqrt_down(reconstructed_norm_squared)
+            };
+            1.0 - similarity.clamp(-1.0, 1.0)
+        }
         DistanceMetric::InnerProduct => -dot,
     };
     Ok(if distance == 0.0 { 0.0 } else { distance })
@@ -2779,6 +2786,47 @@ mod tests {
         )
         .unwrap();
         assert_ne!(inner_small.to_bits(), inner_large.to_bits());
+    }
+
+    #[test]
+    fn cosine_approximate_score_normalizes_the_quantized_reconstruction() {
+        let dimensions = 8;
+        let bit_width = 4;
+        let mut weighted = vec![0.0; dimensions];
+        weighted[0] = 0.125;
+        let prepared = TurboQuantPreparedQuery::new(
+            weighted.clone(),
+            1.0,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        );
+        let codes = vec![15; dimensions];
+        let packed = pack_codes(&codes, bit_width).unwrap();
+        let mut encoded = 2.0f64.to_le_bytes().to_vec();
+        encoded.extend_from_slice(&packed);
+
+        let score = score_code_value(
+            &encoded,
+            &prepared,
+            DistanceMetric::Cosine,
+            dimensions,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        )
+        .unwrap();
+
+        let centroid = codebook(bit_width).centroid(15);
+        let mut dot = 0.0;
+        let mut reconstructed_norm_squared = 0.0;
+        let inverse_sqrt_dimensions = 1.0 / sqrt_down(dimensions as f64);
+        for weight in weighted {
+            dot += weight * centroid;
+            let reconstructed = centroid * inverse_sqrt_dimensions;
+            reconstructed_norm_squared += reconstructed * reconstructed;
+        }
+        let expected = 1.0 - (dot / sqrt_down(reconstructed_norm_squared)).clamp(-1.0, 1.0);
+        assert_eq!(score.to_bits(), expected.to_bits());
+        assert_ne!(score.to_bits(), (1.0 - dot.clamp(-1.0, 1.0)).to_bits());
     }
 
     #[test]

@@ -535,7 +535,8 @@ reconstructed_unit_norm_squared =
 L2Squared   = query_norm_squared
               + stored_norm^2 * reconstructed_unit_norm_squared
               - 2 * approx_dot
-Cosine      = 1 - clamp(approx_dot, -1, 1)
+Cosine      = 1 - clamp(reconstructed_unit_dot
+                        / sqrt(reconstructed_unit_norm_squared), -1, 1)
 InnerProduct = -approx_dot
 ```
 
@@ -545,6 +546,11 @@ exactly unit length, and that substitution would no longer rank by squared
 distance to the reconstructed source vector. Implementations accumulate the
 dot product and this norm in the same coordinate-ordered packed-code traversal;
 they must not decode the complete code a second time.
+
+Cosine ignores the persisted original source norm, preserving invariance under
+positive source scaling, but it must normalize by the packed-code
+reconstruction norm. Quantization does not produce an exactly unit-length
+reconstruction, so omitting this divisor does not compute cosine distance.
 
 Small negative L2 estimates caused by approximation or rounding are clamped to
 positive zero for candidate ordering. This clamp affects routing only.
