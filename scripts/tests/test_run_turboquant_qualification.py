@@ -133,6 +133,7 @@ class TurboQuantQualificationTests(unittest.TestCase):
                 output / "state" / f"{cell.identifier}.json",
                 {
                     "cell": qualification.asdict(cell),
+                    "disposition": "completed",
                     "sha256": qualification.hashlib.sha256(raw.encode()).hexdigest(),
                 },
             )
@@ -147,6 +148,47 @@ class TurboQuantQualificationTests(unittest.TestCase):
             with self.assertRaises(qualification.QualificationError):
                 qualification.completed_cell_is_valid(
                     output, cell, revision, (1, 2, 4), 2
+                )
+
+    def test_typed_scalability_failure_is_exact_resumable_evidence(self):
+        cell = next(
+            cell
+            for cell in qualification.enumerate_cells("full")
+            if cell.records == 1_000_000
+        )
+        failure = qualification.expected_scalability_failure(cell, 100_000)
+        self.assertEqual(
+            failure,
+            {
+                "kind": "ProximityResourceLimitExceeded",
+                "resource": "TurboQuant records",
+                "limit": 100_000,
+                "actual": 1_000_000,
+                "phase": "qualification preflight",
+            },
+        )
+        self.assertIsNone(qualification.expected_scalability_failure(cell, None))
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            qualification.record_scalability_failure(output, cell, 100_000)
+            self.assertTrue(
+                qualification.completed_cell_is_valid(
+                    output,
+                    cell,
+                    "a" * 40,
+                    (1, 2, 4),
+                    30,
+                    100_000,
+                )
+            )
+            with self.assertRaises(qualification.QualificationError):
+                qualification.completed_cell_is_valid(
+                    output,
+                    cell,
+                    "a" * 40,
+                    (1, 2, 4),
+                    30,
+                    None,
                 )
 
     def test_wasm_resume_requires_revision_digest_and_unskipped_pass(self):

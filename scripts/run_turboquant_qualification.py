@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Iterable, Sequence
 
 
-CONTRACT_SCHEMA = "prolly-turboquant-qualification-v1"
+CONTRACT_SCHEMA = "prolly-turboquant-qualification-v2"
 BENCH_SCHEMA_VERSION = 2
 FULL_RECORDS = (1_000, 10_000, 100_000, 1_000_000)
 FULL_DIMENSIONS = (128, 200, 768, 1_536, 3_072)
@@ -172,6 +172,7 @@ def make_contract(
     shard_count: int,
     all_cells: Sequence[Cell],
     selected: Sequence[Cell],
+    max_cell_records: int | None = None,
 ) -> dict[str, object]:
     return {
         "schema": CONTRACT_SCHEMA,
@@ -189,6 +190,21 @@ def make_contract(
         "environments": [asdict(environment) for environment in ENVIRONMENTS],
         "exhaustive_max_records": 10_000,
         "wasm_smoke": shard_index == 0,
+        "max_cell_records": max_cell_records,
+    }
+
+
+def expected_scalability_failure(
+    cell: Cell, max_cell_records: int | None
+) -> dict[str, object] | None:
+    if max_cell_records is None or cell.records <= max_cell_records:
+        return None
+    return {
+        "kind": "ProximityResourceLimitExceeded",
+        "resource": "TurboQuant records",
+        "limit": max_cell_records,
+        "actual": cell.records,
+        "phase": "qualification preflight",
     }
 
 
@@ -440,20 +456,41 @@ def completed_cell_is_valid(
     revision: str,
     workers: Sequence[int],
     repeats: int,
+    max_cell_records: int | None = None,
 ) -> bool:
     state_path = output / "state" / f"{cell.identifier}.json"
     raw_path = output / "raw" / f"{cell.identifier}.csv"
     if not state_path.exists():
         return False
-    if not raw_path.is_file():
-        raise QualificationError(f"resume state exists without raw output for {cell.identifier}")
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
-        raw = raw_path.read_text(encoding="utf-8")
     except (OSError, json.JSONDecodeError) as error:
         raise QualificationError(f"cannot validate resume state for {cell.identifier}: {error}") from error
     if state.get("cell") != asdict(cell):
         raise QualificationError(f"resume cell contract mismatch for {cell.identifier}")
+    expected_failure = expected_scalability_failure(cell, max_cell_records)
+    if expected_failure is not None:
+        if state.get("disposition") != "typed_scalability_failure":
+            raise QualificationError(
+                f"resume disposition mismatch for limited cell {cell.identifier}"
+            )
+        if state.get("failure") != expected_failure:
+            raise QualificationError(
+                f"resume scalability failure mismatch for {cell.identifier}"
+            )
+        if raw_path.exists():
+            raise QualificationError(
+                f"limited cell has unexpected raw benchmark output for {cell.identifier}"
+            )
+        return True
+    if not raw_path.is_file():
+        raise QualificationError(f"resume state exists without raw output for {cell.identifier}")
+    try:
+        raw = raw_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise QualificationError(f"cannot read resume output for {cell.identifier}: {error}") from error
+    if state.get("disposition") != "completed":
+        raise QualificationError(f"resume disposition mismatch for {cell.identifier}")
     if state.get("sha256") != hashlib.sha256(raw.encode()).hexdigest():
         raise QualificationError(f"resume output digest mismatch for {cell.identifier}")
     validate_output(raw, cell, revision, workers, repeats)
@@ -486,7 +523,27 @@ def run_cell(
             "cell": asdict(cell),
             "command": list(command),
             "completed_at": datetime.now(timezone.utc).isoformat(),
+            "disposition": "completed",
             "sha256": hashlib.sha256(result.stdout.encode()).hexdigest(),
+        },
+    )
+
+
+def record_scalability_failure(
+    output: Path, cell: Cell, max_cell_records: int
+) -> None:
+    failure = expected_scalability_failure(cell, max_cell_records)
+    if failure is None:
+        raise QualificationError(
+            f"{cell.identifier}: scalability failure requested for an in-limit cell"
+        )
+    write_json(
+        output / "state" / f"{cell.identifier}.json",
+        {
+            "cell": asdict(cell),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "disposition": "typed_scalability_failure",
+            "failure": failure,
         },
     )
 
@@ -585,6 +642,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--keep-going", action="store_true")
     parser.add_argument("--allow-dirty", action="store_true", help="smoke profile only")
+    parser.add_argument(
+        "--max-cell-records",
+        type=int,
+        help=(
+            "full profile only: record a typed scalability disposition instead of "
+            "running 1M cells above this explicit host limit (minimum 100000)"
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.search_repeats is None:
@@ -593,6 +658,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("search repeats must be positive")
     if args.allow_dirty and args.profile != "smoke":
         parser.error("--allow-dirty is only valid for smoke runs")
+    if args.max_cell_records is not None:
+        if args.profile != "full":
+            parser.error("--max-cell-records is only valid for full runs")
+        if not 100_000 <= args.max_cell_records < 1_000_000:
+            parser.error("--max-cell-records must be in 100000..1000000")
 
     repo = Path(__file__).resolve().parents[1]
     revision = current_revision(repo)
@@ -609,6 +679,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.shard_count,
         all_cells,
         selected,
+        args.max_cell_records,
     )
     if args.dry_run:
         print(json.dumps(contract, indent=2, sort_keys=True))
@@ -638,13 +709,39 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_wasm_smoke(repo, output, revision)
 
     completed = 0
+    scalability_failures = 0
     failed: list[str] = []
     for ordinal, cell in enumerate(selected, start=1):
         if args.resume and completed_cell_is_valid(
-            output, cell, revision, args.workers, args.search_repeats
+            output,
+            cell,
+            revision,
+            args.workers,
+            args.search_repeats,
+            args.max_cell_records,
         ):
             completed += 1
-            print(f"[{ordinal}/{len(selected)}] resume {cell.identifier}", flush=True)
+            if expected_scalability_failure(cell, args.max_cell_records) is not None:
+                scalability_failures += 1
+                disposition = "typed scalability failure"
+            else:
+                disposition = "benchmark"
+            print(
+                f"[{ordinal}/{len(selected)}] resume {disposition} {cell.identifier}",
+                flush=True,
+            )
+            continue
+        expected_failure = expected_scalability_failure(cell, args.max_cell_records)
+        if expected_failure is not None:
+            record_scalability_failure(output, cell, args.max_cell_records)
+            completed += 1
+            scalability_failures += 1
+            print(
+                f"[{ordinal}/{len(selected)}] typed scalability failure "
+                f"{cell.identifier}: {expected_failure['resource']} "
+                f"actual={expected_failure['actual']} limit={expected_failure['limit']}",
+                flush=True,
+            )
             continue
         print(f"[{ordinal}/{len(selected)}] run {cell.identifier}", flush=True)
         try:
@@ -664,6 +761,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "revision": revision,
         "schema": CONTRACT_SCHEMA,
+        "typed_scalability_failures": scalability_failures,
         "wasm_smoke": wasm_smoke,
     }
     write_json(output / "status.json", status)

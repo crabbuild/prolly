@@ -100,6 +100,23 @@ class TurboQuantSummaryTests(unittest.TestCase):
         self.assertFalse(gates["forced_matrix_qualified"])
         self.assertFalse(gates["auto_qualified"])
 
+    def test_typed_one_million_scalability_failure_is_reported_separately(self):
+        failure = {
+            "cell_id": "one-million-cell",
+            "kind": "ProximityResourceLimitExceeded",
+            "resource": "TurboQuant records",
+            "limit": 100_000,
+            "actual": 1_000_000,
+            "phase": "qualification preflight",
+        }
+        gates = summary.evaluate_gates(self.auto_rows(), "full", [failure])
+        self.assertTrue(gates["forced_matrix_qualified"])
+        self.assertTrue(gates["auto_qualified"])
+        self.assertEqual(gates["typed_scalability_failures"], 1)
+        self.assertEqual(
+            gates["typed_scalability_failure_cells"], ["one-million-cell"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

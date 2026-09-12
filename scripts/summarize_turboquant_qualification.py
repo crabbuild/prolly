@@ -201,13 +201,18 @@ def summarize_cell(cell, parsed, workers: Sequence[int]) -> dict[str, object]:
     }
 
 
-def evaluate_gates(rows: Sequence[dict[str, object]], profile: str) -> dict[str, object]:
+def evaluate_gates(
+    rows: Sequence[dict[str, object]],
+    profile: str,
+    scalability_failures: Sequence[dict[str, object]] = (),
+) -> dict[str, object]:
     if profile != "full":
         return {
             "profile": profile,
             "matrix_complete": True,
             "forced_matrix_qualified": False,
             "auto_qualified": False,
+            "typed_scalability_failures": len(scalability_failures),
             "note": "smoke evidence does not evaluate production GA or Auto gates",
         }
 
@@ -304,6 +309,10 @@ def evaluate_gates(rows: Sequence[dict[str, object]], profile: str) -> dict[str,
         "default_recall_rows": len(default_rows),
         "forced_matrix_failures": failures,
         "forced_matrix_qualified": forced_pass,
+        "typed_scalability_failures": len(scalability_failures),
+        "typed_scalability_failure_cells": [
+            str(failure["cell_id"]) for failure in scalability_failures
+        ],
         "auto_scope_rows": len(auto_scope),
         "auto_failures": auto_failures,
         "auto_qualified": auto_pass,
@@ -315,7 +324,9 @@ def evaluate_gates(rows: Sequence[dict[str, object]], profile: str) -> dict[str,
     }
 
 
-def load_matrix(inputs: Sequence[Path]) -> tuple[dict[str, object], list[dict[str, object]]]:
+def load_matrix(
+    inputs: Sequence[Path],
+) -> tuple[dict[str, object], list[dict[str, object]], list[dict[str, object]]]:
     manifests = [read_json(path / "manifest.json") for path in inputs]
     contracts = []
     for path, manifest in zip(inputs, manifests, strict=True):
@@ -331,8 +342,11 @@ def load_matrix(inputs: Sequence[Path]) -> tuple[dict[str, object], list[dict[st
     revision = str(ordered_contracts[0]["revision"])
     workers = tuple(int(value) for value in ordered_contracts[0]["workers"])
     repeats = int(ordered_contracts[0]["search_repeats"])
+    raw_limit = ordered_contracts[0].get("max_cell_records")
+    max_cell_records = None if raw_limit is None else int(raw_limit)
     all_cells = runner.enumerate_cells(profile)
     summaries = []
+    scalability_failures = []
     for contract in ordered_contracts:
         index = int(contract["shard_index"])
         shard_count = int(contract["shard_count"])
@@ -347,6 +361,7 @@ def load_matrix(inputs: Sequence[Path]) -> tuple[dict[str, object], list[dict[st
             shard_count,
             all_cells,
             expected_cells,
+            max_cell_records,
         )
         if contract != expected_contract:
             raise SummaryError(f"shard {index} manifest differs from the canonical contract")
@@ -355,21 +370,55 @@ def load_matrix(inputs: Sequence[Path]) -> tuple[dict[str, object], list[dict[st
             expected_cells
         ):
             raise SummaryError(f"shard {index} is not complete")
+        expected_failure_count = sum(
+            runner.expected_scalability_failure(cell, max_cell_records) is not None
+            for cell in expected_cells
+        )
+        if status.get("typed_scalability_failures") != expected_failure_count:
+            raise SummaryError(
+                f"shard {index} typed scalability failure count mismatch"
+            )
         if index == 0:
             try:
                 runner.wasm_smoke_is_valid(path, revision)
             except runner.QualificationError as error:
                 raise SummaryError(str(error)) from error
-        expected_names = {f"{cell.identifier}.csv" for cell in expected_cells}
+        benchmark_cells = [
+            cell
+            for cell in expected_cells
+            if runner.expected_scalability_failure(cell, max_cell_records) is None
+        ]
+        expected_names = {f"{cell.identifier}.csv" for cell in benchmark_cells}
         actual_names = {entry.name for entry in (path / "raw").glob("*.csv")}
         if actual_names != expected_names:
             raise SummaryError(
                 f"shard {index} raw cell set mismatch missing={sorted(expected_names - actual_names)} "
                 f"unexpected={sorted(actual_names - expected_names)}"
             )
+        expected_state_names = {f"{cell.identifier}.json" for cell in expected_cells}
+        actual_state_names = {entry.name for entry in (path / "state").glob("*.json")}
+        if actual_state_names != expected_state_names:
+            raise SummaryError(
+                f"shard {index} state set mismatch "
+                f"missing={sorted(expected_state_names - actual_state_names)} "
+                f"unexpected={sorted(actual_state_names - expected_state_names)}"
+            )
         for cell in expected_cells:
             try:
-                runner.completed_cell_is_valid(path, cell, revision, workers, repeats)
+                runner.completed_cell_is_valid(
+                    path,
+                    cell,
+                    revision,
+                    workers,
+                    repeats,
+                    max_cell_records,
+                )
+                failure = runner.expected_scalability_failure(cell, max_cell_records)
+                if failure is not None:
+                    scalability_failures.append(
+                        {"cell_id": cell.identifier, **failure}
+                    )
+                    continue
                 raw = (path / "raw" / f"{cell.identifier}.csv").read_text(encoding="utf-8")
                 parsed = runner.validate_output(raw, cell, revision, workers, repeats)
             except (OSError, runner.QualificationError) as error:
@@ -380,12 +429,18 @@ def load_matrix(inputs: Sequence[Path]) -> tuple[dict[str, object], list[dict[st
                 worker_value(parsed, base_build, max(workers), 4)
             )
             summaries.append(summary)
-    if len(summaries) != len(all_cells):
-        raise SummaryError(f"validated {len(summaries)} cells, expected {len(all_cells)}")
-    return ordered_contracts[0], summaries
+    dispositions = len(summaries) + len(scalability_failures)
+    if dispositions != len(all_cells):
+        raise SummaryError(f"validated {dispositions} cells, expected {len(all_cells)}")
+    return ordered_contracts[0], summaries, scalability_failures
 
 
-def write_summary(output: Path, contract: dict[str, object], rows: list[dict[str, object]]) -> None:
+def write_summary(
+    output: Path,
+    contract: dict[str, object],
+    rows: list[dict[str, object]],
+    scalability_failures: list[dict[str, object]],
+) -> None:
     if output.exists() and any(output.iterdir()):
         raise SummaryError(f"refusing to overwrite non-empty summary output: {output}")
     output.mkdir(parents=True, exist_ok=True)
@@ -394,7 +449,8 @@ def write_summary(output: Path, contract: dict[str, object], rows: list[dict[str
     writer.writeheader()
     writer.writerows(rows)
     runner.atomic_write(output / "summary.csv", buffer.getvalue())
-    gates = evaluate_gates(rows, str(contract["profile"]))
+    runner.write_json(output / "scalability-failures.json", scalability_failures)
+    gates = evaluate_gates(rows, str(contract["profile"]), scalability_failures)
     runner.write_json(output / "gates.json", gates)
     failed_forced = sum(len(value) for value in gates.get("forced_matrix_failures", {}).values())
     failed_auto = sum(len(value) for value in gates.get("auto_failures", {}).values())
@@ -402,7 +458,9 @@ def write_summary(output: Path, contract: dict[str, object], rows: list[dict[str
 
 - Revision: `{contract['revision']}`
 - Profile: `{contract['profile']}`
-- Validated cells: {len(rows)}
+- Validated matrix dispositions: {len(rows) + len(scalability_failures)}
+- Completed benchmark cells: {len(rows)}
+- Typed scalability failures: {len(scalability_failures)}
 - Matrix contract: `{contract['full_matrix_digest']}`
 - Forced-backend matrix gates: {'PASS' if gates['forced_matrix_qualified'] else 'NOT QUALIFIED'}
 - Auto gates: {'PASS' if gates['auto_qualified'] else 'NOT QUALIFIED'}
@@ -421,9 +479,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--input", type=Path, nargs="+", required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
-    contract, rows = load_matrix([path.resolve() for path in args.input])
-    write_summary(args.output.resolve(), contract, rows)
-    print(f"validated {len(rows)} TurboQuant cells into {args.output.resolve()}")
+    contract, rows, scalability_failures = load_matrix(
+        [path.resolve() for path in args.input]
+    )
+    write_summary(args.output.resolve(), contract, rows, scalability_failures)
+    print(
+        f"validated {len(rows) + len(scalability_failures)} TurboQuant cells "
+        f"({len(scalability_failures)} typed scalability failures) "
+        f"into {args.output.resolve()}"
+    )
     return 0
 
 

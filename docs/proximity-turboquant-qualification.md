@@ -206,6 +206,17 @@ python3 scripts/run_turboquant_qualification.py \
   --resume
 ```
 
+On a qualification host that cannot safely execute the 1M tier, pass an
+explicit record ceiling of at least 100K. For example,
+`--max-cell-records 100000` executes every 1K/10K/100K cell and records each
+1M cell as a versioned `ProximityResourceLimitExceeded` disposition with the
+exact resource, limit, actual count, and preflight phase. This mirrors the
+production builder's typed `max_records` failure and is accepted only for 1M
+cells; it never creates a synthetic benchmark CSV or counts as performance or
+recall evidence. The ceiling is part of the immutable shard contract, resume
+revalidates every disposition, and the summarizer emits the complete list in
+`scalability-failures.json`. Omitting the option requires every 1M cell to run.
+
 Shard zero also rebuilds the browser WASM package and requires the package test
 suite to report zero failures and zero skips, including the TurboQuant lifecycle
 and Rust-wire-fixture tests. This is the required WASM smoke gate; native
