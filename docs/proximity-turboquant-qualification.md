@@ -57,6 +57,18 @@ PROLLY_PROXIMITY_BENCH_SEARCH_REPEATS=30 \
 cargo bench --all-features --bench prolly_proximity_bench
 ```
 
+Search rows report the sample median; `_p95` and `_p99` companion rows report
+nearest-rank tail latency. Their counters retain logical/physical bytes read
+and candidate handle/byte peaks. `_work` rows retain frontier peak and the
+completion discriminator (`0` exact, `1` approximate-policy-satisfied, `2`
+budget-exhausted, `3` cancelled, `4` deadline-exceeded).
+`turboquant_build_resources` reports peak owned scratch bytes and butterfly
+operations, while
+`turboquant_sidecar_bytes` and `pq_sidecar_bytes` report complete typed-closure
+bytes beside encoded payload counts. The harness emits the git revision,
+compiler, target architecture/OS, store, seed, cache mode, and repetition
+count before the CSV rows.
+
 Production qualification must retain raw outputs under
 `performance-results/proximity-turboquant/` and cover the full matrix in the
 approved design: 1K/10K/100K/1M records; dimensions

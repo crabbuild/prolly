@@ -33,11 +33,17 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 
 ## Benchmark protocol
 
-`benches/proximity_bench.rs` emits CSV:
+`benches/prolly_proximity_bench.rs` emits CSV:
 
 ```text
 operation,dimensions,threads,micros,metric_a,metric_b
 ```
+
+For repeated accelerator searches, the base row's `micros` value is the
+sample median and `_p95`/`_p99` companion rows contain nearest-rank tail
+latency. Companion counters expose logical/physical read bytes and candidate
+retention peaks. Dedicated resource and sidecar rows record owned build bytes,
+transform work, complete typed-closure bytes, and encoded payload counts.
 
 Default dimensions are 8, 128, 768, and 1536; build rows use 1, 2, and 4
 workers. The harness also records mutation locality, exact/adaptive/SQ8,
@@ -82,7 +88,7 @@ Production characterization command:
 PROLLY_PROXIMITY_BENCH_RECORDS=10000 \
 PROLLY_PROXIMITY_BENCH_DIMENSIONS=8,128,768,1536 \
 PROLLY_PROXIMITY_BENCH_THREADS=1,2,4 \
-cargo bench --all-features --bench proximity_bench
+cargo bench --all-features --bench prolly_proximity_bench
 ```
 
 Results are hardware-, compiler-, and store-specific. Persist CSV output with

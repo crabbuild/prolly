@@ -1,11 +1,11 @@
 use prolly::{
     copy_content_graph, plan_content_gc, AcceleratorSet, AdaptiveQuality, BuildParallelism,
     CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits,
-    CompositeBuildOutcome, ContentGraphLimits, DistanceMetric, HnswConfig, HnswIndex, MemStore,
-    ProductQuantizationConfig, ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap,
-    ProximityMutation, ProximityRecord, QueryKernel, ScalarQuantizationConfig, SearchBackend,
-    SearchIo, SearchPolicy, SearchRequest, SearchRuntime, TurboQuantizationConfig, TurboQuantizer,
-    TypedContentRoot,
+    CompositeBuildOutcome, ContentGraphLimits, ContentObjectKind, DistanceMetric, HnswConfig,
+    HnswIndex, MemStore, ProductQuantizationConfig, ProductQuantizer, ProximityConfig,
+    ProximityFilter, ProximityMap, ProximityMutation, ProximityRecord, QueryKernel,
+    ScalarQuantizationConfig, SearchBackend, SearchCompletion, SearchIo, SearchPolicy,
+    SearchRequest, SearchRuntime, TurboQuantizationConfig, TurboQuantizer, TypedContentRoot,
 };
 #[cfg(feature = "async-store")]
 use prolly::{AsyncProximityMap, AsyncSearchControl, SyncStoreAsAsync};
@@ -13,6 +13,7 @@ use std::collections::HashSet;
 #[cfg(feature = "async-store")]
 use std::future::Future;
 use std::hint::black_box;
+use std::process::Command;
 use std::sync::Arc;
 #[cfg(feature = "async-store")]
 use std::task::{Context, Poll};
@@ -44,6 +45,14 @@ fn main() {
         seed: 0,
     };
     println!("prolly proximity benchmark");
+    println!("revision={}", command_output("git", &["rev-parse", "HEAD"]));
+    println!(
+        "compiler={}",
+        command_output("rustc", &["--version", "--verbose"])
+    );
+    println!("target_arch={}", std::env::consts::ARCH);
+    println!("target_os={}", std::env::consts::OS);
+    println!("store=memory");
     println!("records={records}");
     println!("profile={}", if scale_only { "scale" } else { "complete" });
     println!("search_repeats={search_repeats}");
@@ -358,6 +367,31 @@ fn bench_accelerators<S>(
             stats.transformed_components,
             stats.encoded_output_bytes,
         );
+        row(
+            "turboquant_build_resources",
+            dimensions,
+            2,
+            Duration::ZERO,
+            stats.peak_temporary_bytes,
+            stats.butterfly_operations,
+        );
+        let sidecar = prolly::walk_content_graph(
+            &store,
+            &[TypedContentRoot::new(
+                ContentObjectKind::TurboQuantization,
+                turboquant.manifest_cid().clone(),
+            )],
+            &ContentGraphLimits::default(),
+        )
+        .unwrap();
+        row(
+            "turboquant_sidecar_bytes",
+            dimensions,
+            0,
+            Duration::ZERO,
+            sidecar.total_bytes,
+            stats.encoded_output_bytes,
+        );
         for (name, kernel) in [
             ("turboquant_search_scalar", QueryKernel::ScalarDeterministic),
             ("turboquant_search_simd", QueryKernel::SimdDeterministic),
@@ -367,22 +401,49 @@ fn bench_accelerators<S>(
             request.kernel = kernel;
             request.options.backend = SearchBackend::TurboQuantized;
             request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
-            let started = Instant::now();
             let mut result = None;
+            let mut samples = Vec::with_capacity(options.repeats);
             for _ in 0..options.repeats {
                 if options.reset_cache {
                     map.clear_content_cache().unwrap();
                 }
+                let started = Instant::now();
                 result = Some(turboquant.search(map, request.clone()).unwrap());
+                samples.push(started.elapsed());
             }
             let result = result.expect("search repeats is positive");
+            let latency = LatencySummary::from_samples(samples);
             row(
                 name,
                 dimensions,
                 0,
-                started.elapsed().div_f64(options.repeats as f64),
+                latency.median,
                 result.stats.quantized_distance_evaluations,
                 result.stats.reranked_candidates,
+            );
+            row(
+                &format!("{name}_p95"),
+                dimensions,
+                0,
+                latency.p95,
+                result.stats.bytes_read,
+                result.stats.physical_bytes_read,
+            );
+            row(
+                &format!("{name}_p99"),
+                dimensions,
+                0,
+                latency.p99,
+                result.stats.candidate_handles_peak,
+                result.stats.candidate_retained_bytes_peak,
+            );
+            row(
+                &format!("{name}_work"),
+                dimensions,
+                0,
+                Duration::ZERO,
+                result.stats.frontier_peak,
+                completion_id(result.completion),
             );
             if kernel == QueryKernel::ScalarDeterministic {
                 println!(
@@ -422,26 +483,70 @@ fn bench_accelerators<S>(
         stats.training_distance_evaluations,
         stats.encoded_vectors,
     );
+    let sidecar = prolly::walk_content_graph(
+        &store,
+        &[TypedContentRoot::new(
+            ContentObjectKind::ProductQuantization,
+            pq.manifest_cid().clone(),
+        )],
+        &ContentGraphLimits::default(),
+    )
+    .unwrap();
+    row(
+        "pq_sidecar_bytes",
+        dimensions,
+        0,
+        Duration::ZERO,
+        sidecar.total_bytes,
+        stats.encoded_vectors,
+    );
     let mut request = SearchRequest::exact(query, k);
     request.policy = SearchPolicy::FixedBudget;
     request.options.backend = SearchBackend::ProductQuantized;
     request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
-    let started = Instant::now();
     let mut result = None;
+    let mut samples = Vec::with_capacity(options.repeats);
     for _ in 0..options.repeats {
         if options.reset_cache {
             map.clear_content_cache().unwrap();
         }
+        let started = Instant::now();
         result = Some(pq.search(map, request.clone()).unwrap());
+        samples.push(started.elapsed());
     }
     let result = result.expect("search repeats is positive");
+    let latency = LatencySummary::from_samples(samples);
     row(
         "pq_search",
         dimensions,
         0,
-        started.elapsed().div_f64(options.repeats as f64),
+        latency.median,
         result.stats.distance_evaluations,
         result.stats.reranked_candidates,
+    );
+    row(
+        "pq_search_p95",
+        dimensions,
+        0,
+        latency.p95,
+        result.stats.bytes_read,
+        result.stats.physical_bytes_read,
+    );
+    row(
+        "pq_search_p99",
+        dimensions,
+        0,
+        latency.p99,
+        result.stats.candidate_handles_peak,
+        result.stats.candidate_retained_bytes_peak,
+    );
+    row(
+        "pq_search_work",
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.frontier_peak,
+        completion_id(result.completion),
     );
     println!(
         "pq_recall,{dimensions},0,0,{:.6},0",
@@ -588,6 +693,34 @@ fn config(dimensions: usize, metric: DistanceMetric) -> ProximityConfig {
     config
 }
 
+#[derive(Clone, Copy)]
+struct LatencySummary {
+    median: Duration,
+    p95: Duration,
+    p99: Duration,
+}
+
+impl LatencySummary {
+    fn from_samples(mut samples: Vec<Duration>) -> Self {
+        assert!(!samples.is_empty(), "latency samples must not be empty");
+        samples.sort_unstable();
+        Self {
+            median: nearest_rank(&samples, 50),
+            p95: nearest_rank(&samples, 95),
+            p99: nearest_rank(&samples, 99),
+        }
+    }
+}
+
+fn nearest_rank(samples: &[Duration], percentile: usize) -> Duration {
+    let rank = samples
+        .len()
+        .saturating_mul(percentile)
+        .div_ceil(100)
+        .max(1);
+    samples[rank - 1]
+}
+
 fn row(
     operation: &str,
     dimensions: usize,
@@ -600,6 +733,31 @@ fn row(
         "{operation},{dimensions},{threads},{:.3},{metric_a},{metric_b}",
         duration.as_secs_f64() * 1_000_000.0
     );
+}
+
+fn command_output(program: &str, arguments: &[&str]) -> String {
+    Command::new(program)
+        .args(arguments)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .replace('\n', " | ")
+        })
+        .filter(|output| !output.is_empty())
+        .unwrap_or_else(|| "unavailable".to_owned())
+}
+
+fn completion_id(completion: SearchCompletion) -> usize {
+    match completion {
+        SearchCompletion::Exact => 0,
+        SearchCompletion::ApproximatePolicySatisfied => 1,
+        SearchCompletion::BudgetExhausted => 2,
+        SearchCompletion::Cancelled => 3,
+        SearchCompletion::DeadlineExceeded => 4,
+    }
 }
 
 fn make_records(count: usize, dimensions: usize) -> Vec<ProximityRecord> {
