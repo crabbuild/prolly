@@ -418,6 +418,7 @@ fn bench_accelerators<S>(
         for (name, kernel) in [
             ("turboquant_search_scalar", QueryKernel::ScalarDeterministic),
             ("turboquant_search_simd", QueryKernel::SimdDeterministic),
+            ("turboquant_search_auto", QueryKernel::AutoDeterministic),
         ] {
             let mut request = SearchRequest::exact(query, k);
             request.policy = SearchPolicy::FixedBudget;

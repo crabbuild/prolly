@@ -60,9 +60,12 @@ pub(crate) fn fill_query_products_f64(
     debug_assert_eq!(left.len(), output.len());
     let fill = match kernel {
         QueryKernel::ScalarDeterministic => None,
-        QueryKernel::SimdDeterministic | QueryKernel::AutoDeterministic => {
-            *FILL_DOT_F64.get_or_init(detect_fill_f64)
-        }
+        QueryKernel::SimdDeterministic => *FILL_DOT_F64.get_or_init(detect_fill_f64),
+        // Two-lane f64 SIMD does not repay dispatch and load/store overhead in
+        // TurboQuant's 64-coordinate chunks on NEON or wasm32. Keep the
+        // explicit SIMD kernel available for conformance and callers, while
+        // selecting the measured scalar fill for the automatic kernel there.
+        QueryKernel::AutoDeterministic => auto_fill_f64(),
     };
     if let Some(fill) = fill {
         // SAFETY: feature detection selects only a compatible target-specific
@@ -70,6 +73,17 @@ pub(crate) fn fill_query_products_f64(
         unsafe { fill(left, right, output) };
     } else {
         fill_tail_f64(left, right, output, 0);
+    }
+}
+
+fn auto_fill_f64() -> Option<FillProductsF64> {
+    #[cfg(any(target_arch = "aarch64", target_arch = "wasm32"))]
+    {
+        None
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "wasm32")))]
+    {
+        *FILL_DOT_F64.get_or_init(detect_fill_f64)
     }
 }
 
