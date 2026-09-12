@@ -120,6 +120,14 @@ from code-tree bytes. The harness emits the git revision, compiler, target
 architecture/OS, store, seed, cache mode, and repetition count before the CSV
 rows.
 
+The scalar and automatic TurboQuant scan kernels precompute the finite
+query-by-codebook product table once per search. Candidate scoring then decodes
+packed codes and performs the same coordinate-ordered scalar reduction without
+repeating a floating-point multiply for every candidate component. The
+explicit SIMD kernel remains an independent conformance path; tests require
+all three kernels to return bit-identical scores, plans, neighbors, and logical
+statistics.
+
 Production qualification must retain raw outputs under
 `performance-results/proximity-turboquant/` and cover the full matrix in the
 approved design: 1K/10K/100K/1M records; dimensions

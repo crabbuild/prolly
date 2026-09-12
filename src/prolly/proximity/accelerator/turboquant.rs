@@ -700,7 +700,8 @@ where
         }
         self.validate_binding(map, expected_source)?;
         let query = prepare_vector(self.metric, request.query, self.dimensions)?;
-        let prepared_query = prepare_query_from_prepared(&query, &self.plan, self.dimensions);
+        let prepared_query =
+            prepare_query_from_prepared(&query, &self.plan, self.dimensions, self.config.bit_width);
         let filter = PreparedFilter::new(request.filter.clone(), &map.tree().directory)?;
         let mut stats = ProximitySearchStats::default();
         let mut approximate = BinaryHeap::<QuantizedRanked>::new();
@@ -1286,7 +1287,28 @@ fn validate_code_value(bytes: &[u8], dimensions: usize, bit_width: u8) -> Result
 
 pub(crate) struct TurboQuantPreparedQuery {
     weighted: Vec<f64>,
+    weighted_centroids: Vec<f64>,
+    centroid_count: usize,
     norm_squared: f64,
+}
+
+impl TurboQuantPreparedQuery {
+    fn new(weighted: Vec<f64>, norm_squared: f64, bit_width: u8) -> Self {
+        let codebook = codebook(bit_width);
+        let centroid_count = 1usize << bit_width;
+        let mut weighted_centroids = Vec::with_capacity(weighted.len() * centroid_count);
+        for weight in &weighted {
+            for code in 0..centroid_count {
+                weighted_centroids.push(*weight * codebook.centroid(code as u8));
+            }
+        }
+        Self {
+            weighted,
+            weighted_centroids,
+            centroid_count,
+            norm_squared,
+        }
+    }
 }
 
 pub(crate) fn prepare_query_with_plan(
@@ -1294,6 +1316,7 @@ pub(crate) fn prepare_query_with_plan(
     query: &[f32],
     dimensions: u32,
     plan: &StructuredRotation,
+    bit_width: u8,
 ) -> Result<(Vec<f32>, TurboQuantPreparedQuery), Error> {
     if plan.dimensions != dimensions as usize {
         return Err(invalid_search(
@@ -1301,7 +1324,7 @@ pub(crate) fn prepare_query_with_plan(
         ));
     }
     let query = prepare_vector(metric, query, dimensions)?;
-    let prepared = prepare_query_from_prepared(&query, plan, dimensions);
+    let prepared = prepare_query_from_prepared(&query, plan, dimensions, bit_width);
     Ok((query, prepared))
 }
 
@@ -1309,17 +1332,19 @@ fn prepare_query_from_prepared(
     query: &[f32],
     plan: &StructuredRotation,
     dimensions: u32,
+    bit_width: u8,
 ) -> TurboQuantPreparedQuery {
     let query_f64: Vec<_> = query.iter().map(|value| f64::from(*value)).collect();
     let transformed = plan.apply(&query_f64);
     let inverse_sqrt_dimensions = 1.0 / sqrt_down(f64::from(dimensions));
-    TurboQuantPreparedQuery {
-        weighted: transformed
+    TurboQuantPreparedQuery::new(
+        transformed
             .into_iter()
             .map(|value| value * inverse_sqrt_dimensions)
             .collect(),
-        norm_squared: query_f64.iter().fold(0.0, |sum, value| sum + value * value),
-    }
+        query_f64.iter().fold(0.0, |sum, value| sum + value * value),
+        bit_width,
+    )
 }
 
 pub(crate) fn score_code_value(
@@ -1332,10 +1357,15 @@ pub(crate) fn score_code_value(
 ) -> Result<f64, Error> {
     let norm = validate_code_value(bytes, dimensions, bit_width)?;
     let packed = &bytes[8..];
-    let codebook = codebook(bit_width);
     let dot = if norm == 0.0 {
         0.0
+    } else if matches!(
+        kernel,
+        QueryKernel::ScalarDeterministic | QueryKernel::AutoDeterministic
+    ) {
+        norm * score_precomputed_centroids(packed, prepared_query, dimensions, bit_width)
     } else {
+        let codebook = codebook(bit_width);
         const PRODUCT_SLOTS: usize = 64;
         let mut centroids = [0.0f64; PRODUCT_SLOTS];
         let mut products = [0.0f64; PRODUCT_SLOTS];
@@ -1371,6 +1401,67 @@ pub(crate) fn score_code_value(
         DistanceMetric::InnerProduct => -dot,
     };
     Ok(if distance == 0.0 { 0.0 } else { distance })
+}
+
+#[inline]
+fn score_precomputed_centroids(
+    packed: &[u8],
+    prepared: &TurboQuantPreparedQuery,
+    dimensions: usize,
+    bit_width: u8,
+) -> f64 {
+    let centroid_count = 1usize << bit_width;
+    debug_assert_eq!(prepared.centroid_count, centroid_count);
+    debug_assert_eq!(
+        prepared.weighted_centroids.len(),
+        dimensions * centroid_count
+    );
+    let products = &prepared.weighted_centroids;
+    let mut reduced = 0.0;
+    match bit_width {
+        2 => {
+            for (group, byte) in packed.iter().copied().enumerate() {
+                let coordinate = group * 4;
+                reduced += products[coordinate * centroid_count + usize::from(byte & 0x03)];
+                reduced +=
+                    products[(coordinate + 1) * centroid_count + usize::from((byte >> 2) & 0x03)];
+                reduced +=
+                    products[(coordinate + 2) * centroid_count + usize::from((byte >> 4) & 0x03)];
+                reduced += products[(coordinate + 3) * centroid_count + usize::from(byte >> 6)];
+            }
+        }
+        3 => {
+            for (group, bytes) in packed.chunks_exact(3).enumerate() {
+                let codes =
+                    u32::from(bytes[0]) | (u32::from(bytes[1]) << 8) | (u32::from(bytes[2]) << 16);
+                let coordinate = group * 8;
+                reduced += products[coordinate * centroid_count + (codes & 0x07) as usize];
+                reduced +=
+                    products[(coordinate + 1) * centroid_count + ((codes >> 3) & 0x07) as usize];
+                reduced +=
+                    products[(coordinate + 2) * centroid_count + ((codes >> 6) & 0x07) as usize];
+                reduced +=
+                    products[(coordinate + 3) * centroid_count + ((codes >> 9) & 0x07) as usize];
+                reduced +=
+                    products[(coordinate + 4) * centroid_count + ((codes >> 12) & 0x07) as usize];
+                reduced +=
+                    products[(coordinate + 5) * centroid_count + ((codes >> 15) & 0x07) as usize];
+                reduced +=
+                    products[(coordinate + 6) * centroid_count + ((codes >> 18) & 0x07) as usize];
+                reduced +=
+                    products[(coordinate + 7) * centroid_count + ((codes >> 21) & 0x07) as usize];
+            }
+        }
+        4 => {
+            for (group, byte) in packed.iter().copied().enumerate() {
+                let coordinate = group * 2;
+                reduced += products[coordinate * centroid_count + usize::from(byte & 0x0f)];
+                reduced += products[(coordinate + 1) * centroid_count + usize::from(byte >> 4)];
+            }
+        }
+        _ => unreachable!("validated TurboQuant bit width"),
+    }
+    reduced
 }
 
 #[derive(Clone)]
@@ -1676,13 +1767,14 @@ mod tests {
     #[test]
     fn scalar_and_simd_approximate_scores_are_bit_identical() {
         for dimensions in [8usize, 24, 128, 200, 768] {
-            let prepared = TurboQuantPreparedQuery {
-                weighted: (0..dimensions)
-                    .map(|index| ((index as f64 + 0.25) * 0.03125).sin())
-                    .collect(),
-                norm_squared: 17.25,
-            };
             for bit_width in [2, 3, 4] {
+                let prepared = TurboQuantPreparedQuery::new(
+                    (0..dimensions)
+                        .map(|index| ((index as f64 + 0.25) * 0.03125).sin())
+                        .collect(),
+                    17.25,
+                    bit_width,
+                );
                 let maximum = 1u8 << bit_width;
                 let codes: Vec<_> = (0..dimensions)
                     .map(|index| ((index * 7 + 3) as u8) % maximum)
@@ -1712,10 +1804,24 @@ mod tests {
                         QueryKernel::SimdDeterministic,
                     )
                     .unwrap();
+                    let automatic = score_code_value(
+                        &encoded,
+                        &prepared,
+                        metric,
+                        dimensions,
+                        bit_width,
+                        QueryKernel::AutoDeterministic,
+                    )
+                    .unwrap();
                     assert_eq!(
                         scalar.to_bits(),
                         simd.to_bits(),
                         "dimension={dimensions}, bits={bit_width}, metric={metric:?}",
+                    );
+                    assert_eq!(
+                        scalar.to_bits(),
+                        automatic.to_bits(),
+                        "automatic dimension={dimensions}, bits={bit_width}, metric={metric:?}",
                     );
                 }
             }
@@ -1724,10 +1830,7 @@ mod tests {
 
     #[test]
     fn l2_approximate_score_clamps_negative_estimates_to_positive_zero() {
-        let prepared = TurboQuantPreparedQuery {
-            weighted: vec![1_000.0; 8],
-            norm_squared: 1.0,
-        };
+        let prepared = TurboQuantPreparedQuery::new(vec![1_000.0; 8], 1.0, 2);
         let codes = vec![3; 8];
         let mut encoded = 1.0f64.to_le_bytes().to_vec();
         encoded.extend_from_slice(&pack_codes(&codes, 2).unwrap());
