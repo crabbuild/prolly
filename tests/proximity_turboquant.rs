@@ -219,6 +219,36 @@ fn turboquant_rejects_unsupported_dimensions_and_stale_sources() {
 }
 
 #[test]
+fn turboquant_remains_explicit_only_until_auto_qualification() {
+    use prolly::{ApproximatePreference, SearchIo, SearchRuntime};
+
+    let store = Arc::new(MemStore::new());
+    let map =
+        ProximityMap::build(store.clone(), ProximityConfig::new(128), records(65, 128)).unwrap();
+    let (index, _) = TurboQuantizer::build(
+        &map,
+        TurboQuantizationConfig::default(),
+        BuildParallelism::serial(),
+    )
+    .unwrap();
+    let accelerators = AcceleratorSet::empty()
+        .with_turboquant(map.tree(), index)
+        .unwrap();
+    let query = vec![0.25; 128];
+    let mut request = SearchRequest::exact(&query, 7);
+    request.policy = SearchPolicy::FixedBudget;
+    request.options.planner.approximate_preference = ApproximatePreference::TurboQuantizedFirst;
+    let result = map
+        .search_with(
+            &accelerators,
+            &SearchIo::new(store, Arc::new(SearchRuntime::default())),
+            request,
+        )
+        .unwrap();
+    assert_eq!(result.plan.backend, SearchBackend::Native);
+}
+
+#[test]
 fn turboquant_proof_replays_the_committed_plan_and_closure() {
     let store = Arc::new(MemStore::new());
     let map =

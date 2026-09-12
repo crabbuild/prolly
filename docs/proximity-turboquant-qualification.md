@@ -20,6 +20,8 @@ but uses a deterministic structured orthogonal transform instead of the
 paper's dense Gaussian-QR/Haar rotation. Consequently, Prolly makes no claim
 to the paper's exact dense-rotation theorem. No Turbovec source code, API, or
 wire format is used.
+The detailed independent-implementation and release-owner record is in
+[`proximity-turboquant-provenance.md`](proximity-turboquant-provenance.md).
 
 ## Checked-in correctness evidence
 

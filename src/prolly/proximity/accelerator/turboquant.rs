@@ -1,8 +1,11 @@
 //! Independent, deterministic TurboQuant-MSE routing accelerator.
 //!
-//! This implementation follows the public TurboQuant paper's rotate-then-
-//! scalar-quantize construction, with Prolly's frozen structured transform.
-//! It does not contain or depend on Turbovec code or formats.
+//! This implementation follows the rotate-then-scalar-quantize construction
+//! from [TurboQuant: Online Vector Quantization with Near-optimal Distortion
+//! Rate](https://arxiv.org/abs/2504.19874), with Prolly's frozen structured
+//! transform. The production transform is not the paper's dense
+//! Gaussian-QR/Haar rotation, so the implementation does not claim that
+//! theorem. It does not contain or depend on Turbovec code or formats.
 
 use crate::prolly::builder::SortedBatchBuilder;
 use crate::prolly::cid::Cid;
