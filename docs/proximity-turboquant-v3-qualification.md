@@ -12,8 +12,8 @@ This report retains ten real cells from the corrected TurboQuant production
 matrix: the default four-bit, 8× rerank path at 10K and 100K records, 768
 dimensions, and every supported metric, plus matching 16× cosine and
 inner-product diagnostics. These cells use the unique,
-architecture-stable schema-v3 dataset. They are partial evidence, not a
-complete production qualification, and they keep `Auto` selection disabled.
+architecture-stable dataset. They are superseded diagnostics, not production
+qualification evidence, and `Auto` remains disabled.
 
 ## Environment and contract
 

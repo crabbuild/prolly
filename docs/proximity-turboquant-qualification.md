@@ -380,7 +380,7 @@ production cells and the pinned-host rerun appeared open under v2. Subsequent
 audit found that v2 repeated every vector after 20,003 records, making its
 100K Recall@10 quantized in coarse duplicate groups. Those rows remain useful
 performance and rank-depth diagnostics, but none counts toward the corrected
-v3 production matrix.
+current production matrix.
 
 The retained
 [`proximity-turboquant-v3-qualification.md`](proximity-turboquant-v3-qualification.md)
@@ -389,6 +389,17 @@ ProximityMap's canonical fixed-point metric semantics. An exhaustive 10K
 cosine run incorrectly reported recall 0.50 instead of 1.00, proving that the
 old oracle could not validate candidate quality. Its latency, size, and
 non-cosine results remain useful diagnostics, but none of its rows counts as
-current qualification evidence. All 45,360 schema-4 cells require execution
-from one final frozen revision; `Auto`, forced-backend GA, pinned-host,
-binding-inventory, and legal gates remain open.
+current qualification evidence.
+
+The current
+[`proximity-turboquant-v4-qualification.md`](proximity-turboquant-v4-qualification.md)
+report retains eleven schema-4 cells at one implementation revision: the 10K
+and 100K × 768 default rows for all metrics, matching 16× cosine and
+inner-product diagnostics, and an exhaustive 10K cosine oracle. The corrected
+oracle reports 0.00 TurboQuant versus 1.00 PQ recall for 10K cosine at both 8×
+and 16×; exhaustive reranking returns 1.00 for both. A qualification-scale
+regression proves that 222 lower-key records share the exact top-10 vectors'
+packed code, making the frozen 80-candidate default incapable of selecting any
+of them. All 45,360 schema-4 cells still require execution from one final
+frozen revision; `Auto`, forced-backend GA, pinned-host, binding-inventory, and
+legal gates remain open.

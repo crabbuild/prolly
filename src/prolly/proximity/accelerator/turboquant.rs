@@ -2942,6 +2942,81 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "qualification-scale deterministic cosine fixture"]
+    fn qualification_cosine_fixture_exposes_default_shortlist_code_ties() {
+        const RECORDS: usize = 10_000;
+        const DIMENSIONS: usize = 768;
+        const PERIOD: u64 = 2_000_003;
+        let vector = |index: usize| {
+            let index = u64::try_from(index).unwrap();
+            (0..DIMENSIONS)
+                .map(|component| {
+                    let component = u64::try_from(component).unwrap();
+                    let mixed = index
+                        .wrapping_mul(1_000_003)
+                        .wrapping_add(component.wrapping_mul(97_409));
+                    ((mixed % PERIOD) as f64 - 1_000_001.0) as f32 / 100_000.0
+                })
+                .collect::<Vec<_>>()
+        };
+        let query = prepare_vector(
+            DistanceMetric::Cosine,
+            &vector(RECORDS / 3),
+            DIMENSIONS as u32,
+        )
+        .unwrap();
+        let mut exact = Vec::with_capacity(RECORDS);
+        for index in 0..RECORDS {
+            let prepared =
+                prepare_vector(DistanceMetric::Cosine, &vector(index), DIMENSIONS as u32).unwrap();
+            exact.push((
+                crate::prolly::proximity::distance::score(
+                    DistanceMetric::Cosine,
+                    &query,
+                    &prepared,
+                ),
+                index,
+            ));
+        }
+        exact.sort_by(|left, right| left.0.total_cmp(&right.0).then(left.1.cmp(&right.1)));
+        let exact_top: Vec<_> = exact.iter().take(10).map(|(_, index)| *index).collect();
+        assert_eq!(
+            exact_top,
+            [3313, 3315, 3317, 3319, 3321, 3323, 3325, 3327, 3329, 3331]
+        );
+
+        let plan = StructuredRotation::derive(DIMENSIONS, 0).unwrap();
+        let codebook = codebook(4);
+        let sqrt_dimensions = sqrt_down(DIMENSIONS as f64);
+        let packed_len = packed_len(DIMENSIONS, 4).unwrap();
+        let mut scratch = EncodingScratch::new(DIMENSIONS, packed_len);
+        let query_code =
+            encode_vector_reusing(&query, &plan, codebook, 4, sqrt_dimensions, &mut scratch)
+                .unwrap();
+        let mut lower_key_equal_codes = 0usize;
+        for index in 0..exact_top[0] {
+            let prepared =
+                prepare_vector(DistanceMetric::Cosine, &vector(index), DIMENSIONS as u32).unwrap();
+            let encoded =
+                encode_vector_reusing(&prepared, &plan, codebook, 4, sqrt_dimensions, &mut scratch)
+                    .unwrap();
+            if encoded.bytes[8..] == query_code.bytes[8..] {
+                lower_key_equal_codes += 1;
+            }
+        }
+        assert_eq!(lower_key_equal_codes, 222);
+        assert!(lower_key_equal_codes >= 10 * 8);
+        for index in exact_top {
+            let prepared =
+                prepare_vector(DistanceMetric::Cosine, &vector(index), DIMENSIONS as u32).unwrap();
+            let encoded =
+                encode_vector_reusing(&prepared, &plan, codebook, 4, sqrt_dimensions, &mut scratch)
+                    .unwrap();
+            assert_eq!(encoded.bytes[8..], query_code.bytes[8..]);
+        }
+    }
+
+    #[test]
     fn checked_in_turboquant_conformance_values_are_frozen() {
         let hex = |cid: Cid| {
             cid.as_bytes()

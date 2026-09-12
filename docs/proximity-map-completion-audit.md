@@ -92,6 +92,15 @@ Their cosine oracle rescored raw pre-ingestion vectors with platform `sqrt`
 instead of using persisted canonical vectors and the authoritative
 deterministic scorer; exhaustive reranking consequently reported only 0.50
 recall. Benchmark schema 4 corrects the oracle and rejects every older row.
+
+Eleven corrected schema-4 cells are retained in
+[`proximity-turboquant-v4-qualification.md`](proximity-turboquant-v4-qualification.md).
+They establish 1.00 exhaustive recall for both TurboQuant and PQ and expose
+the remaining 10K cosine default failure: all authoritative exact top-10
+vectors share a packed code with 222 lower-key records, so the frozen
+80-candidate `(approximate_score, key)` shortlist cannot select them. This is
+a contract-level recall gap, not a scorer defect.
+
 All 45,360 current-schema cells still require a single frozen-revision run,
 and all final release gates remain open.
 

@@ -13,8 +13,7 @@ forced-backend recall failures and do not qualify either forced-backend GA or
 > architecture-width `usize` wrapping. At 100K, each vector therefore appears
 > about five times and Recall@10 changes in coarse duplicate groups. These
 > rows remain reproducible performance and rank-depth diagnostics, but they do
-> not count toward the corrected, architecture-stable schema-v3 production
-> matrix.
+> not count toward the current architecture-stable production matrix.
 
 ## Environment and contract
 
