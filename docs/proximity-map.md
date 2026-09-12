@@ -525,6 +525,12 @@ PROLLY_PROXIMITY_BENCH_QUANTIZERS_ONLY=1 \
 cargo bench --all-features --bench prolly_proximity_bench
 ```
 
+Use `PROLLY_PROXIMITY_BENCH_STORE=file` with an existing
+`PROLLY_PROXIMITY_BENCH_STORE_PATH` directory for durable-local cells. The
+harness creates isolated child stores and removes its uniquely named run
+directory on ordinary exit; a process interruption may leave that child for
+diagnosis.
+
 Benchmark rows are machine-specific evidence, not performance guarantees. See
 [`proximity-map-completion-audit.md`](proximity-map-completion-audit.md)
 for the release evidence matrix.

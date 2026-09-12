@@ -1,8 +1,8 @@
 use prolly::{
     copy_content_graph, plan_content_gc, AcceleratorSet, AdaptiveQuality, BuildParallelism, Cid,
     CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits,
-    CompositeBuildOutcome, ContentGraphLimits, ContentObjectKind, DistanceMetric, HnswConfig,
-    HnswIndex, MemStore, ProductQuantizationConfig, ProductQuantizer, ProximityConfig,
+    CompositeBuildOutcome, ContentGraphLimits, ContentObjectKind, DistanceMetric, FileNodeStore,
+    HnswConfig, HnswIndex, MemStore, ProductQuantizationConfig, ProductQuantizer, ProximityConfig,
     ProximityFilter, ProximityMap, ProximityMutation, ProximityRecord, QueryKernel,
     ScalarQuantizationConfig, SearchBackend, SearchCompletion, SearchIo, SearchPolicy,
     SearchRequest, SearchRuntime, TurboQuantizationConfig, TurboQuantizer, TypedContentRoot,
@@ -13,11 +13,12 @@ use std::collections::HashSet;
 #[cfg(feature = "async-store")]
 use std::future::Future;
 use std::hint::black_box;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 #[cfg(feature = "async-store")]
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 fn main() {
     let records = env_usize("PROLLY_PROXIMITY_BENCH_RECORDS").unwrap_or(1_000);
@@ -31,6 +32,21 @@ fn main() {
     let threads = env_list("PROLLY_PROXIMITY_BENCH_THREADS").unwrap_or_else(|| vec![1, 2, 4]);
     let scale_only = env_bool("PROLLY_PROXIMITY_BENCH_SCALE_ONLY");
     let quantizers_only = env_bool("PROLLY_PROXIMITY_BENCH_QUANTIZERS_ONLY");
+    let store_kind = BenchStoreKind::from_env();
+    let durable_root = match store_kind {
+        BenchStoreKind::Memory => {
+            assert!(
+                std::env::var_os("PROLLY_PROXIMITY_BENCH_STORE_PATH").is_none(),
+                "store path is only valid for the file benchmark store"
+            );
+            None
+        }
+        BenchStoreKind::File => Some(DurableRunRoot::create(
+            std::env::var_os("PROLLY_PROXIMITY_BENCH_STORE_PATH")
+                .map(PathBuf::from)
+                .expect("file benchmark store requires PROLLY_PROXIMITY_BENCH_STORE_PATH"),
+        )),
+    };
     assert!(
         !(scale_only && quantizers_only),
         "scale-only and quantizers-only benchmark profiles are mutually exclusive"
@@ -86,7 +102,10 @@ fn main() {
     println!("target_arch={}", std::env::consts::ARCH);
     println!("target_os={}", std::env::consts::OS);
     println!("machine={}", command_output("hostname", &[]));
-    println!("store=memory");
+    println!("store={}", store_kind.label());
+    if let Some(root) = &durable_root {
+        println!("store_path={}", root.path().display());
+    }
     println!("seed={}", turboquant_config.seed);
     println!("records={records}");
     println!(
@@ -130,8 +149,91 @@ fn main() {
         eligibility_ppm,
         turboquant_config: &turboquant_config,
     };
-    for dimension in dimensions {
-        bench_case(records, dimension, &settings);
+    match durable_root {
+        None => {
+            let mut make_store = || Arc::new(MemStore::new());
+            for dimension in dimensions {
+                bench_case(records, dimension, &settings, &mut make_store);
+            }
+        }
+        Some(root) => {
+            let mut store_id = 0usize;
+            let mut make_store = || {
+                store_id += 1;
+                Arc::new(
+                    FileNodeStore::open(root.path().join(format!("store-{store_id:06}"))).unwrap(),
+                )
+            };
+            for dimension in dimensions {
+                bench_case(records, dimension, &settings, &mut make_store);
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum BenchStoreKind {
+    Memory,
+    File,
+}
+
+impl BenchStoreKind {
+    fn from_env() -> Self {
+        match std::env::var("PROLLY_PROXIMITY_BENCH_STORE")
+            .unwrap_or_else(|_| "memory".to_owned())
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "memory" => Self::Memory,
+            "file" => Self::File,
+            _ => panic!("PROLLY_PROXIMITY_BENCH_STORE must be memory or file"),
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Memory => "memory",
+            Self::File => "file",
+        }
+    }
+}
+
+struct DurableRunRoot {
+    path: PathBuf,
+}
+
+impl DurableRunRoot {
+    fn create(parent: PathBuf) -> Self {
+        assert!(
+            parent.is_dir(),
+            "file benchmark store path must be an existing directory"
+        );
+        let parent = parent
+            .canonicalize()
+            .expect("file benchmark store path must be canonicalizable");
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock must be after the Unix epoch")
+            .as_nanos();
+        let path = parent.join(format!("prolly-turboquant-{}-{nonce}", std::process::id()));
+        std::fs::create_dir(&path).expect("create unique file benchmark run directory");
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for DurableRunRoot {
+    fn drop(&mut self) {
+        if let Err(error) = std::fs::remove_dir_all(&self.path) {
+            eprintln!(
+                "warning: failed to remove benchmark run directory {}: {error}",
+                self.path.display()
+            );
+        }
     }
 }
 
@@ -149,7 +251,16 @@ struct BenchSettings<'a> {
     turboquant_config: &'a TurboQuantizationConfig,
 }
 
-fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
+fn bench_case<S, F>(
+    count: usize,
+    dimensions: usize,
+    settings: &BenchSettings<'_>,
+    make_store: &mut F,
+) where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+    F: FnMut() -> S,
+{
     let BenchSettings {
         threads,
         scale_only,
@@ -165,7 +276,7 @@ fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
     let records = make_records(count, dimensions);
     if !quantizers_only {
         for &workers in threads {
-            let store = Arc::new(MemStore::new());
+            let store = make_store();
             let config = config(dimensions, metric);
             let started = Instant::now();
             let (_, stats) = ProximityMap::build_with_parallelism(
@@ -186,7 +297,7 @@ fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
         }
     }
 
-    let store = Arc::new(MemStore::new());
+    let store = make_store();
     let started = Instant::now();
     let map =
         ProximityMap::build(store.clone(), config(dimensions, metric), records.clone()).unwrap();
@@ -334,7 +445,7 @@ fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
 
     let limits = ContentGraphLimits::default();
     let root = TypedContentRoot::proximity_descriptor(map.tree().descriptor.clone());
-    let replica = MemStore::new();
+    let replica = make_store();
     let started = Instant::now();
     let copied = copy_content_graph(&store, &replica, root.clone(), &limits).unwrap();
     row(
@@ -839,13 +950,11 @@ fn bench_accelerators<S>(
 }
 
 #[cfg(feature = "async-store")]
-fn bench_async(
-    map: &ProximityMap<Arc<MemStore>>,
-    store: Arc<MemStore>,
-    query: &[f32],
-    k: usize,
-    dimensions: usize,
-) {
+fn bench_async<S>(map: &ProximityMap<S>, store: S, query: &[f32], k: usize, dimensions: usize)
+where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
     let async_map = block_on(AsyncProximityMap::load(
         SyncStoreAsAsync::new(store),
         map.tree().descriptor.clone(),

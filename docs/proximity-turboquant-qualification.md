@@ -81,6 +81,24 @@ The scale-only and quantizers-only profiles are mutually exclusive. Worker
 counts must be positive and unique; invalid lists fail before data generation
 so retained CSVs cannot contain ambiguous duplicate cells.
 
+The default store is `memory`. Durable-local cells use the repository
+`FileNodeStore` by selecting `PROLLY_PROXIMITY_BENCH_STORE=file` and providing
+an existing parent directory. The harness creates a uniquely named child for
+the run, reports its canonical path, isolates each build in a separate store,
+and removes the owned run directory on ordinary exit. An interrupted process
+may leave that uniquely named child for diagnosis and manual cleanup.
+
+```sh
+mkdir -p /var/tmp/prolly-turboquant-bench
+PROLLY_PROXIMITY_BENCH_STORE=file \
+PROLLY_PROXIMITY_BENCH_STORE_PATH=/var/tmp/prolly-turboquant-bench \
+PROLLY_PROXIMITY_BENCH_RECORDS=100000 \
+PROLLY_PROXIMITY_BENCH_DIMENSIONS=768,1536 \
+PROLLY_PROXIMITY_BENCH_THREADS=1,2,4 \
+PROLLY_PROXIMITY_BENCH_QUANTIZERS_ONLY=1 \
+cargo bench --all-features --bench prolly_proximity_bench
+```
+
 Search rows report the sample median; `_p95` and `_p99` companion rows report
 nearest-rank tail latency. Their counters retain logical/physical bytes read
 and candidate handle/byte peaks. `_work` rows retain frontier peak and the
