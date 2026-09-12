@@ -1022,6 +1022,14 @@ where
             "TurboQuant executor requires a TurboQuant plan",
         ));
     };
+    if let Some(completion) = stop_reason(control) {
+        return Ok(SearchResult {
+            neighbors: Vec::new(),
+            stats: ProximitySearchStats::default(),
+            completion,
+            plan: plan.summary(),
+        });
+    }
     let transform_plan = store
         .runtime()
         .turboquant_transform_plan(index.dimensions, index.config.seed)?;
@@ -1087,11 +1095,14 @@ where
         }
     } else {
         let mut range = codes.range(&index.code_tree, &[], None).await?;
-        while let Some(entry) = range.next().await {
+        loop {
             if let Some(stopped) = stop_reason(control) {
                 completion = stopped;
                 break;
             }
+            let Some(entry) = range.next().await else {
+                break;
+            };
             let (key, code) = entry?;
             if excluded.is_some_and(|excluded| excluded.contains(&key)) {
                 continue;

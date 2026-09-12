@@ -889,8 +889,16 @@ fn turboquant_proof_replays_the_committed_plan_and_closure() {
     }
 
     let mut version = proof.clone();
-    version.format_version = version.format_version.wrapping_add(1);
-    assert_rejected(&version);
+    version.format_version = version.format_version.saturating_sub(1);
+    version.request.query[0] += 1.0;
+    version.accelerator_objects.pop();
+    match version.verify(&ContentGraphLimits::default()) {
+        Err(prolly::Error::UnsupportedProximityVersion { found, required }) => {
+            assert_eq!(found, version.format_version);
+            assert_eq!(required, proof.format_version);
+        }
+        other => panic!("old TurboQuant proof version must fail explicitly: {other:?}"),
+    }
 
     let mut source = proof.clone();
     source.source.descriptor = Cid::from_bytes(b"tampered source");
@@ -1347,6 +1355,7 @@ fn turboquant_async_build_load_search_verify_and_cancel_match_sync() {
     };
     use std::future::Future;
     use std::task::{Context, Poll};
+    use std::time::Instant;
 
     fn block_on<F: Future>(future: F) -> F::Output {
         let waker = futures_util::task::noop_waker();
@@ -1403,6 +1412,25 @@ fn turboquant_async_build_load_search_verify_and_cancel_match_sync() {
             .unwrap();
         assert_eq!(result.neighbors, sync.neighbors);
         assert_eq!(result.plan.backend, SearchBackend::TurboQuantized);
+
+        let expired = loaded
+            .search(
+                &asynchronous,
+                request.clone(),
+                AsyncSearchControl {
+                    deadline: Some(Instant::now()),
+                    ..AsyncSearchControl::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(expired.completion, SearchCompletion::DeadlineExceeded);
+        assert!(expired.neighbors.is_empty());
+        assert_eq!(expired.stats.nodes_read, 0);
+        assert_eq!(expired.stats.physical_bytes_read, 0);
+        assert_eq!(expired.stats.committed_bytes, 0);
+        assert_eq!(expired.stats.quantized_distance_evaluations, 0);
+        assert_eq!(expired.stats.distance_evaluations, 0);
 
         assert!(asynchronous
             .prove_search(request.clone(), &ContentGraphLimits::default())

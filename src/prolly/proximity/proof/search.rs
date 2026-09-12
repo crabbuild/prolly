@@ -191,6 +191,12 @@ impl ProximitySearchProof {
         &self,
         limits: &ContentGraphLimits,
     ) -> Result<ProximitySearchVerification, Error> {
+        if self.format_version != SEARCH_PLAN_FORMAT_VERSION {
+            return Err(Error::UnsupportedProximityVersion {
+                found: self.format_version,
+                required: SEARCH_PLAN_FORMAT_VERSION,
+            });
+        }
         if request_commitment(&self.request, &self.plan) != self.request_commitment {
             return Err(invalid("search request commitment mismatch"));
         }
@@ -203,12 +209,8 @@ impl ProximitySearchProof {
             &self.accelerator_objects,
             limits,
         )?;
-        if self.format_version != SEARCH_PLAN_FORMAT_VERSION
-            || self.plan.summary() != self.result.plan
-        {
-            return Err(invalid(
-                "unsupported proof version or search plan summary mismatch",
-            ));
+        if self.plan.summary() != self.result.plan {
+            return Err(invalid("search plan summary mismatch"));
         }
         let mut request = self.request.borrowed();
         let mut native_trace = Vec::new();
