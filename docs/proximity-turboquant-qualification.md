@@ -334,8 +334,9 @@ does not close the remaining production-matrix gates.
 
 The retained
 [`proximity-turboquant-10k-qualification.md`](proximity-turboquant-10k-qualification.md)
-report adds one real schema-v2 10K × 768 squared-L2 default-path cell. It
-demonstrates 1.0 TurboQuant recall and materially faster construction than PQ,
-but its warm p95 search is 2.63× PQ and its sidecar is 22.79× larger. It is
-therefore evidence for the forced path and against enabling `Auto`, not a
-substitute for the remaining 45,359 production cells.
+report adds one real schema-v2 10K × 768 default-path cell for each supported
+metric. Every cell demonstrates 1.0 TurboQuant recall and materially faster
+construction than PQ, but warm p95 search is 2.63× to 5.43× PQ and the
+sidecar is 22.79× larger. These cells are therefore evidence for the forced
+path and against enabling `Auto`, not a substitute for the remaining 45,357
+production cells.
