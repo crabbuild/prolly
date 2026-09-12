@@ -274,6 +274,164 @@ fn turboquant_is_canonical_bounded_verified_and_exhaustively_reranked() {
 }
 
 #[test]
+fn turboquant_every_build_limit_fails_typed_before_manifest_publication() {
+    let count = 33usize;
+    let dimensions = 128usize;
+    let source = records(count, dimensions);
+    let config = TurboQuantizationConfig {
+        bit_width: 4,
+        rerank_multiplier: 8,
+        seed: 41,
+    };
+    let oracle_store = Arc::new(MemStore::new());
+    let oracle_map = ProximityMap::build(
+        oracle_store,
+        ProximityConfig::new(dimensions as u32),
+        source.clone(),
+    )
+    .unwrap();
+    let (oracle, _) =
+        TurboQuantizer::build(&oracle_map, config.clone(), BuildParallelism::serial()).unwrap();
+    let manifest = oracle.manifest_cid().clone();
+    let cases = [
+        (
+            "TurboQuant records",
+            1,
+            TurboQuantizationBuildLimits {
+                max_records: Some(count - 1),
+                ..Default::default()
+            },
+        ),
+        (
+            "TurboQuant input bytes",
+            1,
+            TurboQuantizationBuildLimits {
+                max_input_bytes: Some(1),
+                ..Default::default()
+            },
+        ),
+        (
+            "TurboQuant temporary bytes",
+            1,
+            TurboQuantizationBuildLimits {
+                max_temporary_bytes: Some(1),
+                ..Default::default()
+            },
+        ),
+        (
+            "TurboQuant transform operations",
+            1,
+            TurboQuantizationBuildLimits {
+                max_transform_operations: Some(1),
+                ..Default::default()
+            },
+        ),
+        (
+            "TurboQuant encoded output bytes",
+            1,
+            TurboQuantizationBuildLimits {
+                max_encoded_output_bytes: Some(1),
+                ..Default::default()
+            },
+        ),
+        (
+            "TurboQuant worker threads",
+            2,
+            TurboQuantizationBuildLimits {
+                max_worker_threads: Some(1),
+                ..Default::default()
+            },
+        ),
+    ];
+
+    for (resource, workers, limits) in &cases {
+        let store = Arc::new(MemStore::new());
+        let map = ProximityMap::build(
+            store.clone(),
+            ProximityConfig::new(dimensions as u32),
+            source.clone(),
+        )
+        .unwrap();
+        let error = match TurboQuantizer::build_with_limits(
+            &map,
+            config.clone(),
+            BuildParallelism::new(*workers).unwrap(),
+            limits.clone(),
+        ) {
+            Err(error) => error,
+            Ok(_) => panic!("configured TurboQuant limit must fail"),
+        };
+        let prolly::Error::ProximityResourceLimitExceeded {
+            resource: actual_resource,
+            limit,
+            actual,
+        } = error
+        else {
+            panic!("unexpected limit error: {error:?}");
+        };
+        assert_eq!(actual_resource, *resource);
+        assert!(actual > limit);
+        assert!(Store::get(&store, manifest.as_bytes()).unwrap().is_none());
+    }
+
+    #[cfg(feature = "async-store")]
+    {
+        use prolly::{AsyncProximityMap, AsyncTurboQuantizer, SyncStoreAsAsync};
+        use std::future::Future;
+        use std::task::{Context, Poll};
+
+        fn block_on<F: Future>(future: F) -> F::Output {
+            let waker = futures_util::task::noop_waker();
+            let mut context = Context::from_waker(&waker);
+            let mut future = Box::pin(future);
+            loop {
+                match future.as_mut().poll(&mut context) {
+                    Poll::Ready(value) => return value,
+                    Poll::Pending => std::thread::yield_now(),
+                }
+            }
+        }
+
+        for (resource, workers, limits) in cases {
+            let store = Arc::new(MemStore::new());
+            block_on(async {
+                let map = AsyncProximityMap::build(
+                    SyncStoreAsAsync::new(store.clone()),
+                    ProximityConfig::new(dimensions as u32),
+                    source.clone(),
+                )
+                .await
+                .unwrap();
+                let error = match AsyncTurboQuantizer::build_with_limits(
+                    &map,
+                    config.clone(),
+                    BuildParallelism::new(workers).unwrap(),
+                    limits,
+                    2,
+                    &ContentGraphLimits::default(),
+                )
+                .await
+                {
+                    Err(error) => error,
+                    Ok(_) => panic!("configured async TurboQuant limit must fail"),
+                };
+                let prolly::Error::ProximityResourceLimitExceeded {
+                    resource: actual_resource,
+                    limit,
+                    actual,
+                } = error
+                else {
+                    panic!("unexpected async limit error: {error:?}");
+                };
+                assert_eq!(actual_resource, resource);
+                assert!(actual > limit);
+                assert!(Store::get(&store, manifest.as_bytes()).unwrap().is_none());
+            });
+        }
+    }
+}
+
+#[test]
 fn turboquant_all_supported_codes_and_representative_dimensions_rerank_exactly() {
     for dimensions in [8usize, 24, 200] {
         for bit_width in [2, 3, 4] {
