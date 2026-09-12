@@ -2124,11 +2124,14 @@ async fn run_large_write_workload(
             true,
             1,
             async {
-                let mut session = client.table(&table).write_session().options(LargeWriteOptions {
-                    max_items: args.records,
-                    max_logical_bytes: logical_bytes.max(1),
-                    ..LargeWriteOptions::default()
-                });
+                let mut session = client
+                    .table(&table)
+                    .write_session()
+                    .options(LargeWriteOptions {
+                        max_items: args.records,
+                        max_logical_bytes: logical_bytes.max(1),
+                        ..LargeWriteOptions::default()
+                    });
                 for index in 0..args.records {
                     session
                         .put(HashMap::from([
@@ -2156,7 +2159,9 @@ async fn run_large_write_workload(
             .len()
             != 2
         {
-            return Err("large write did not create exactly one version after table creation".into());
+            return Err(
+                "large write did not create exactly one version after table creation".into(),
+            );
         }
     }
     writer.flush().map_err(error)?;

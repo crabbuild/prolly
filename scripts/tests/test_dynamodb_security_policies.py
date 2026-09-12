@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 PROVIDER = ROOT / "stores" / "prolly-store-dynamodb" / "src" / "lib.rs"
-POLICIES = ROOT / "dynamodb" / "client" / "deploy" / "aws"
+POLICIES = ROOT / "extensions" / "dynamodb" / "client" / "deploy" / "aws"
 
 SDK_CALLS = {
     "batch_get_item": "dynamodb:BatchGetItem",

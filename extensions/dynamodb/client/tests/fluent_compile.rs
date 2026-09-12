@@ -10,10 +10,10 @@ use aws_sdk_dynamodb::types::{
 };
 use prolly::MapVersionId;
 use prolly_dynamodb_client::{
-    BulkImportOptions, Client, IndexReconfigurationPlan, KeyAttribute, KeyKind,
-    LargeWriteOptions, MaintenanceContext, RetentionPolicy, SecondaryIndexDefinition,
-    SecondaryIndexKind, SecondaryIndexProjection, StreamWorkerOptions, TableArchive,
-    TableArchiveLimits, TtlWorkerOptions,
+    BulkImportOptions, Client, IndexReconfigurationPlan, KeyAttribute, KeyKind, LargeWriteOptions,
+    MaintenanceContext, RetentionPolicy, SecondaryIndexDefinition, SecondaryIndexKind,
+    SecondaryIndexProjection, StreamWorkerOptions, TableArchive, TableArchiveLimits,
+    TtlWorkerOptions,
 };
 
 #[allow(dead_code)]
@@ -210,8 +210,8 @@ fn advertised_fluent_chains_compile(
         .request_token("large-write");
     session
         .put(HashMap::from([(
-        "accountId".into(),
-        AttributeValue::S("acct-bulk".into()),
+            "accountId".into(),
+            AttributeValue::S("acct-bulk".into()),
         )]))
         .unwrap();
     assert_send(session.commit());
