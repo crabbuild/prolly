@@ -4609,18 +4609,6 @@ where
         self.build_from_entries(entries).await
     }
 
-    pub(crate) async fn publish_builder_nodes(
-        &self,
-        nodes: &[builder::DeferredNode],
-        origin: PublicationOrigin,
-    ) -> Result<(), Error> {
-        let nodes = nodes
-            .iter()
-            .map(|entry| (&entry.cid, entry.bytes.as_slice()))
-            .collect::<Vec<_>>();
-        self.publish_builder_node_refs(&nodes, origin).await
-    }
-
     pub(crate) async fn publish_builder_node_refs(
         &self,
         nodes: &[(&Cid, &[u8])],

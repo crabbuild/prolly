@@ -687,8 +687,21 @@ per coordinate per round, plus one standard-normal scaling multiplication.
 
 `max_temporary_bytes` includes the derived transform plan, every worker's two
 `dimensions * 8` transform buffers, bounded key/code batch output, ordered
-reassembly state, and statistics. The builder computes a conservative checked
-upper bound before starting workers and tracks the actual peak at or below it.
+reassembly state, and the code tree builder's current hierarchy, pending
+publication payload, and transient raw/encoded node overlap. The builder
+computes a conservative checked upper bound before starting workers and tracks
+the accounted peak at or below it. Payload accounting excludes allocator
+metadata and provider-owned publication buffers. A bounded build publishes
+completed code-tree nodes immediately so the pending publication payload
+cannot grow with source cardinality. Unbounded builds cap code-tree publication
+batches at 16 nodes so large-dimension leaves cannot turn a generic provider
+batch setting into excessive process memory.
+
+Build statistics normalize worker scratch to one worker so parallelism does
+not change their canonical logical counters. `peak_temporary_bytes` also
+reflects the build limit and node-publication batch, however, and may therefore
+differ between sync and async builds that use different publication batching;
+limit enforcement always accounts for every requested worker.
 
 Parallel construction assigns contiguous key-ordered batches to workers.
 Results are committed only in batch sequence order. If several records fail,

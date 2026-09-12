@@ -514,9 +514,8 @@ fn turboquant_temporary_limit_adapts_batches_before_encoding() {
     .unwrap();
     let (_, single_stats) =
         TurboQuantizer::build(&single_map, config.clone(), BuildParallelism::serial()).unwrap();
-    let temporary_limit = single_stats.peak_temporary_bytes;
 
-    let source = records(33, dimensions);
+    let source = records(257, dimensions);
     let sync_store = Arc::new(MemStore::new());
     let sync_map = ProximityMap::build(
         sync_store,
@@ -524,10 +523,32 @@ fn turboquant_temporary_limit_adapts_batches_before_encoding() {
         source.clone(),
     )
     .unwrap();
-    let (oracle, mut expected_stats) =
+    let (oracle, expected_stats) =
         TurboQuantizer::build(&sync_map, config.clone(), BuildParallelism::serial()).unwrap();
+    let packed_len = (dimensions * usize::from(config.bit_width)).div_ceil(8);
+    let plan_bytes = 2 * dimensions * (std::mem::size_of::<usize>() + std::mem::size_of::<i8>());
+    let worker_bytes = dimensions * 25 + packed_len;
+    let encoded_value_bytes = 8 + packed_len;
+    let algorithm_only_peak = source
+        .chunks(128)
+        .map(|batch| {
+            plan_bytes
+                + worker_bytes
+                + batch
+                    .iter()
+                    .map(|record| record.key.len() + dimensions * 4)
+                    .sum::<usize>()
+                + batch.len() * encoded_value_bytes
+        })
+        .max()
+        .unwrap();
+    assert!(
+        expected_stats.peak_temporary_bytes > algorithm_only_peak,
+        "tree-builder retention must be included in TurboQuant peak memory"
+    );
+    let temporary_limit = single_stats.peak_temporary_bytes
+        + 19 * (expected_stats.peak_temporary_bytes - single_stats.peak_temporary_bytes) / 20;
     assert!(expected_stats.peak_temporary_bytes > temporary_limit);
-    expected_stats.peak_temporary_bytes = temporary_limit;
     let limits = TurboQuantizationBuildLimits {
         max_temporary_bytes: Some(temporary_limit),
         ..Default::default()
@@ -540,7 +561,11 @@ fn turboquant_temporary_limit_adapts_batches_before_encoding() {
     )
     .unwrap();
     assert_eq!(bounded.manifest_cid(), oracle.manifest_cid());
-    assert_eq!(bounded_stats, expected_stats);
+    assert!(bounded_stats.peak_temporary_bytes <= temporary_limit);
+    assert!(bounded_stats.peak_temporary_bytes < expected_stats.peak_temporary_bytes);
+    let mut normalized_bounded_stats = bounded_stats.clone();
+    normalized_bounded_stats.peak_temporary_bytes = expected_stats.peak_temporary_bytes;
+    assert_eq!(normalized_bounded_stats, expected_stats);
 
     #[cfg(feature = "async-store")]
     {
@@ -580,7 +605,7 @@ fn turboquant_temporary_limit_adapts_batches_before_encoding() {
             .await
             .unwrap();
             assert_eq!(async_bounded.manifest_cid(), oracle.manifest_cid());
-            assert_eq!(async_stats, expected_stats);
+            assert_eq!(async_stats, bounded_stats);
         });
     }
 }
@@ -1807,7 +1832,7 @@ fn turboquant_async_build_streams_canonical_codes_in_bounded_publications() {
         }
     }
 
-    let source = records(1_025, 128);
+    let source = records(4_097, 128);
     let config = TurboQuantizationConfig {
         bit_width: 3,
         rerank_multiplier: 16,
@@ -1840,16 +1865,19 @@ fn turboquant_async_build_streams_canonical_codes_in_bounded_publications() {
             config,
             BuildParallelism::new(3).unwrap(),
             TurboQuantizationBuildLimits::default(),
-            1,
+            1_024,
             &ContentGraphLimits::default(),
         )
         .await
         .unwrap();
 
         assert_eq!(async_index.manifest_cid(), sync_index.manifest_cid());
-        assert_eq!(async_stats, sync_stats);
+        assert!(async_stats.peak_temporary_bytes <= sync_stats.peak_temporary_bytes);
+        let mut normalized_async_stats = async_stats.clone();
+        normalized_async_stats.peak_temporary_bytes = sync_stats.peak_temporary_bytes;
+        assert_eq!(normalized_async_stats, sync_stats);
         assert!(bounded.publications.load(Ordering::SeqCst) > 1);
-        assert_eq!(bounded.maximum_batch.load(Ordering::SeqCst), 1);
+        assert_eq!(bounded.maximum_batch.load(Ordering::SeqCst), 16);
         assert_eq!(
             async_index
                 .verify(&map, &ContentGraphLimits::default())
@@ -1880,7 +1908,10 @@ fn turboquant_async_build_streams_canonical_codes_in_bounded_publications() {
             CatalogAcceleratorKind::TurboQuantized
         );
         assert_eq!(catalog.entries()[0].manifest, *sync_index.manifest_cid());
-        assert_eq!(catalog_stats.turboquant, Some(sync_stats));
+        let mut catalog_turboquant = catalog_stats.turboquant.clone().unwrap();
+        assert!(catalog_turboquant.peak_temporary_bytes <= sync_stats.peak_temporary_bytes);
+        catalog_turboquant.peak_temporary_bytes = sync_stats.peak_temporary_bytes;
+        assert_eq!(catalog_turboquant, sync_stats);
         assert!(catalog_stats.objects_published > 1);
         assert!(catalog_stats.bytes_published > 0);
         assert!(bounded.publications.load(Ordering::SeqCst) > 1);

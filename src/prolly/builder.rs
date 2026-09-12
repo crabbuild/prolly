@@ -83,8 +83,11 @@ pub struct SortedBatchBuilder<S: Store> {
     store: S,
     config: Config,
     origin: PublicationOrigin,
+    publication_batch_items: usize,
     pending_entry: Option<(Vec<u8>, Vec<u8>)>,
     pending_nodes: Vec<BuiltNode>,
+    pending_nodes_payload_bytes: usize,
+    peak_retained_payload_bytes: usize,
     hierarchy: HierarchicalEmitter,
 }
 
@@ -108,7 +111,9 @@ pub struct AsyncSortedBatchBuilder<S: AsyncStore> {
     origin: PublicationOrigin,
     publication_batch_items: usize,
     pending_entry: Option<(Vec<u8>, Vec<u8>)>,
-    pending_nodes: Vec<DeferredNode>,
+    pending_nodes: Vec<BuiltNode>,
+    pending_nodes_payload_bytes: usize,
+    peak_retained_payload_bytes: usize,
     hierarchy: HierarchicalEmitter,
 }
 
@@ -175,6 +180,8 @@ where
             publication_batch_items,
             pending_entry: None,
             pending_nodes: Vec::new(),
+            pending_nodes_payload_bytes: 0,
+            peak_retained_payload_bytes: 0,
             hierarchy,
         }
     }
@@ -193,12 +200,14 @@ where
             }
             if key == *previous {
                 *previous_value = val;
+                self.observe_retained_payload_peak()?;
                 return Ok(());
             }
         }
 
         self.flush_pending_entry().await?;
         self.pending_entry = Some((key, val));
+        self.observe_retained_payload_peak()?;
         Ok(())
     }
 
@@ -211,12 +220,36 @@ where
     }
 
     async fn collect_emitted(&mut self, emitted: Vec<EmittedNode>) -> Result<(), Error> {
+        let emitted_payload_bytes = emitted.iter().try_fold(0usize, |bytes, emitted| {
+            bytes
+                .checked_add(emitted.owned_payload_bytes)
+                .ok_or(Error::InvalidNode)
+        })?;
+        let concurrent_payload_bytes = self
+            .retained_payload_bytes()?
+            .checked_add(emitted_payload_bytes)
+            .ok_or(Error::InvalidNode)?;
+        self.peak_retained_payload_bytes = self
+            .peak_retained_payload_bytes
+            .max(concurrent_payload_bytes);
         for emitted in emitted {
-            self.pending_nodes.push(DeferredNode {
+            let retained_payload_bytes = emitted
+                .summary
+                .first_key
+                .len()
+                .checked_add(emitted.bytes.len())
+                .ok_or(Error::InvalidNode)?;
+            self.pending_nodes.push(BuiltNode {
                 cid: emitted.summary.cid,
+                first_key: emitted.summary.first_key,
+                count: emitted.summary.count,
                 bytes: emitted.bytes,
-                node: emitted.node,
             });
+            self.pending_nodes_payload_bytes = self
+                .pending_nodes_payload_bytes
+                .checked_add(retained_payload_bytes)
+                .ok_or(Error::InvalidNode)?;
+            self.observe_retained_payload_peak()?;
             if self.pending_nodes.len() == self.publication_batch_items {
                 self.flush_pending_nodes().await?;
             }
@@ -225,23 +258,64 @@ where
     }
 
     async fn flush_pending_nodes(&mut self) -> Result<(), Error> {
+        let nodes = self
+            .pending_nodes
+            .iter()
+            .map(|entry| (&entry.cid, entry.bytes.as_slice()))
+            .collect::<Vec<_>>();
         self.engine
-            .publish_builder_nodes(&self.pending_nodes, self.origin)
+            .publish_builder_node_refs(&nodes, self.origin)
             .await?;
         self.pending_nodes.clear();
+        self.pending_nodes_payload_bytes = 0;
         Ok(())
     }
 
     /// Finish and publish the remaining nodes, then return the visible root.
-    pub async fn build(mut self) -> Result<Tree, Error> {
+    pub async fn build(self) -> Result<Tree, Error> {
+        self.build_with_retained_payload_peak()
+            .await
+            .map(|(tree, _)| tree)
+    }
+
+    pub(crate) async fn build_with_retained_payload_peak(mut self) -> Result<(Tree, usize), Error> {
         self.flush_pending_entry().await?;
         let (root, emitted) = self.hierarchy.finish()?;
         self.collect_emitted(emitted).await?;
         self.flush_pending_nodes().await?;
-        Ok(Tree {
-            root: root.map(|summary| summary.cid),
-            config: self.engine.config().clone(),
-        })
+        Ok((
+            Tree {
+                root: root.map(|summary| summary.cid),
+                config: self.engine.config().clone(),
+            },
+            self.peak_retained_payload_bytes,
+        ))
+    }
+
+    pub(crate) fn retained_payload_bytes(&self) -> Result<usize, Error> {
+        let pending_entry_bytes = match &self.pending_entry {
+            Some((key, value)) => key
+                .len()
+                .checked_add(value.len())
+                .ok_or(Error::InvalidNode)?,
+            None => 0,
+        };
+        self.hierarchy
+            .retained_payload_bytes()?
+            .checked_add(pending_entry_bytes)
+            .and_then(|bytes| bytes.checked_add(self.pending_nodes_payload_bytes))
+            .ok_or(Error::InvalidNode)
+    }
+
+    pub(crate) fn peak_retained_payload_bytes(&self) -> usize {
+        self.peak_retained_payload_bytes
+    }
+
+    fn observe_retained_payload_peak(&mut self) -> Result<(), Error> {
+        self.peak_retained_payload_bytes = self
+            .peak_retained_payload_bytes
+            .max(self.retained_payload_bytes()?);
+        Ok(())
     }
 }
 
@@ -613,14 +687,30 @@ where
     }
 
     pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
+        Self::new_with_origin_and_batch_size(store, config, origin, SORTED_BUILDER_NODE_BATCH)
+    }
+
+    pub(crate) fn new_with_origin_and_batch_size(
+        store: S,
+        config: Config,
+        origin: PublicationOrigin,
+        publication_batch_items: usize,
+    ) -> Self {
+        assert!(
+            publication_batch_items > 0,
+            "sorted builder publication batch size must be positive"
+        );
         let hierarchy = HierarchicalEmitter::new(config.clone())
             .expect("configuration contains a registered persisted tree format");
         Self {
             store,
             config,
             origin,
+            publication_batch_items,
             pending_entry: None,
             pending_nodes: Vec::new(),
+            pending_nodes_payload_bytes: 0,
+            peak_retained_payload_bytes: 0,
             hierarchy,
         }
     }
@@ -640,12 +730,14 @@ where
             }
             if key == *previous {
                 *previous_value = val;
+                self.observe_retained_payload_peak()?;
                 return Ok(());
             }
         }
 
         self.flush_pending_entry()?;
         self.pending_entry = Some((key, val));
+        self.observe_retained_payload_peak()?;
         Ok(())
     }
 
@@ -686,18 +778,45 @@ where
     }
 
     /// Build a tree from the streamed entries.
-    pub fn build(mut self) -> Result<Tree, Error> {
+    pub fn build(self) -> Result<Tree, Error> {
+        self.build_with_retained_payload_peak()
+            .map(|(tree, _)| tree)
+    }
+
+    pub(crate) fn build_with_retained_payload_peak(mut self) -> Result<(Tree, usize), Error> {
         self.flush_pending_entry()?;
         let (root, emitted) = self.hierarchy.finish()?;
         self.collect_emitted(emitted)?;
         self.flush_pending_nodes()?;
-        Ok(Tree {
-            root: root.map(|summary| summary.cid),
-            config: self.config,
-        })
+        Ok((
+            Tree {
+                root: root.map(|summary| summary.cid),
+                config: self.config,
+            },
+            self.peak_retained_payload_bytes,
+        ))
     }
 
     fn collect_emitted(&mut self, emitted: Vec<EmittedNode>) -> Result<(), Error> {
+        let emitted_payload_bytes = emitted.iter().try_fold(0usize, |bytes, emitted| {
+            bytes
+                .checked_add(emitted.owned_payload_bytes)
+                .ok_or(Error::InvalidNode)
+        })?;
+        let retained_emitted_payload_bytes =
+            emitted.iter().try_fold(0usize, |bytes, emitted| {
+                bytes
+                    .checked_add(emitted.summary.first_key.len())
+                    .and_then(|bytes| bytes.checked_add(emitted.bytes.len()))
+                    .ok_or(Error::InvalidNode)
+            })?;
+        let concurrent_payload_bytes = self
+            .retained_payload_bytes()?
+            .checked_add(emitted_payload_bytes)
+            .ok_or(Error::InvalidNode)?;
+        self.peak_retained_payload_bytes = self
+            .peak_retained_payload_bytes
+            .max(concurrent_payload_bytes);
         self.pending_nodes
             .extend(emitted.into_iter().map(|emitted| BuiltNode {
                 cid: emitted.summary.cid,
@@ -705,7 +824,12 @@ where
                 count: emitted.summary.count,
                 bytes: emitted.bytes,
             }));
-        if self.pending_nodes.len() >= SORTED_BUILDER_NODE_BATCH {
+        self.pending_nodes_payload_bytes = self
+            .pending_nodes_payload_bytes
+            .checked_add(retained_emitted_payload_bytes)
+            .ok_or(Error::InvalidNode)?;
+        self.observe_retained_payload_peak()?;
+        if self.pending_nodes.len() >= self.publication_batch_items {
             self.flush_pending_nodes()?;
         }
         Ok(())
@@ -714,6 +838,33 @@ where
     fn flush_pending_nodes(&mut self) -> Result<(), Error> {
         persist_nodes(&self.store, &self.pending_nodes, self.origin)?;
         self.pending_nodes.clear();
+        self.pending_nodes_payload_bytes = 0;
+        Ok(())
+    }
+
+    pub(crate) fn retained_payload_bytes(&self) -> Result<usize, Error> {
+        let pending_entry_bytes = match &self.pending_entry {
+            Some((key, value)) => key
+                .len()
+                .checked_add(value.len())
+                .ok_or(Error::InvalidNode)?,
+            None => 0,
+        };
+        self.hierarchy
+            .retained_payload_bytes()?
+            .checked_add(pending_entry_bytes)
+            .and_then(|bytes| bytes.checked_add(self.pending_nodes_payload_bytes))
+            .ok_or(Error::InvalidNode)
+    }
+
+    pub(crate) fn peak_retained_payload_bytes(&self) -> usize {
+        self.peak_retained_payload_bytes
+    }
+
+    fn observe_retained_payload_peak(&mut self) -> Result<(), Error> {
+        self.peak_retained_payload_bytes = self
+            .peak_retained_payload_bytes
+            .max(self.retained_payload_bytes()?);
         Ok(())
     }
 }
