@@ -1619,10 +1619,23 @@ mod tests {
                 }
                 plan_bytes.extend(round.signs.iter().map(|sign| *sign as u8));
             }
+            // Construct the input directly from IEEE-754 bits. Calling libm
+            // here (for example, `sin`) makes the *test input* vary by target
+            // before the deterministic transform is exercised.
+            let mut input_stream = SplitMix64::new(0x5451_4649_5854_0001);
             let input: Vec<_> = (0..dimensions)
-                .map(|index| (index as f64 * 0.03125).sin())
+                .map(|_| {
+                    let draw = input_stream.next();
+                    let sign = draw & (1u64 << 63);
+                    let fraction = draw & ((1u64 << 52) - 1);
+                    f64::from_bits(sign | 0x3fe0_0000_0000_0000 | fraction)
+                })
                 .collect();
             let output = plan.apply(&input);
+            let input_bytes: Vec<_> = input
+                .iter()
+                .flat_map(|value| value.to_bits().to_le_bytes())
+                .collect();
             let output_bytes: Vec<_> = output
                 .iter()
                 .flat_map(|value| value.to_bits().to_le_bytes())
@@ -1631,10 +1644,17 @@ mod tests {
             assert_eq!(
                 hex(Cid::from_bytes(&plan_bytes)),
                 expected["plan_sha256"].as_str().unwrap(),
+                "plan mismatch at dimension {dimensions}",
+            );
+            assert_eq!(
+                hex(Cid::from_bytes(&input_bytes)),
+                expected["input_sha256"].as_str().unwrap(),
+                "input mismatch at dimension {dimensions}",
             );
             assert_eq!(
                 hex(Cid::from_bytes(&output_bytes)),
                 expected["output_sha256"].as_str().unwrap(),
+                "output mismatch at dimension {dimensions}",
             );
         }
         for bit_width in [2, 3, 4] {

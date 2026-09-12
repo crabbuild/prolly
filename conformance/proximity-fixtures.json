@@ -34,31 +34,38 @@
     "rotation": {
       "8": {
         "plan_sha256": "2f6eebb75a59bd467362f520f65d7439e9dca67d2550e4629272a2da0bd60fa4",
-        "output_sha256": "779eed3c1f09b423af98c93ac50e7c47b465313e328326593e5a3b71926de5a2"
+        "input_sha256": "0df23ccb8ae4539f523c781770edc1a6559238c7f85a46f722ef734bd3f1b426",
+        "output_sha256": "701ad9f7590028ee3ae66f65e070054a61559936bd1cf2c0cf6c302f245f3cf7"
       },
       "24": {
         "plan_sha256": "74d6434c74763010f29e9d52e29b1fe3276ca788071da05aaddb9bba48343cca",
-        "output_sha256": "5766eaaafab0c335df06cdea162f4caeaa4b2f723d1c5bdc8f2e93f5ef6aa530"
+        "input_sha256": "253c1e0c40cff30eafc491db09b70ad70477c499a619ef15ba6d556d3acdb62a",
+        "output_sha256": "14f903f1054c1fe218c0260a36dfaa202c3272ee26f4e1edfbb1eec978d60877"
       },
       "128": {
         "plan_sha256": "d8c3493ae87a67447244162c06fc14bae49221da8e768199c1306865901b79a6",
-        "output_sha256": "a1a7fde2b1dedf1d3bf6415724468515e5b4f277cdcc5a7a312ef33a3af30b08"
+        "input_sha256": "8336f407759ab9bd7359070cf07bf31de3a5429cfef13628984f6dc0c6c0b2e0",
+        "output_sha256": "3876fc0ee1bfdc304aaed52196a49b09e51cea6a6faf9af0ce30ac02ce9cacaf"
       },
       "200": {
         "plan_sha256": "9c09de045a68fee9538f2058c4feba60d5af63c4c0658978cc21d94179b6c0a1",
-        "output_sha256": "abe182561b3ac5ec861a39f51b391b91983401e63d18b30d146275b42816f975"
+        "input_sha256": "8d7dd2a89b614fd72f03c83c29398c7e2a0f9c3ee38e978d855462913593ee5a",
+        "output_sha256": "4f64414bb94df1ac03fac551e5c2166cae7d548944b99b9ae9e0c07f65acc330"
       },
       "768": {
         "plan_sha256": "9933010c8cc39c7f581209f8aba2ee1b1b6639a17721ea5cd0c6ab3c4c523d62",
-        "output_sha256": "dd797c012bce9f72b711395c1932e45e96aec7bc9c8be5c3abb32999b0e18926"
+        "input_sha256": "0d948d563cb311bb0e9f144357a99899196badae66ea26e51ebc59ed8012049b",
+        "output_sha256": "2a0ea3aaab4ee516e198d27687969e0a87ee8e3f02e08a2b94bf99d978b1f533"
       },
       "1536": {
         "plan_sha256": "a4bd7182d4bb646586a5da39f1adc41cc70d804bf02cac7c6657b0a6486dcb8c",
-        "output_sha256": "77a2a03b3db6f351433909801dc54ebc006b7cc35f14ce0342532318bdfcd65c"
+        "input_sha256": "ec35a39f1156d3165150800a38e561eaca2559044dd21fd882401c5bdad05ab2",
+        "output_sha256": "e301c711ebd75614ce76945d103e8390b06f57b0d64b2f6f9c078a0feebfc834"
       },
       "3072": {
         "plan_sha256": "232ff3045de1e706300ded2e18364cf1c062749d5e1a3b2512e4495f45acee8b",
-        "output_sha256": "6c29a0740d5dbe5bf0d0d7226299fc7849b2f61073b5d8cc5a94bddf4f7fc13d"
+        "input_sha256": "d4599c39517807d720357c1b81d4bebd391917cddd39b09e9c5b8ba73978bb1e",
+        "output_sha256": "465385945d6903401b1644bcfe47330d86e92018e261f01a34d655d93d633416"
       }
     },
     "packing_19_codes": {
