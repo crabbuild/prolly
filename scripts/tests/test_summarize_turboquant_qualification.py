@@ -1,7 +1,9 @@
 import importlib.util
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "summarize_turboquant_qualification.py"
@@ -116,6 +118,48 @@ class TurboQuantSummaryTests(unittest.TestCase):
         self.assertEqual(
             gates["typed_scalability_failure_cells"], ["one-million-cell"]
         )
+
+    def test_matrix_loader_validates_typed_scalability_disposition_without_csv(self):
+        revision = "a" * 40
+        cell = next(
+            cell
+            for cell in summary.runner.enumerate_cells("full")
+            if cell.records == 1_000_000
+        )
+        contract = summary.runner.make_contract(
+            "full",
+            revision,
+            (1,),
+            1,
+            0,
+            1,
+            [cell],
+            [cell],
+            100_000,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            shard = Path(directory)
+            summary.runner.write_json(shard / "manifest.json", {"contract": contract})
+            summary.runner.record_scalability_failure(shard, cell, 100_000)
+            summary.runner.write_json(
+                shard / "status.json",
+                {
+                    "complete": True,
+                    "completed_cells": 1,
+                    "typed_scalability_failures": 1,
+                },
+            )
+            with mock.patch.object(
+                summary.runner, "enumerate_cells", return_value=[cell]
+            ), mock.patch.object(
+                summary.runner, "wasm_smoke_is_valid", return_value=True
+            ):
+                loaded_contract, rows, failures = summary.load_matrix([shard])
+            self.assertEqual(loaded_contract, contract)
+            self.assertEqual(rows, [])
+            self.assertEqual(len(failures), 1)
+            self.assertEqual(failures[0]["cell_id"], cell.identifier)
+            self.assertFalse((shard / "raw").exists())
 
 
 if __name__ == "__main__":
