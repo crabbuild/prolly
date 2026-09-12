@@ -313,25 +313,15 @@ where
                     })?;
                 peak_temporary_bytes = peak_temporary_bytes.max(logical_peak);
 
-                let compute = || {
-                    batch
-                        .into_par_iter()
-                        .map(|(key, vector)| {
-                            let encoded = encode_vector(
-                                &vector,
-                                &plan,
-                                codebook,
-                                config.bit_width,
-                                sqrt_dimensions,
-                            );
-                            (key, encoded)
-                        })
-                        .collect::<Vec<_>>()
+                let encode = |(key, vector): (Vec<u8>, Vec<f32>)| {
+                    let encoded =
+                        encode_vector(&vector, &plan, codebook, config.bit_width, sqrt_dimensions);
+                    (key, encoded)
                 };
                 let encoded = if let Some(pool) = &pool {
-                    pool.install(compute)
+                    pool.install(|| batch.into_par_iter().map(encode).collect::<Vec<_>>())
                 } else {
-                    compute()
+                    batch.into_iter().map(encode).collect()
                 };
                 // Rayon indexed collection preserves input order. Errors are
                 // inspected only here so the earliest source key wins.
