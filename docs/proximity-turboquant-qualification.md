@@ -126,7 +126,10 @@ query-by-codebook product table once per search. Candidate scoring then decodes
 packed codes, reconstructs the exact positive half from the codebook's frozen
 bit-symmetric negative half, and performs the same coordinate-ordered scalar
 reduction without repeating a floating-point multiply for every candidate
-component. This halves the scalar/automatic query table to
+component. The private table uses fixed-size product rows for each supported
+bit width, so every dynamic lookup is safe and statically bounded; the complete
+TurboQuant algorithm module forbids unsafe code. This halves the
+scalar/automatic query table to
 `dimensions * 2^(bit_width - 1) * 8` bytes (1 MiB at the maximum supported
 shape). The
 explicit SIMD kernel remains an independent conformance path and reconstructs
@@ -293,7 +296,7 @@ The local release-command audit on 2026-09-12 records each gate separately:
 | warnings-denied all-target/all-feature Clippy | Passed |
 | Rust 1.89 all-target/all-feature check | Passed; repository-wide unfulfilled-lint-expectation warnings remain non-fatal under that compiler |
 | all-feature tests | Passed: 546 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
-| strict-provenance Miri scorer checks | Passed for the every-code signed-zero/extreme-weight symmetry oracle and scalar/SIMD bit-identity test |
+| scalar scorer safety and strict-provenance Miri checks | The TurboQuant algorithm module has `#![forbid(unsafe_code)]`; Miri passed the every-code signed-zero/extreme-weight symmetry oracle and scalar/SIMD bit-identity test |
 | all-feature doctests | Passed: 74/74 |
 | all-feature benchmark compilation | Passed |
 | browser-WASM build, typecheck, and package tests | Passed: 37/37, including canonical TurboQuant wire parity |
@@ -314,12 +317,12 @@ not production capacity or `Auto` qualification. Production evidence must not
 replace or average away a failing dataset/metric row.
 
 A controlled 10K-record × 768-dimension warm-search diagnostic measured the
-default four-bit scalar median at 9.016 ms before bounds-check elimination and
-8.498/8.506 ms in two compact symmetric-table runs. Relative to the unchanged
-PQ control in each run, the TurboQuant/PQ median ratio improved from 6.177× to
-5.905×/5.904×. Recall, candidate/rerank counts, and logical/physical work were
-unchanged. This is implementation diagnostic evidence, not a retained matrix
-cell or an `Auto` qualification result.
+default four-bit scalar median at 9.016 ms before compact-table work and
+8.627/8.333 ms in two current-head safe fixed-array runs. Relative to the PQ
+control paired with each run, the TurboQuant/PQ median ratio improved from
+6.177× to 6.071×/6.008×. Recall, candidate/rerank counts, and
+logical/physical work were unchanged. This is implementation diagnostic
+evidence, not a retained matrix cell or an `Auto` qualification result.
 
 The retained
 [`proximity-turboquant-1k-qualification.md`](proximity-turboquant-1k-qualification.md)

@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 //! Independent, deterministic TurboQuant-MSE routing accelerator.
 //!
 //! This implementation follows the rotate-then-scalar-quantize construction
@@ -1448,30 +1450,77 @@ pub(crate) fn validate_code_value(
 
 pub(crate) struct TurboQuantPreparedQuery {
     weighted: Vec<f64>,
-    weighted_centroids: Vec<f64>,
-    stored_centroid_count: usize,
+    product_table: TurboQuantProductTable,
     norm_squared: f64,
+}
+
+enum TurboQuantProductTable {
+    None,
+    TwoBit(Vec<[[f64; 2]; 4]>),
+    ThreeBit(Vec<[[f64; 4]; 8]>),
+    FourBit(Vec<[[f64; 8]; 2]>),
+}
+
+impl TurboQuantProductTable {
+    fn product_count(&self) -> usize {
+        match self {
+            Self::None => 0,
+            Self::TwoBit(groups) => groups.len() * 4 * 2,
+            Self::ThreeBit(groups) => groups.len() * 8 * 4,
+            Self::FourBit(groups) => groups.len() * 2 * 8,
+        }
+    }
 }
 
 impl TurboQuantPreparedQuery {
     fn new(weighted: Vec<f64>, norm_squared: f64, bit_width: u8, kernel: QueryKernel) -> Self {
-        let stored_centroid_count = 1usize << (bit_width - 1);
-        let weighted_centroids = if matches!(kernel, QueryKernel::SimdDeterministic) {
-            Vec::new()
+        let product_table = if matches!(kernel, QueryKernel::SimdDeterministic) {
+            TurboQuantProductTable::None
         } else {
             let codebook = codebook(bit_width);
-            let mut products = Vec::with_capacity(weighted.len() * stored_centroid_count);
-            for weight in &weighted {
-                for code in 0..stored_centroid_count {
-                    products.push(*weight * codebook.centroid(code as u8));
-                }
+            match bit_width {
+                2 => TurboQuantProductTable::TwoBit(
+                    weighted
+                        .chunks_exact(4)
+                        .map(|weights| {
+                            std::array::from_fn(|dimension| {
+                                std::array::from_fn(|code| {
+                                    weights[dimension] * codebook.centroid(code as u8)
+                                })
+                            })
+                        })
+                        .collect(),
+                ),
+                3 => TurboQuantProductTable::ThreeBit(
+                    weighted
+                        .chunks_exact(8)
+                        .map(|weights| {
+                            std::array::from_fn(|dimension| {
+                                std::array::from_fn(|code| {
+                                    weights[dimension] * codebook.centroid(code as u8)
+                                })
+                            })
+                        })
+                        .collect(),
+                ),
+                4 => TurboQuantProductTable::FourBit(
+                    weighted
+                        .chunks_exact(2)
+                        .map(|weights| {
+                            std::array::from_fn(|dimension| {
+                                std::array::from_fn(|code| {
+                                    weights[dimension] * codebook.centroid(code as u8)
+                                })
+                            })
+                        })
+                        .collect(),
+                ),
+                _ => unreachable!("validated TurboQuant bit width"),
             }
-            products
         };
         Self {
             weighted,
-            weighted_centroids,
-            stored_centroid_count,
+            product_table,
             norm_squared,
         }
     }
@@ -1578,63 +1627,34 @@ fn score_precomputed_centroids(
     prepared: &TurboQuantPreparedQuery,
     bit_width: u8,
 ) -> f64 {
-    let stored_centroid_count = 1usize << (bit_width - 1);
-    debug_assert_eq!(prepared.stored_centroid_count, stored_centroid_count);
     debug_assert_eq!(
-        prepared.weighted_centroids.len(),
-        prepared.weighted.len() * stored_centroid_count
+        prepared.product_table.product_count(),
+        prepared.weighted.len() * (1usize << (bit_width - 1))
     );
-    let products = &prepared.weighted_centroids;
     let mut reduced = 0.0;
-    match bit_width {
-        2 => {
-            const STORED: usize = 1 << (2 - 1);
-            const ROW_GROUP: usize = 4 * STORED;
-            for (rows, byte) in products.chunks_exact(ROW_GROUP).zip(packed.iter().copied()) {
-                // SAFETY: every row slice has exactly STORED entries, and each
-                // extracted value is a complete two-bit code.
-                unsafe {
-                    reduced += symmetric_row_product::<STORED, 1>(&rows[..STORED], byte & 0x03);
-                    reduced += symmetric_row_product::<STORED, 1>(
-                        &rows[STORED..2 * STORED],
-                        (byte >> 2) & 0x03,
-                    );
-                    reduced += symmetric_row_product::<STORED, 1>(
-                        &rows[2 * STORED..3 * STORED],
-                        (byte >> 4) & 0x03,
-                    );
-                    reduced += symmetric_row_product::<STORED, 1>(&rows[3 * STORED..], byte >> 6);
-                }
+    match (&prepared.product_table, bit_width) {
+        (TurboQuantProductTable::TwoBit(groups), 2) => {
+            for (rows, byte) in groups.iter().zip(packed.iter().copied()) {
+                reduced += symmetric_row_product_2(&rows[0], byte & 0x03);
+                reduced += symmetric_row_product_2(&rows[1], (byte >> 2) & 0x03);
+                reduced += symmetric_row_product_2(&rows[2], (byte >> 4) & 0x03);
+                reduced += symmetric_row_product_2(&rows[3], byte >> 6);
             }
         }
-        3 => {
-            const STORED: usize = 1 << (3 - 1);
-            const ROW_GROUP: usize = 8 * STORED;
-            for (rows, bytes) in products.chunks_exact(ROW_GROUP).zip(packed.chunks_exact(3)) {
+        (TurboQuantProductTable::ThreeBit(groups), 3) => {
+            for (rows, bytes) in groups.iter().zip(packed.chunks_exact(3)) {
                 let codes =
                     u32::from(bytes[0]) | (u32::from(bytes[1]) << 8) | (u32::from(bytes[2]) << 16);
-                // SAFETY: every row slice has exactly STORED entries, and each
-                // extracted value is masked to a complete three-bit code.
-                unsafe {
-                    for row in 0..8 {
-                        reduced += symmetric_row_product::<STORED, 2>(
-                            &rows[row * STORED..(row + 1) * STORED],
-                            ((codes >> (row * 3)) & 0x07) as u8,
-                        );
-                    }
+                for (row, products) in rows.iter().enumerate() {
+                    reduced +=
+                        symmetric_row_product_4(products, ((codes >> (row * 3)) & 0x07) as u8);
                 }
             }
         }
-        4 => {
-            const STORED: usize = 1 << (4 - 1);
-            const ROW_GROUP: usize = 2 * STORED;
-            for (rows, byte) in products.chunks_exact(ROW_GROUP).zip(packed.iter().copied()) {
-                // SAFETY: every row slice has exactly STORED entries, and each
-                // extracted value is a complete four-bit code.
-                unsafe {
-                    reduced += symmetric_row_product::<STORED, 3>(&rows[..STORED], byte & 0x0f);
-                    reduced += symmetric_row_product::<STORED, 3>(&rows[STORED..], byte >> 4);
-                }
+        (TurboQuantProductTable::FourBit(groups), 4) => {
+            for (rows, byte) in groups.iter().zip(packed.iter().copied()) {
+                reduced += symmetric_row_product_8(&rows[0], byte & 0x0f);
+                reduced += symmetric_row_product_8(&rows[1], byte >> 4);
             }
         }
         _ => unreachable!("validated TurboQuant bit width"),
@@ -1643,19 +1663,32 @@ fn score_precomputed_centroids(
 }
 
 #[inline(always)]
-unsafe fn symmetric_row_product<const STORED: usize, const SIGN_SHIFT: usize>(
-    row: &[f64],
-    code: u8,
-) -> f64 {
-    debug_assert_eq!(row.len(), STORED);
-    debug_assert!(STORED.is_power_of_two());
-    let side = usize::from(code) >> SIGN_SHIFT;
+fn symmetric_row_product_2(row: &[f64; 2], code: u8) -> f64 {
+    let side = usize::from(code) >> 1;
     debug_assert!(side <= 1);
-    let mirror_mask = 0usize.wrapping_sub(side) & (2 * STORED - 1);
-    let index = (usize::from(code) ^ mirror_mask) & (STORED - 1);
-    // SAFETY: callers provide exactly STORED entries. The final mask bounds
-    // `index` to 0..STORED for each supported power-of-two codebook half.
-    let product = unsafe { *row.get_unchecked(index) };
+    let mirror_mask = 0usize.wrapping_sub(side) & 3;
+    let index = (usize::from(code) ^ mirror_mask) & 1;
+    let product = row[index];
+    f64::from_bits(product.to_bits() ^ ((side as u64) << 63))
+}
+
+#[inline(always)]
+fn symmetric_row_product_4(row: &[f64; 4], code: u8) -> f64 {
+    let side = usize::from(code) >> 2;
+    debug_assert!(side <= 1);
+    let mirror_mask = 0usize.wrapping_sub(side) & 7;
+    let index = (usize::from(code) ^ mirror_mask) & 3;
+    let product = row[index];
+    f64::from_bits(product.to_bits() ^ ((side as u64) << 63))
+}
+
+#[inline(always)]
+fn symmetric_row_product_8(row: &[f64; 8], code: u8) -> f64 {
+    let side = usize::from(code) >> 3;
+    debug_assert!(side <= 1);
+    let mirror_mask = 0usize.wrapping_sub(side) & 15;
+    let index = (usize::from(code) ^ mirror_mask) & 7;
+    let product = row[index];
     f64::from_bits(product.to_bits() ^ ((side as u64) << 63))
 }
 
@@ -2340,15 +2373,20 @@ mod tests {
                     .map(|code| weight * codebook.centroid(code as u8))
                     .collect::<Vec<_>>();
                 for code in 0..count {
-                    // SAFETY: each match arm passes the complete negative half
-                    // of its corresponding fixed-size symmetric codebook.
-                    let actual = unsafe {
-                        match bit_width {
-                            2 => symmetric_row_product::<2, 1>(&stored, code as u8),
-                            3 => symmetric_row_product::<4, 2>(&stored, code as u8),
-                            4 => symmetric_row_product::<8, 3>(&stored, code as u8),
-                            _ => unreachable!(),
-                        }
+                    let actual = match bit_width {
+                        2 => symmetric_row_product_2(
+                            stored.as_slice().try_into().unwrap(),
+                            code as u8,
+                        ),
+                        3 => symmetric_row_product_4(
+                            stored.as_slice().try_into().unwrap(),
+                            code as u8,
+                        ),
+                        4 => symmetric_row_product_8(
+                            stored.as_slice().try_into().unwrap(),
+                            code as u8,
+                        ),
+                        _ => unreachable!(),
                     };
                     let expected = weight * codebook.centroid(code as u8);
                     assert_eq!(
@@ -2440,12 +2478,12 @@ mod tests {
                     QueryKernel::AutoDeterministic,
                 );
                 assert_eq!(
-                    scalar_prepared.weighted_centroids.len(),
+                    scalar_prepared.product_table.product_count(),
                     dimensions * (1usize << (bit_width - 1))
                 );
-                assert!(simd_prepared.weighted_centroids.is_empty());
+                assert_eq!(simd_prepared.product_table.product_count(), 0);
                 assert_eq!(
-                    automatic_prepared.weighted_centroids.len(),
+                    automatic_prepared.product_table.product_count(),
                     dimensions * (1usize << (bit_width - 1))
                 );
                 let maximum = 1u8 << bit_width;
