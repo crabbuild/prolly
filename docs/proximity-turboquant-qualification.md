@@ -117,6 +117,14 @@ metric text, malformed numeric values, duplicate/non-positive worker counts,
 and unsupported TurboQuant configurations fail instead of being silently
 normalized.
 
+Cold-cache quantizer samples clear the authoritative map caches and use a new
+`SearchIo` runtime/namespace for each timed query, so descriptor, manifest,
+source, and code-tree physical reads are measured rather than inherited from a
+prior sample. Warm rows perform one untimed warmup through the same instrumented
+runtime used by every measured sample. The output preamble records the machine
+hostname and the frozen TurboQuant seed in addition to revision, compiler,
+target, store, and cache mode.
+
 ## Release gates
 
 Forced-backend GA still requires:

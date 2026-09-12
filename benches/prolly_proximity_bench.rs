@@ -85,7 +85,9 @@ fn main() {
     );
     println!("target_arch={}", std::env::consts::ARCH);
     println!("target_os={}", std::env::consts::OS);
+    println!("machine={}", command_output("hostname", &[]));
     println!("store=memory");
+    println!("seed={}", turboquant_config.seed);
     println!("records={records}");
     println!(
         "profile={}",
@@ -516,6 +518,10 @@ fn bench_accelerators<S>(
             sidecar.manifest_bytes,
             sidecar.code_tree_bytes,
         );
+        let quality = turboquant.quality();
+        let accelerators = AcceleratorSet::empty()
+            .with_turboquant(map.tree(), turboquant)
+            .unwrap();
         for (name, kernel) in [
             ("turboquant_search_scalar", QueryKernel::ScalarDeterministic),
             ("turboquant_search_simd", QueryKernel::SimdDeterministic),
@@ -528,12 +534,30 @@ fn bench_accelerators<S>(
             request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
             let mut result = None;
             let mut samples = Vec::with_capacity(options.repeats);
+            let warm_io = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()));
+            if !options.reset_cache {
+                map.search_with(&accelerators, &warm_io, request.clone())
+                    .unwrap();
+            }
             for _ in 0..options.repeats {
-                if options.reset_cache {
+                let cold_io = if options.reset_cache {
                     map.clear_content_cache().unwrap();
-                }
+                    Some(SearchIo::new(
+                        store.clone(),
+                        Arc::new(SearchRuntime::default()),
+                    ))
+                } else {
+                    None
+                };
                 let started = Instant::now();
-                result = Some(turboquant.search(map, request.clone()).unwrap());
+                result = Some(
+                    map.search_with(
+                        &accelerators,
+                        cold_io.as_ref().unwrap_or(&warm_io),
+                        request.clone(),
+                    )
+                    .unwrap(),
+                );
                 samples.push(started.elapsed());
             }
             let result = result.expect("search repeats is positive");
@@ -580,7 +604,7 @@ fn bench_accelerators<S>(
                         k,
                         map.tree().config.metric,
                     ),
-                    turboquant.quality().mean_squared_error,
+                    quality.mean_squared_error,
                 );
             }
         }
@@ -654,18 +678,37 @@ fn bench_accelerators<S>(
         sidecar.manifest_bytes,
         sidecar.code_tree_bytes,
     );
+    let accelerators = AcceleratorSet::empty().with_pq(map.tree(), pq).unwrap();
     let mut request = SearchRequest::exact(query, k);
     request.policy = SearchPolicy::FixedBudget;
     request.options.backend = SearchBackend::ProductQuantized;
     request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
     let mut result = None;
     let mut samples = Vec::with_capacity(options.repeats);
+    let warm_io = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()));
+    if !options.reset_cache {
+        map.search_with(&accelerators, &warm_io, request.clone())
+            .unwrap();
+    }
     for _ in 0..options.repeats {
-        if options.reset_cache {
+        let cold_io = if options.reset_cache {
             map.clear_content_cache().unwrap();
-        }
+            Some(SearchIo::new(
+                store.clone(),
+                Arc::new(SearchRuntime::default()),
+            ))
+        } else {
+            None
+        };
         let started = Instant::now();
-        result = Some(pq.search(map, request.clone()).unwrap());
+        result = Some(
+            map.search_with(
+                &accelerators,
+                cold_io.as_ref().unwrap_or(&warm_io),
+                request.clone(),
+            )
+            .unwrap(),
+        );
         samples.push(started.elapsed());
     }
     let result = result.expect("search repeats is positive");
