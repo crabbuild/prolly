@@ -123,12 +123,16 @@ rows.
 
 The scalar and automatic TurboQuant scan kernels precompute the finite
 query-by-codebook product table once per search. Candidate scoring then decodes
-packed codes and performs the same coordinate-ordered scalar reduction without
-repeating a floating-point multiply for every candidate component. The
+packed codes, reconstructs the exact positive half from the codebook's frozen
+bit-symmetric negative half, and performs the same coordinate-ordered scalar
+reduction without repeating a floating-point multiply for every candidate
+component. This halves the scalar/automatic query table to
+`dimensions * 2^(bit_width - 1) * 8` bytes (1 MiB at the maximum supported
+shape). The
 explicit SIMD kernel remains an independent conformance path and reconstructs
 only one bounded coordinate chunk at a time. Its query preparation therefore
 does not allocate the scalar product table, avoiding
-`dimensions * 2^bit_width * 8` unused bytes per query (2 MiB at the maximum
+`dimensions * 2^(bit_width - 1) * 8` unused bytes per query (1 MiB at the maximum
 16,384-dimension four-bit configuration). Tests require all three kernels to
 return bit-identical scores, plans, neighbors, and logical statistics.
 
@@ -288,7 +292,8 @@ The local release-command audit on 2026-09-12 records each gate separately:
 | `cargo fmt --all -- --check` and `git diff --check` | Passed |
 | warnings-denied all-target/all-feature Clippy | Passed |
 | Rust 1.89 all-target/all-feature check | Passed; repository-wide unfulfilled-lint-expectation warnings remain non-fatal under that compiler |
-| all-feature tests | Passed: 544 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
+| all-feature tests | Passed: 546 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
+| strict-provenance Miri scorer checks | Passed for the every-code signed-zero/extreme-weight symmetry oracle and scalar/SIMD bit-identity test |
 | all-feature doctests | Passed: 74/74 |
 | all-feature benchmark compilation | Passed |
 | browser-WASM build, typecheck, and package tests | Passed: 37/37, including canonical TurboQuant wire parity |
@@ -307,6 +312,14 @@ The implementation PR records a development-machine 64-record × 8-dimension
 smoke run. It demonstrates executable benchmark coverage and exact reranking,
 not production capacity or `Auto` qualification. Production evidence must not
 replace or average away a failing dataset/metric row.
+
+A controlled 10K-record × 768-dimension warm-search diagnostic measured the
+default four-bit scalar median at 9.016 ms before bounds-check elimination and
+8.498/8.506 ms in two compact symmetric-table runs. Relative to the unchanged
+PQ control in each run, the TurboQuant/PQ median ratio improved from 6.177× to
+5.905×/5.904×. Recall, candidate/rerank counts, and logical/physical work were
+unchanged. This is implementation diagnostic evidence, not a retained matrix
+cell or an `Auto` qualification result.
 
 The retained
 [`proximity-turboquant-1k-qualification.md`](proximity-turboquant-1k-qualification.md)
