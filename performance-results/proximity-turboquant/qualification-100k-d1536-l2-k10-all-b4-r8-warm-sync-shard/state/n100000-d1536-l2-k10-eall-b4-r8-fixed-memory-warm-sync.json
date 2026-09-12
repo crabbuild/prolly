@@ -1,0 +1,29 @@
+{
+  "cell": {
+    "bits": 4,
+    "dimensions": 1536,
+    "eligibility_ppm": 1000000,
+    "environment": {
+      "async_quantizers": false,
+      "cold": false,
+      "name": "memory-warm-sync",
+      "store": "memory"
+    },
+    "k": 10,
+    "metric": "l2",
+    "records": 100000,
+    "rerank": "fixed",
+    "rerank_multiplier": 8
+  },
+  "command": [
+    "cargo",
+    "bench",
+    "--quiet",
+    "--all-features",
+    "--bench",
+    "prolly_proximity_bench"
+  ],
+  "completed_at": "2026-09-12T18:24:28.245784+00:00",
+  "disposition": "completed",
+  "sha256": "f1fb78f49bc4422186edbfc0189a348840b6966747bd0fd775df88ae8ef2edc9"
+}

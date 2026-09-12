@@ -352,5 +352,8 @@ metric. The first build-gate-scale evidence is negative: TurboQuant recall@10
 is 0.00/0.50/0.00 for L2/cosine/inner product, and warm p95 is
 8.18×/9.98×/9.35× PQ. Those deterministic per-row failures keep
 forced-backend GA and `Auto` unqualified; they cannot be averaged away by the
-successful smaller cells. The remaining 45,354 production cells and the
-pinned-host rerun remain open.
+successful smaller cells. Three 16× rerank cells restore 768-dimensional L2
+recall to 1.00 but leave cosine at 0.50 and inner product at 0.00. The matching
+100K × 1536 default cells have 0.00 TurboQuant recall for every metric and
+20.45× to 23.49× PQ p95, despite faster builds. The remaining 45,348
+production cells and the pinned-host rerun remain open.
