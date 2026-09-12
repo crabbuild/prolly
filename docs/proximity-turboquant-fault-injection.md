@@ -53,6 +53,12 @@ packed code bits and lengths, supported and maximum-size transform derivation,
 code scoring for every metric, and randomized proof-transcript replay
 mutations. Every case must finish without panic or unbounded allocation, and
 every altered proof transcript must fail closed.
+`every_turboquant_manifest_binding_mutation_fails_closed` separately mutates
+each semantic manifest binding named by the design: source CID, dimensions,
+metric, count, seed, transform ID, codebook ID, bit width, quality bits,
+zero-vector count, code root, and configuration fingerprint. Each candidate is
+rehash-addressed where applicable and must fail either trusted open or full
+source verification.
 An old TurboQuant proof version is rejected immediately with the typed
 `UnsupportedProximityVersion` error and exact required version, before request
 commitment or authenticated closure work.

@@ -1923,6 +1923,119 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn every_turboquant_manifest_binding_mutation_fails_closed() {
+        use crate::prolly::proximity::{ProximityConfig, ProximityRecord};
+
+        let store = Arc::new(MemStore::new());
+        let map = ProximityMap::build(
+            store.clone(),
+            ProximityConfig::new(8),
+            [
+                ProximityRecord {
+                    key: b"first".to_vec(),
+                    vector: vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0],
+                    value: Vec::new(),
+                },
+                ProximityRecord {
+                    key: b"second".to_vec(),
+                    vector: vec![-8.0, 7.0, -6.0, 5.0, -4.0, 3.0, -2.0, 1.0],
+                    value: Vec::new(),
+                },
+            ],
+        )
+        .unwrap();
+        let (index, _) = TurboQuantizer::build(
+            &map,
+            TurboQuantizationConfig::default(),
+            BuildParallelism::serial(),
+        )
+        .unwrap();
+        let manifest_bytes = Store::get(&store, index.manifest_cid().as_bytes())
+            .unwrap()
+            .unwrap();
+        let manifest = Manifest::decode(&manifest_bytes).unwrap();
+
+        let assert_fails_closed = |candidate: Manifest, field: &str| {
+            let bytes = candidate.encode().unwrap();
+            let cid = Cid::from_bytes(&bytes);
+            Store::put(&store, cid.as_bytes(), &bytes).unwrap();
+            if let Ok(candidate) = TurboQuantizer::load(store.clone(), cid) {
+                assert!(
+                    candidate.verify(&map).is_err(),
+                    "mutated TurboQuant {field} passed full verification"
+                );
+            }
+        };
+
+        let mut source = manifest.clone();
+        source.source = Cid::from_bytes(b"another source");
+        assert_fails_closed(source, "source CID");
+
+        let mut dimensions = manifest.clone();
+        dimensions.dimensions = 16;
+        assert_fails_closed(dimensions, "dimensions");
+
+        let mut metric = manifest.clone();
+        metric.metric = DistanceMetric::Cosine;
+        assert_fails_closed(metric, "metric");
+
+        let mut count = manifest.clone();
+        count.count += 1;
+        assert_fails_closed(count, "count");
+
+        let mut seed = manifest.clone();
+        seed.config.seed ^= 1;
+        assert_fails_closed(seed, "seed");
+
+        let mut transform = manifest.clone();
+        transform.transform_id += 1;
+        assert_fails_closed(transform, "transform ID");
+
+        let mut codebook = manifest.clone();
+        codebook.codebook_id += 1;
+        assert_fails_closed(codebook, "codebook ID");
+
+        let mut bit_width = manifest.clone();
+        bit_width.config.bit_width = 3;
+        assert_fails_closed(bit_width, "bit width");
+
+        let mut quality = manifest.clone();
+        quality.quality.mean_squared_error += 1.0;
+        quality.quality.maximum_squared_error += 1.0;
+        assert_fails_closed(quality, "quality bits");
+
+        let mut zero_vectors = manifest.clone();
+        zero_vectors.zero_vectors = 1;
+        assert_fails_closed(zero_vectors, "zero-vector count");
+
+        let (alternate, _) = TurboQuantizer::build(
+            &map,
+            TurboQuantizationConfig {
+                seed: 1,
+                ..TurboQuantizationConfig::default()
+            },
+            BuildParallelism::serial(),
+        )
+        .unwrap();
+        let alternate_bytes = Store::get(&store, alternate.manifest_cid().as_bytes())
+            .unwrap()
+            .unwrap();
+        let mut code_root = manifest;
+        code_root.code_root = Manifest::decode(&alternate_bytes).unwrap().code_root;
+        assert_fails_closed(code_root, "code root");
+
+        let mut fingerprint = manifest_bytes;
+        *fingerprint.last_mut().unwrap() ^= 1;
+        let fingerprint_cid = Cid::from_bytes(&fingerprint);
+        Store::put(&store, fingerprint_cid.as_bytes(), &fingerprint).unwrap();
+        assert!(matches!(
+            TurboQuantizer::load(store, fingerprint_cid),
+            Err(Error::InvalidProximityObject { kind: "TurboQuant", reason })
+                if reason == "TurboQuant configuration fingerprint mismatch"
+        ));
+    }
+
     #[cfg(feature = "async-store")]
     #[test]
     fn async_load_rejects_a_code_tree_root_count_that_disagrees_with_the_manifest() {
