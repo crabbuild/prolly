@@ -162,6 +162,48 @@ runtime used by every measured sample. The output preamble records the machine
 hostname and the frozen TurboQuant seed in addition to revision, compiler,
 target, store, and cache mode.
 
+### Qualification runner
+
+`scripts/run_turboquant_qualification.py` is the authoritative native-matrix
+orchestrator. The full profile deterministically enumerates 45,360 cells: all
+required count, dimension, metric, requested-`k`, eligibility, bit-width, and
+fixed rerank combinations across warm/cold memory, warm/cold file, and
+warm/cold async/batched environments, plus exhaustive reranking through 10K
+records. When eligibility contains fewer records than the requested `k`, the
+harness records both `k` and `effective_k`; recall is computed at the largest
+mathematically possible result count.
+
+Each cell has an immutable ID and isolated raw CSV, stderr log, completion
+record, and SHA-256 digest. A cell is complete only after the runner validates
+the exact revision and schema, every required operation and worker row, finite
+counters, warm/cold physical-I/O behavior, and sync/async logical parity.
+Resume revalidates both the content digest and the entire row contract before
+skipping a cell. Mixed revisions, schemas, shard definitions, repetitions, or
+worker lists fail closed. Hash sharding is stable and disjoint:
+
+```sh
+python3 scripts/run_turboquant_qualification.py \
+  --profile full \
+  --output performance-results/proximity-turboquant/full-REV/shard-00-of-64 \
+  --shard-index 0 \
+  --shard-count 64
+
+# Restart the exact same shard after interruption.
+python3 scripts/run_turboquant_qualification.py \
+  --profile full \
+  --output performance-results/proximity-turboquant/full-REV/shard-00-of-64 \
+  --shard-index 0 \
+  --shard-count 64 \
+  --resume
+```
+
+Shard zero also rebuilds the browser WASM package and requires the package test
+suite to report zero failures and zero skips, including the TurboQuant lifecycle
+and Rust-wire-fixture tests. This is the required WASM smoke gate; native
+latency is not presented as browser performance. Production runs reject a
+tracked-dirty worktree. `--allow-dirty` exists only for the six-cell smoke
+profile and its output is never publishable qualification evidence.
+
 ## Release gates
 
 Forced-backend GA still requires:

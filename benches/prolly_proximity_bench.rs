@@ -133,6 +133,15 @@ fn main() {
     println!("metric={metric:?}");
     println!("k={k}");
     println!("eligibility_ppm={eligibility_ppm}");
+    println!(
+        "effective_k={}",
+        k.min(
+            records
+                .saturating_mul(eligibility_ppm)
+                .div_ceil(1_000_000)
+                .max(1)
+        )
+    );
     println!("turboquant_bits={}", turboquant_config.bit_width);
     println!("rerank_multiplier={}", turboquant_config.rerank_multiplier);
     println!(

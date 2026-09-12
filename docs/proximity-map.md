@@ -540,6 +540,19 @@ runtime after an untimed warmup; combining the option with
 `PROLLY_PROXIMITY_BENCH_RESET_SEARCH_CACHE=1` reloads the source and sidecar in
 a fresh runtime inside every timed sample.
 
+Run the versioned six-environment smoke contract with:
+
+```sh
+python3 scripts/run_turboquant_qualification.py \
+  --profile smoke \
+  --output /tmp/prolly-turboquant-smoke
+```
+
+The same runner's `full` profile enumerates and hash-shards the complete native
+qualification matrix, validates each cell before recording completion, and
+runs the unskipped browser-WASM TurboQuant smoke gate on shard zero. See the
+qualification ledger for resumable full-run commands and evidence rules.
+
 Benchmark rows are machine-specific evidence, not performance guarantees. See
 [`proximity-map-completion-audit.md`](proximity-map-completion-audit.md)
 for the release evidence matrix.

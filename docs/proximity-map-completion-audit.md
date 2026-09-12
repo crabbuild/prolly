@@ -58,6 +58,14 @@ Counters in `metric_a`/`metric_b` are operation-specific and printed beside
 wall time so regressions can be attributed to logical work rather than timing
 noise.
 
+The strict matrix entry point is
+`scripts/run_turboquant_qualification.py`. Its `full` profile contains 45,360
+deterministic cells and supports stable hash sharding and exact-contract resume.
+It validates schema/revision metadata, row completeness, worker determinism,
+warm/cold physical I/O, and sync/async logical parity before writing an atomic
+completion record. Shard zero also records an unskipped browser-WASM build and
+test smoke gate.
+
 Smoke command:
 
 ```sh
