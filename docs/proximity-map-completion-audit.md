@@ -28,6 +28,8 @@ Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM each expose and
 test build/load/verify/forced-search behavior, pre-cancelled search, and
 reported build/search statistics, and each corresponding
 `bindings/*/COOKBOOK.md` now includes a deterministic RAG-sidecar lifecycle.
+The regenerated `bindings/api/classification-audit.json` contains 73
+TurboQuant rows, all `implemented` and `release_complete`.
 The repository-wide inventory and production qualification gates remain
 tracked separately in
 [`proximity-turboquant-qualification.md`](proximity-turboquant-qualification.md).
