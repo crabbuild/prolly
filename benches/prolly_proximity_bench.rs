@@ -673,6 +673,7 @@ fn bench_accelerators<S>(
         let accelerators = AcceleratorSet::empty()
             .with_turboquant(map.tree(), turboquant)
             .unwrap();
+        let mut scalar_result = None;
         for (name, kernel) in [
             ("turboquant_search_scalar", QueryKernel::ScalarDeterministic),
             ("turboquant_search_simd", QueryKernel::SimdDeterministic),
@@ -758,6 +759,16 @@ fn bench_accelerators<S>(
                 result.stats.reranked_candidates,
                 result.stats.committed_bytes,
             );
+            if let Some(expected) = &scalar_result {
+                assert_search_logical_parity(expected, &result, name);
+            } else {
+                assert_eq!(
+                    kernel,
+                    QueryKernel::ScalarDeterministic,
+                    "TurboQuant scalar result must establish the parity baseline"
+                );
+                scalar_result = Some(result.clone());
+            }
             if kernel == QueryKernel::ScalarDeterministic {
                 println!(
                     "turboquant_recall,{dimensions},0,0,{:.6},{}",
@@ -784,6 +795,9 @@ fn bench_accelerators<S>(
                     k,
                     dimensions,
                     options,
+                    expected: scalar_result
+                        .as_ref()
+                        .expect("TurboQuant scalar result establishes parity"),
                 },
             );
         }
@@ -972,6 +986,7 @@ fn bench_accelerators<S>(
                 k,
                 dimensions,
                 options,
+                expected: &result,
             },
         );
     }
@@ -1066,6 +1081,7 @@ struct AsyncQuantizerBenchCase<'a> {
     k: usize,
     dimensions: usize,
     options: SearchBenchOptions<'a>,
+    expected: &'a prolly::SearchResult,
 }
 
 #[cfg(feature = "async-store")]
@@ -1232,6 +1248,7 @@ fn bench_async_turboquant<S>(
         k,
         dimensions,
         options,
+        expected,
     } = case;
     let mut request = SearchRequest::exact(query, k);
     request.policy = SearchPolicy::FixedBudget;
@@ -1324,6 +1341,8 @@ fn bench_async_turboquant<S>(
         )
     };
 
+    assert_search_logical_parity(expected, &result, "turboquant_search_async");
+
     emit_quantized_search_rows(
         "turboquant_search_async",
         dimensions,
@@ -1359,6 +1378,7 @@ fn bench_async_pq<S>(
         k,
         dimensions,
         options,
+        expected,
     } = case;
     let mut request = SearchRequest::exact(query, k);
     request.policy = SearchPolicy::FixedBudget;
@@ -1450,6 +1470,8 @@ fn bench_async_pq<S>(
         )
     };
 
+    assert_search_logical_parity(expected, &result, "pq_search_async");
+
     emit_quantized_search_rows(
         "pq_search_async",
         dimensions,
@@ -1466,6 +1488,59 @@ fn bench_async_pq<S>(
             k,
             map.tree().config.metric,
         ),
+    );
+}
+
+fn assert_search_logical_parity(
+    expected: &prolly::SearchResult,
+    actual: &prolly::SearchResult,
+    context: &str,
+) {
+    assert_eq!(actual.neighbors, expected.neighbors, "{context} neighbors");
+    assert_eq!(actual.plan, expected.plan, "{context} plan");
+    assert_eq!(
+        actual.completion, expected.completion,
+        "{context} completion"
+    );
+    assert_eq!(
+        actual.stats.levels_visited, expected.stats.levels_visited,
+        "{context} levels visited"
+    );
+    assert_eq!(
+        actual.stats.nodes_read, expected.stats.nodes_read,
+        "{context} logical nodes"
+    );
+    assert_eq!(
+        actual.stats.bytes_read, expected.stats.bytes_read,
+        "{context} logical bytes"
+    );
+    assert_eq!(
+        actual.stats.committed_bytes, expected.stats.committed_bytes,
+        "{context} committed bytes"
+    );
+    assert_eq!(
+        actual.stats.distance_evaluations, expected.stats.distance_evaluations,
+        "{context} exact evaluations"
+    );
+    assert_eq!(
+        actual.stats.quantized_distance_evaluations, expected.stats.quantized_distance_evaluations,
+        "{context} quantized evaluations"
+    );
+    assert_eq!(
+        actual.stats.reranked_candidates, expected.stats.reranked_candidates,
+        "{context} reranked candidates"
+    );
+    assert_eq!(
+        actual.stats.frontier_peak, expected.stats.frontier_peak,
+        "{context} frontier peak"
+    );
+    assert_eq!(
+        actual.stats.candidate_handles_peak, expected.stats.candidate_handles_peak,
+        "{context} candidate handles"
+    );
+    assert_eq!(
+        actual.stats.candidate_retained_bytes_peak, expected.stats.candidate_retained_bytes_peak,
+        "{context} retained candidate bytes"
     );
 }
 

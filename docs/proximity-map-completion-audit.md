@@ -63,8 +63,10 @@ The strict matrix entry point is
 deterministic cells and supports stable hash sharding and exact-contract resume.
 It validates schema/revision metadata, row completeness, worker determinism,
 warm/cold physical I/O, and sync/async logical parity before writing an atomic
-completion record. Shard zero also records an unskipped browser-WASM build and
-test smoke gate.
+completion record. The harness asserts neighbor, exact-distance, plan,
+completion, and complete logical-statistic parity across scalar/SIMD/automatic
+and async execution. Shard zero also records an unskipped browser-WASM build
+and test smoke gate.
 
 Smoke command:
 

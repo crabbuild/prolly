@@ -177,6 +177,10 @@ Each cell has an immutable ID and isolated raw CSV, stderr log, completion
 record, and SHA-256 digest. A cell is complete only after the runner validates
 the exact revision and schema, every required operation and worker row, finite
 counters, warm/cold physical-I/O behavior, and sync/async logical parity.
+The benchmark itself additionally asserts identical neighbors (including exact
+distances and order), committed plans, completion states, and every logical
+statistic across scalar/SIMD/automatic kernels and the async engine before a
+cell can emit successful evidence.
 Resume revalidates both the content digest and the entire row contract before
 skipping a cell. Mixed revisions, schemas, shard definitions, repetitions, or
 worker lists fail closed. Hash sharding is stable and disjoint:
