@@ -220,6 +220,66 @@ test("WASM product quantizer lifecycle is portable and bounded", { skip: !genera
   }
 });
 
+test("WASM TurboQuant lifecycle is portable, verified, and cancellable", { skip: !generatedPresent }, async () => {
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(8, Array.from({ length: 16 }, (_, index) => ({
+      key: bytes(`tq-vector-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array(Array.from({ length: 8 }, (_, component) => (
+        index === 0 ? 0 : ((index * 31 + component * 17) % 97) / 13 - 3
+      ))),
+      value: bytes(`tq-value-${index.toString().padStart(2, "0")}`),
+    })));
+    const config = { ...api.defaultTurboQuantConfig(), seed: 0xffff_ffff_ffff_ffffn };
+    const built = await proximity.buildTurboQuant({
+      config,
+      workerThreads: 1n,
+      limits: api.defaultTurboQuantBuildLimits(),
+    });
+    assert.equal(built.stats.encodedVectors, 16n);
+    assert.equal(built.stats.zeroVectors, 1n);
+    assert.equal(built.stats.encodedOutputBytes, 16n * 12n);
+    const request = {
+      vector: new Float32Array(8),
+      topK: 3,
+      policy: "fixed_budget" as const,
+      backend: "turbo_quantized" as const,
+    };
+    const index = built.index;
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    assert.deepEqual(index.config(), config);
+    assert.ok(index.quality().meanSquaredError >= 0);
+    assert.equal(index.verify(proximity).encodedVectors, 16n);
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "turbo_quantized");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "tq-vector-00");
+    const cancellation = proximity.cancellationToken();
+    try {
+      cancellation.cancel();
+      const cancelled = await index.searchCancellable(proximity, request, cancellation);
+      assert.equal(cancelled.completion, "cancelled");
+      assert.deepEqual(cancelled.neighbors, []);
+    } finally {
+      cancellation.close();
+    }
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "turbo_quantized");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadTurboQuant(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+    await assert.rejects(
+      proximity.buildTurboQuant({ config, workerThreads: 2n }),
+      /browser-safe WASM TurboQuant requires workerThreads = 1/,
+    );
+    proximity.close();
+  } finally {
+    engine.close();
+  }
+});
+
 test("WASM composite and catalog lifecycle is portable and bounded", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   try {

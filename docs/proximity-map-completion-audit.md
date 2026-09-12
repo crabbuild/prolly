@@ -4,7 +4,7 @@ This audit maps every approved goal to implementation, adversarial tests,
 and a benchmark row. The release is a hard format cutoff: proximity v1 is
 legacy rejection input only; ordered CRAB bytes remain unchanged.
 
-## Thirteen-goal evidence matrix
+## Fourteen-goal evidence matrix
 
 | # | Goal | Implementation evidence | Test evidence | Benchmark row |
 | ---: | --- | --- | --- | --- |
@@ -21,6 +21,7 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 | 11 | Typed traversal, sync, manifests, GC, proofs | `content_graph/`, `proximity/proof/` | `tests/proximity_content_graph.rs`, `tests/proximity_proofs.rs` | `content_graph_copy`, `content_graph_gc_plan`, `search_proof_*` |
 | 12 | Overflow hierarchies and external vectors | `proximity/storage/{overflow,vector}.rs` | `tests/proximity_overflow.rs` | all rows use bounded overflow and externalize vectors above 4 KiB |
 | 13 | Validated source-bound HNSW | `proximity/accelerator/hnsw/` | `tests/proximity_hnsw.rs`, `tests/proximity_proofs.rs` | `hnsw_build`, `hnsw_search` |
+| 14 | Native source-bound TurboQuant-MSE routing | `proximity/accelerator/{turboquant,quantized}.rs`, `proximity/distance/simd.rs` | `tests/proximity_turboquant.rs`, `tests/proximity_wire.rs`, async/proof/content/composite suites | `turboquant_build`, `turboquant_search_scalar`, `turboquant_search_simd`, `turboquant_recall` |
 
 ## Wire and migration evidence
 
@@ -40,7 +41,8 @@ operation,dimensions,threads,micros,metric_a,metric_b
 
 Default dimensions are 8, 128, 768, and 1536; build rows use 1, 2, and 4
 workers. The harness also records mutation locality, exact/adaptive/SQ8,
-scalar/SIMD, sync/async, PQ/HNSW, content copy/GC, and proof generation/replay.
+scalar/SIMD, sync/async, TurboQuant/PQ/HNSW, content copy/GC, and proof
+generation/replay.
 Counters in `metric_a`/`metric_b` are operation-specific and printed beside
 wall time so regressions can be attributed to logical work rather than timing
 noise.
@@ -51,7 +53,7 @@ Smoke command:
 PROLLY_PROXIMITY_BENCH_RECORDS=64 \
 PROLLY_PROXIMITY_BENCH_DIMENSIONS=8 \
 PROLLY_PROXIMITY_BENCH_THREADS=1,2 \
-cargo bench --all-features --bench proximity_bench
+cargo bench --all-features --bench prolly_proximity_bench
 ```
 
 Recorded smoke result on 2026-07-14 (Apple Silicon development machine, release
@@ -109,8 +111,15 @@ cargo test --test canonical_splice --test proximity_overflow --test proximity_mu
 cargo test --test proximity_search --test proximity_parallel --test proximity_simd
 cargo test --all-features --test proximity_async
 cargo test --test proximity_quantization --test proximity_hnsw
+cargo test --test proximity_turboquant --test proximity_wire
 cargo test --test proximity_content_graph --test proximity_proofs
 ```
+
+TurboQuant is explicit-only until its separate recall and comparative value
+gates pass. See
+[`proximity-turboquant-qualification.md`](proximity-turboquant-qualification.md)
+for pending evidence; this audit does not treat a local smoke timing as a GA or
+`Auto` qualification result.
 
 ## Commit trail
 

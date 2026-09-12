@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-08-09T23:23:03+00:00",
+  "generated_at": "2026-09-12T09:20:06+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -279,6 +279,47 @@
       "reviewed": true
     },
     {
+      "rust": "prolly::AcceleratorSet::with_turboquant",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#with_turboquant",
+        "go": "bindings/go/proximity_accelerator.go#with_turboquant",
+        "node": "bindings/node/src/proximity.ts#with_turboquant",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#with_turboquant",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#with_turboquant",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#with_turboquant",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#with_turboquant",
+        "wasm": "bindings/wasm/src/index.ts#with_turboquant"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
       "rust": "prolly::ActiveIndexHealth",
       "classification": "portable",
       "status": "planned",
@@ -422,6 +463,47 @@
       "docs": []
     },
     {
+      "rust": "prolly::ApproximatePreference::TurboQuantizedFirst",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantizedFirst",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantizedFirst",
+        "node": "bindings/node/src/proximity.ts#TurboQuantizedFirst",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizedFirst",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantizedFirst",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantizedFirst",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizedFirst",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantizedFirst"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
       "rust": "prolly::AsyncAcceleratorBuildOptions",
       "classification": "portable",
       "status": "planned",
@@ -477,6 +559,47 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncAcceleratorBuildOptions::turboquant",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#turboquant",
+        "go": "bindings/go/proximity_accelerator.go#turboquant",
+        "node": "bindings/node/src/proximity.ts#turboquant",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#turboquant",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#turboquant",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#turboquant",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#turboquant",
+        "wasm": "bindings/wasm/src/index.ts#turboquant"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
       "rust": "prolly::AsyncAcceleratorBuildStats",
       "classification": "portable",
       "status": "planned",
@@ -530,6 +653,47 @@
       "exclusions": {},
       "tests": [],
       "docs": []
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorBuildStats::turboquant",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#turboquant",
+        "go": "bindings/go/proximity_accelerator.go#turboquant",
+        "node": "bindings/node/src/proximity.ts#turboquant",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#turboquant",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#turboquant",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#turboquant",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#turboquant",
+        "wasm": "bindings/wasm/src/index.ts#turboquant"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::AsyncAcceleratorCatalog",
@@ -728,6 +892,47 @@
       "audience": "application",
       "audience_rationale": "prolly::AsyncAcceleratorSet::with_pq has runtime behavior in the requested proximity-map application domain and requires direct or idiomatic host evidence.",
       "reviewed": true
+    },
+    {
+      "rust": "prolly::AsyncAcceleratorSet::with_turboquant",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#with_turboquant",
+        "go": "bindings/go/proximity_accelerator.go#with_turboquant",
+        "node": "bindings/node/src/proximity.ts#with_turboquant",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#with_turboquant",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#with_turboquant",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#with_turboquant",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#with_turboquant",
+        "wasm": "bindings/wasm/src/index.ts#with_turboquant"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::AsyncBatchBuilder",
@@ -1059,6 +1264,47 @@
       "docs": []
     },
     {
+      "rust": "prolly::AsyncCompositeAccelerator::build_from_turboquant",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#build_from_turboquant",
+        "go": "bindings/go/proximity_accelerator.go#build_from_turboquant",
+        "node": "bindings/node/src/proximity.ts#build_from_turboquant",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#build_from_turboquant",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#build_from_turboquant",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#build_from_turboquant",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#build_from_turboquant",
+        "wasm": "bindings/wasm/src/index.ts#build_from_turboquant"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
       "rust": "prolly::AsyncCompositeAccelerator::config",
       "classification": "portable",
       "status": "planned",
@@ -1229,6 +1475,88 @@
       "exclusions": {},
       "tests": [],
       "docs": []
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOptions::turboquant_limits",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#turboquant_limits",
+        "go": "bindings/go/proximity_accelerator.go#turboquant_limits",
+        "node": "bindings/node/src/proximity.ts#turboquant_limits",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#turboquant_limits",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#turboquant_limits",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#turboquant_limits",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#turboquant_limits",
+        "wasm": "bindings/wasm/src/index.ts#turboquant_limits"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncCompositeBuildOptions::turboquant_parallelism",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#turboquant_parallelism",
+        "go": "bindings/go/proximity_accelerator.go#turboquant_parallelism",
+        "node": "bindings/node/src/proximity.ts#turboquant_parallelism",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#turboquant_parallelism",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#turboquant_parallelism",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#turboquant_parallelism",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#turboquant_parallelism",
+        "wasm": "bindings/wasm/src/index.ts#turboquant_parallelism"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::AsyncCompositeBuildOutcome",
@@ -5454,6 +5782,621 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::AsyncTurboQuantizer",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#AsyncTurboQuantizer",
+        "go": "bindings/go/proximity_accelerator.go#AsyncTurboQuantizer",
+        "node": "bindings/node/src/proximity.ts#AsyncTurboQuantizer",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#AsyncTurboQuantizer",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#AsyncTurboQuantizer",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#AsyncTurboQuantizer",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#AsyncTurboQuantizer",
+        "wasm": "bindings/wasm/src/index.ts#AsyncTurboQuantizer"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::build",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#build",
+        "go": "bindings/go/proximity_accelerator.go#build",
+        "node": "bindings/node/src/proximity.ts#build",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#build",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#build",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#build",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#build",
+        "wasm": "bindings/wasm/src/index.ts#build"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::build_with_limits",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#build_with_limits",
+        "go": "bindings/go/proximity_accelerator.go#build_with_limits",
+        "node": "bindings/node/src/proximity.ts#build_with_limits",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#build_with_limits",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#build_with_limits",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#build_with_limits",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#build_with_limits",
+        "wasm": "bindings/wasm/src/index.ts#build_with_limits"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::config",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#config",
+        "go": "bindings/go/proximity_accelerator.go#config",
+        "node": "bindings/node/src/proximity.ts#config",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#config",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#config",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#config",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#config",
+        "wasm": "bindings/wasm/src/index.ts#config"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::load",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#load",
+        "go": "bindings/go/proximity_accelerator.go#load",
+        "node": "bindings/node/src/proximity.ts#load",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#load",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#load",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#load",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#load",
+        "wasm": "bindings/wasm/src/index.ts#load"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::manifest_cid",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#manifest_cid",
+        "go": "bindings/go/proximity_accelerator.go#manifest_cid",
+        "node": "bindings/node/src/proximity.ts#manifest_cid",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#manifest_cid",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#manifest_cid",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#manifest_cid",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#manifest_cid",
+        "wasm": "bindings/wasm/src/index.ts#manifest_cid"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::quality",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#quality",
+        "go": "bindings/go/proximity_accelerator.go#quality",
+        "node": "bindings/node/src/proximity.ts#quality",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#quality",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#quality",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#quality",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#quality",
+        "wasm": "bindings/wasm/src/index.ts#quality"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::search",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#search",
+        "go": "bindings/go/proximity_accelerator.go#search",
+        "node": "bindings/node/src/proximity.ts#search",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#search",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#search",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#search",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#search",
+        "wasm": "bindings/wasm/src/index.ts#search"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::source_descriptor",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#source_descriptor",
+        "go": "bindings/go/proximity_accelerator.go#source_descriptor",
+        "node": "bindings/node/src/proximity.ts#source_descriptor",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#source_descriptor",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#source_descriptor",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#source_descriptor",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#source_descriptor",
+        "wasm": "bindings/wasm/src/index.ts#source_descriptor"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::verify",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#verify",
+        "go": "bindings/go/proximity_accelerator.go#verify",
+        "node": "bindings/node/src/proximity.ts#verify",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#verify",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#verify",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#verify",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#verify",
+        "wasm": "bindings/wasm/src/index.ts#verify"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizer::zero_vectors",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#zero_vectors",
+        "go": "bindings/go/proximity_accelerator.go#zero_vectors",
+        "node": "bindings/node/src/proximity.ts#zero_vectors",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#zero_vectors",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#zero_vectors",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#zero_vectors",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#zero_vectors",
+        "wasm": "bindings/wasm/src/index.ts#zero_vectors"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizerBuild",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#AsyncTurboQuantizerBuild",
+        "go": "bindings/go/proximity_accelerator.go#AsyncTurboQuantizerBuild",
+        "node": "bindings/node/src/proximity.ts#AsyncTurboQuantizerBuild",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#AsyncTurboQuantizerBuild",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#AsyncTurboQuantizerBuild",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#AsyncTurboQuantizerBuild",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#AsyncTurboQuantizerBuild",
+        "wasm": "bindings/wasm/src/index.ts#AsyncTurboQuantizerBuild"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizerBuild::config",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#config",
+        "go": "bindings/go/proximity_accelerator.go#config",
+        "node": "bindings/node/src/proximity.ts#config",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#config",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#config",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#config",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#config",
+        "wasm": "bindings/wasm/src/index.ts#config"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizerBuild::limits",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#limits",
+        "go": "bindings/go/proximity_accelerator.go#limits",
+        "node": "bindings/node/src/proximity.ts#limits",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#limits",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#limits",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#limits",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#limits",
+        "wasm": "bindings/wasm/src/index.ts#limits"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::AsyncTurboQuantizerBuild::parallelism",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#parallelism",
+        "go": "bindings/go/proximity_accelerator.go#parallelism",
+        "node": "bindings/node/src/proximity.ts#parallelism",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#parallelism",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#parallelism",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#parallelism",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#parallelism",
+        "wasm": "bindings/wasm/src/index.ts#parallelism"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
       "rust": "prolly::AsyncVersionedMap",
       "classification": "portable",
       "status": "planned",
@@ -7979,6 +8922,47 @@
       "docs": []
     },
     {
+      "rust": "prolly::CatalogAcceleratorKind::TurboQuantized",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantized",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantized",
+        "node": "bindings/node/src/proximity.ts#TurboQuantized",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantized",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantized",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantized",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantized",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantized"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
       "rust": "prolly::CborCodec",
       "classification": "portable",
       "status": "planned",
@@ -8664,6 +9648,47 @@
       "docs": []
     },
     {
+      "rust": "prolly::CompositeBase::TurboQuantized",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantized",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantized",
+        "node": "bindings/node/src/proximity.ts#TurboQuantized",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantized",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantized",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantized",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantized",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantized"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
       "rust": "prolly::CompositeBase::kind",
       "classification": "portable",
       "status": "planned",
@@ -8717,6 +9742,47 @@
       "exclusions": {},
       "tests": [],
       "docs": []
+    },
+    {
+      "rust": "prolly::CompositeBaseKind::TurboQuantized",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantized",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantized",
+        "node": "bindings/node/src/proximity.ts#TurboQuantized",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantized",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantized",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantized",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantized",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantized"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::CompositeBuildLimits",
@@ -8827,6 +9893,47 @@
       "exclusions": {},
       "tests": [],
       "docs": []
+    },
+    {
+      "rust": "prolly::CompositeBuildOrRebuildOutcome::TurboQuantizedRebuilt",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantizedRebuilt",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantizedRebuilt",
+        "node": "bindings/node/src/proximity.ts#TurboQuantizedRebuilt",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizedRebuilt",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantizedRebuilt",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantizedRebuilt",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizedRebuilt",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantizedRebuilt"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::CompositeBuildOutcome",
@@ -9025,6 +10132,88 @@
       "exclusions": {},
       "tests": [],
       "docs": []
+    },
+    {
+      "rust": "prolly::CompositeRebuildOptions::turboquant_limits",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#turboquant_limits",
+        "go": "bindings/go/proximity_accelerator.go#turboquant_limits",
+        "node": "bindings/node/src/proximity.ts#turboquant_limits",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#turboquant_limits",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#turboquant_limits",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#turboquant_limits",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#turboquant_limits",
+        "wasm": "bindings/wasm/src/index.ts#turboquant_limits"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::CompositeRebuildOptions::turboquant_parallelism",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#turboquant_parallelism",
+        "go": "bindings/go/proximity_accelerator.go#turboquant_parallelism",
+        "node": "bindings/node/src/proximity.ts#turboquant_parallelism",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#turboquant_parallelism",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#turboquant_parallelism",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#turboquant_parallelism",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#turboquant_parallelism",
+        "wasm": "bindings/wasm/src/index.ts#turboquant_parallelism"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::Config",
@@ -9962,6 +11151,47 @@
       "exclusions": {},
       "tests": [],
       "docs": []
+    },
+    {
+      "rust": "prolly::ContentObjectKind::TurboQuantization",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantization",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantization",
+        "node": "bindings/node/src/proximity.ts#TurboQuantization",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantization",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantization",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantization",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantization",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantization"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::ContentRootManifest",
@@ -33513,6 +34743,47 @@
       "docs": []
     },
     {
+      "rust": "prolly::SearchBackend::TurboQuantized",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantized",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantized",
+        "node": "bindings/node/src/proximity.ts#TurboQuantized",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantized",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantized",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantized",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantized",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantized"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
       "rust": "prolly::SearchBudget",
       "classification": "portable",
       "status": "planned",
@@ -33825,6 +35096,47 @@
       "docs": []
     },
     {
+      "rust": "prolly::SearchOptions::turboquant",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#turboquant",
+        "go": "bindings/go/proximity_accelerator.go#turboquant",
+        "node": "bindings/node/src/proximity.ts#turboquant",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#turboquant",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#turboquant",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#turboquant",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#turboquant",
+        "wasm": "bindings/wasm/src/index.ts#turboquant"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
       "rust": "prolly::SearchPlan",
       "classification": "portable",
       "status": "planned",
@@ -33889,6 +35201,47 @@
       "exclusions": {},
       "tests": [],
       "docs": []
+    },
+    {
+      "rust": "prolly::SearchPlan::TurboQuantized",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantized",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantized",
+        "node": "bindings/node/src/proximity.ts#TurboQuantized",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantized",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantized",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantized",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantized",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantized"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::SearchPlan::summary",
@@ -34332,6 +35685,47 @@
       "exclusions": {},
       "tests": [],
       "docs": []
+    },
+    {
+      "rust": "prolly::SearchRuntimePolicy::turboquant_max_bytes",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#turboquant_max_bytes",
+        "go": "bindings/go/proximity_accelerator.go#turboquant_max_bytes",
+        "node": "bindings/node/src/proximity.ts#turboquant_max_bytes",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#turboquant_max_bytes",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#turboquant_max_bytes",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#turboquant_max_bytes",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#turboquant_max_bytes",
+        "wasm": "bindings/wasm/src/index.ts#turboquant_max_bytes"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::SearchRuntimePolicy::validate",
@@ -40614,6 +42008,1605 @@
       "exclusions": {},
       "tests": [],
       "docs": []
+    },
+    {
+      "rust": "prolly::TurboQuantSearchOptions",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantSearchOptions",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantSearchOptions",
+        "node": "bindings/node/src/proximity.ts#TurboQuantSearchOptions",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantSearchOptions",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantSearchOptions",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantSearchOptions",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantSearchOptions",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantSearchOptions"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantSearchOptions::rerank_multiplier",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#rerank_multiplier",
+        "go": "bindings/go/proximity_accelerator.go#rerank_multiplier",
+        "node": "bindings/node/src/proximity.ts#rerank_multiplier",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#rerank_multiplier",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#rerank_multiplier",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#rerank_multiplier",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#rerank_multiplier",
+        "wasm": "bindings/wasm/src/index.ts#rerank_multiplier"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildLimits",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantizationBuildLimits",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantizationBuildLimits",
+        "node": "bindings/node/src/proximity.ts#TurboQuantizationBuildLimits",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizationBuildLimits",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantizationBuildLimits",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantizationBuildLimits",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizationBuildLimits",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantizationBuildLimits"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildLimits::max_encoded_output_bytes",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#max_encoded_output_bytes",
+        "go": "bindings/go/proximity_accelerator.go#max_encoded_output_bytes",
+        "node": "bindings/node/src/proximity.ts#max_encoded_output_bytes",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#max_encoded_output_bytes",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#max_encoded_output_bytes",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#max_encoded_output_bytes",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#max_encoded_output_bytes",
+        "wasm": "bindings/wasm/src/index.ts#max_encoded_output_bytes"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildLimits::max_input_bytes",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#max_input_bytes",
+        "go": "bindings/go/proximity_accelerator.go#max_input_bytes",
+        "node": "bindings/node/src/proximity.ts#max_input_bytes",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#max_input_bytes",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#max_input_bytes",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#max_input_bytes",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#max_input_bytes",
+        "wasm": "bindings/wasm/src/index.ts#max_input_bytes"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildLimits::max_records",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#max_records",
+        "go": "bindings/go/proximity_accelerator.go#max_records",
+        "node": "bindings/node/src/proximity.ts#max_records",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#max_records",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#max_records",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#max_records",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#max_records",
+        "wasm": "bindings/wasm/src/index.ts#max_records"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildLimits::max_temporary_bytes",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#max_temporary_bytes",
+        "go": "bindings/go/proximity_accelerator.go#max_temporary_bytes",
+        "node": "bindings/node/src/proximity.ts#max_temporary_bytes",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#max_temporary_bytes",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#max_temporary_bytes",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#max_temporary_bytes",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#max_temporary_bytes",
+        "wasm": "bindings/wasm/src/index.ts#max_temporary_bytes"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildLimits::max_transform_operations",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#max_transform_operations",
+        "go": "bindings/go/proximity_accelerator.go#max_transform_operations",
+        "node": "bindings/node/src/proximity.ts#max_transform_operations",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#max_transform_operations",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#max_transform_operations",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#max_transform_operations",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#max_transform_operations",
+        "wasm": "bindings/wasm/src/index.ts#max_transform_operations"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildLimits::max_worker_threads",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#max_worker_threads",
+        "go": "bindings/go/proximity_accelerator.go#max_worker_threads",
+        "node": "bindings/node/src/proximity.ts#max_worker_threads",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#max_worker_threads",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#max_worker_threads",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#max_worker_threads",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#max_worker_threads",
+        "wasm": "bindings/wasm/src/index.ts#max_worker_threads"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildStats",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantizationBuildStats",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantizationBuildStats",
+        "node": "bindings/node/src/proximity.ts#TurboQuantizationBuildStats",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizationBuildStats",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantizationBuildStats",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantizationBuildStats",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizationBuildStats",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantizationBuildStats"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildStats::butterfly_operations",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#butterfly_operations",
+        "go": "bindings/go/proximity_accelerator.go#butterfly_operations",
+        "node": "bindings/node/src/proximity.ts#butterfly_operations",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#butterfly_operations",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#butterfly_operations",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#butterfly_operations",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#butterfly_operations",
+        "wasm": "bindings/wasm/src/index.ts#butterfly_operations"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildStats::encoded_output_bytes",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#encoded_output_bytes",
+        "go": "bindings/go/proximity_accelerator.go#encoded_output_bytes",
+        "node": "bindings/node/src/proximity.ts#encoded_output_bytes",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#encoded_output_bytes",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#encoded_output_bytes",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#encoded_output_bytes",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#encoded_output_bytes",
+        "wasm": "bindings/wasm/src/index.ts#encoded_output_bytes"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildStats::encoded_vectors",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#encoded_vectors",
+        "go": "bindings/go/proximity_accelerator.go#encoded_vectors",
+        "node": "bindings/node/src/proximity.ts#encoded_vectors",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#encoded_vectors",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#encoded_vectors",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#encoded_vectors",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#encoded_vectors",
+        "wasm": "bindings/wasm/src/index.ts#encoded_vectors"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildStats::input_bytes",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#input_bytes",
+        "go": "bindings/go/proximity_accelerator.go#input_bytes",
+        "node": "bindings/node/src/proximity.ts#input_bytes",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#input_bytes",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#input_bytes",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#input_bytes",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#input_bytes",
+        "wasm": "bindings/wasm/src/index.ts#input_bytes"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildStats::peak_temporary_bytes",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#peak_temporary_bytes",
+        "go": "bindings/go/proximity_accelerator.go#peak_temporary_bytes",
+        "node": "bindings/node/src/proximity.ts#peak_temporary_bytes",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#peak_temporary_bytes",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#peak_temporary_bytes",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#peak_temporary_bytes",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#peak_temporary_bytes",
+        "wasm": "bindings/wasm/src/index.ts#peak_temporary_bytes"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildStats::transformed_components",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#transformed_components",
+        "go": "bindings/go/proximity_accelerator.go#transformed_components",
+        "node": "bindings/node/src/proximity.ts#transformed_components",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#transformed_components",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#transformed_components",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#transformed_components",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#transformed_components",
+        "wasm": "bindings/wasm/src/index.ts#transformed_components"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationBuildStats::zero_vectors",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#zero_vectors",
+        "go": "bindings/go/proximity_accelerator.go#zero_vectors",
+        "node": "bindings/node/src/proximity.ts#zero_vectors",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#zero_vectors",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#zero_vectors",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#zero_vectors",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#zero_vectors",
+        "wasm": "bindings/wasm/src/index.ts#zero_vectors"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationConfig",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantizationConfig",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantizationConfig",
+        "node": "bindings/node/src/proximity.ts#TurboQuantizationConfig",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizationConfig",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantizationConfig",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantizationConfig",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizationConfig",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantizationConfig"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationConfig::bit_width",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#bit_width",
+        "go": "bindings/go/proximity_accelerator.go#bit_width",
+        "node": "bindings/node/src/proximity.ts#bit_width",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#bit_width",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#bit_width",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#bit_width",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#bit_width",
+        "wasm": "bindings/wasm/src/index.ts#bit_width"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationConfig::rerank_multiplier",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#rerank_multiplier",
+        "go": "bindings/go/proximity_accelerator.go#rerank_multiplier",
+        "node": "bindings/node/src/proximity.ts#rerank_multiplier",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#rerank_multiplier",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#rerank_multiplier",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#rerank_multiplier",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#rerank_multiplier",
+        "wasm": "bindings/wasm/src/index.ts#rerank_multiplier"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationConfig::seed",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#seed",
+        "go": "bindings/go/proximity_accelerator.go#seed",
+        "node": "bindings/node/src/proximity.ts#seed",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#seed",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#seed",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#seed",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#seed",
+        "wasm": "bindings/wasm/src/index.ts#seed"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationQuality",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantizationQuality",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantizationQuality",
+        "node": "bindings/node/src/proximity.ts#TurboQuantizationQuality",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizationQuality",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantizationQuality",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantizationQuality",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizationQuality",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantizationQuality"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationQuality::maximum_squared_error",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#maximum_squared_error",
+        "go": "bindings/go/proximity_accelerator.go#maximum_squared_error",
+        "node": "bindings/node/src/proximity.ts#maximum_squared_error",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#maximum_squared_error",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#maximum_squared_error",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#maximum_squared_error",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#maximum_squared_error",
+        "wasm": "bindings/wasm/src/index.ts#maximum_squared_error"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationQuality::mean_squared_error",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#mean_squared_error",
+        "go": "bindings/go/proximity_accelerator.go#mean_squared_error",
+        "node": "bindings/node/src/proximity.ts#mean_squared_error",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#mean_squared_error",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#mean_squared_error",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#mean_squared_error",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#mean_squared_error",
+        "wasm": "bindings/wasm/src/index.ts#mean_squared_error"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationVerification",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantizationVerification",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantizationVerification",
+        "node": "bindings/node/src/proximity.ts#TurboQuantizationVerification",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizationVerification",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantizationVerification",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantizationVerification",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizationVerification",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantizationVerification"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationVerification::encoded_vectors",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#encoded_vectors",
+        "go": "bindings/go/proximity_accelerator.go#encoded_vectors",
+        "node": "bindings/node/src/proximity.ts#encoded_vectors",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#encoded_vectors",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#encoded_vectors",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#encoded_vectors",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#encoded_vectors",
+        "wasm": "bindings/wasm/src/index.ts#encoded_vectors"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationVerification::quality",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#quality",
+        "go": "bindings/go/proximity_accelerator.go#quality",
+        "node": "bindings/node/src/proximity.ts#quality",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#quality",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#quality",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#quality",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#quality",
+        "wasm": "bindings/wasm/src/index.ts#quality"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizationVerification::zero_vectors",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#zero_vectors",
+        "go": "bindings/go/proximity_accelerator.go#zero_vectors",
+        "node": "bindings/node/src/proximity.ts#zero_vectors",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#zero_vectors",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#zero_vectors",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#zero_vectors",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#zero_vectors",
+        "wasm": "bindings/wasm/src/index.ts#zero_vectors"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#TurboQuantizer",
+        "go": "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "node": "bindings/node/src/proximity.ts#TurboQuantizer",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#TurboQuantizer",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "wasm": "bindings/wasm/src/index.ts#TurboQuantizer"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::build",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#build",
+        "go": "bindings/go/proximity_accelerator.go#build",
+        "node": "bindings/node/src/proximity.ts#build",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#build",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#build",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#build",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#build",
+        "wasm": "bindings/wasm/src/index.ts#build"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::build_with_limits",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#build_with_limits",
+        "go": "bindings/go/proximity_accelerator.go#build_with_limits",
+        "node": "bindings/node/src/proximity.ts#build_with_limits",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#build_with_limits",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#build_with_limits",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#build_with_limits",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#build_with_limits",
+        "wasm": "bindings/wasm/src/index.ts#build_with_limits"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::config",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#config",
+        "go": "bindings/go/proximity_accelerator.go#config",
+        "node": "bindings/node/src/proximity.ts#config",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#config",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#config",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#config",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#config",
+        "wasm": "bindings/wasm/src/index.ts#config"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::load",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#load",
+        "go": "bindings/go/proximity_accelerator.go#load",
+        "node": "bindings/node/src/proximity.ts#load",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#load",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#load",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#load",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#load",
+        "wasm": "bindings/wasm/src/index.ts#load"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::manifest_cid",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#manifest_cid",
+        "go": "bindings/go/proximity_accelerator.go#manifest_cid",
+        "node": "bindings/node/src/proximity.ts#manifest_cid",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#manifest_cid",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#manifest_cid",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#manifest_cid",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#manifest_cid",
+        "wasm": "bindings/wasm/src/index.ts#manifest_cid"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::prove_search",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#prove_search",
+        "go": "bindings/go/proximity_accelerator.go#prove_search",
+        "node": "bindings/node/src/proximity.ts#prove_search",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#prove_search",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#prove_search",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#prove_search",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#prove_search",
+        "wasm": "bindings/wasm/src/index.ts#prove_search"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::quality",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#quality",
+        "go": "bindings/go/proximity_accelerator.go#quality",
+        "node": "bindings/node/src/proximity.ts#quality",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#quality",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#quality",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#quality",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#quality",
+        "wasm": "bindings/wasm/src/index.ts#quality"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::search",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#search",
+        "go": "bindings/go/proximity_accelerator.go#search",
+        "node": "bindings/node/src/proximity.ts#search",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#search",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#search",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#search",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#search",
+        "wasm": "bindings/wasm/src/index.ts#search"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::source_descriptor",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#source_descriptor",
+        "go": "bindings/go/proximity_accelerator.go#source_descriptor",
+        "node": "bindings/node/src/proximity.ts#source_descriptor",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#source_descriptor",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#source_descriptor",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#source_descriptor",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#source_descriptor",
+        "wasm": "bindings/wasm/src/index.ts#source_descriptor"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
+    },
+    {
+      "rust": "prolly::TurboQuantizer::verify",
+      "classification": "portable",
+      "status": "implemented",
+      "family": "proximity-map",
+      "performance": "owned",
+      "languages": {
+        "python": "bindings/python/prolly/api.py#verify",
+        "go": "bindings/go/proximity_accelerator.go#verify",
+        "node": "bindings/node/src/proximity.ts#verify",
+        "kotlin": "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#verify",
+        "java": "bindings/java/src/main/java/build/crab/prolly/javaapi#verify",
+        "ruby": "bindings/ruby/lib/prolly/api.rb#verify",
+        "swift": "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#verify",
+        "wasm": "bindings/wasm/src/index.ts#verify"
+      },
+      "exclusions": {},
+      "tests": [
+        "binding-proximity-turboquant-parity",
+        "proximity-turboquant-lifecycle"
+      ],
+      "docs": [
+        "docs/proximity-map.md",
+        "docs/proximity-turboquant-qualification.md"
+      ],
+      "reconciliation": "bound-direct",
+      "reconciliation_evidence": [
+        "bindings/uniffi/src/domain/proximity.rs#BindingTurboQuantizer",
+        "bindings/python/prolly/api.py#TurboQuantizer",
+        "bindings/go/proximity_accelerator.go#TurboQuantizer",
+        "bindings/node/src/proximity.ts#TurboQuantizer",
+        "bindings/kotlin/src/main/kotlin/build/crab/prolly/api/PortableApi.kt#TurboQuantizer",
+        "bindings/java/src/main/java/build/crab/prolly/javaapi/TurboQuantizer.java",
+        "bindings/ruby/lib/prolly/api.rb#TurboQuantizer",
+        "bindings/swift/Sources/ProllyAPI/PortableAPI.swift#TurboQuantizer",
+        "bindings/wasm/src/index.ts#WasmTurboQuantizer"
+      ],
+      "reconciliation_rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators.",
+      "reviewed": true,
+      "rationale": "All maintained hosts expose TurboQuant configuration and limits, build/load/verify/search, async cancellation through the host async contract, exact statistics and quality records, catalog/composite participation, and the appended planning/content discriminators."
     },
     {
       "rust": "prolly::TypedContentObject",

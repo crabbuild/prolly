@@ -857,8 +857,35 @@ content-addressed descriptor. It stores exact key/vector/value records in an
 ordered directory and uses a deterministic proximity hierarchy for exact L2 or
 honestly approximate filtered search. It includes cosine/inner product,
 localized canonical mutation, async/SIMD execution, overflow/external vectors,
-SQ8/PQ/HNSW, typed replication/GC, and descriptor-bound proofs. See
+SQ8/TurboQuant/PQ/HNSW, typed replication/GC, and descriptor-bound proofs. See
 [`proximity-map.md`](proximity-map.md) for complete examples.
+
+For high-dimensional immutable RAG corpora, a forced TurboQuant sidecar can
+reduce routing storage and avoid PQ's corpus-training pass while keeping final
+values and distances authoritative:
+
+```rust,no_run
+use prolly::*;
+
+# fn retrieve<S>(map: &ProximityMap<S>, query: &[f32]) -> Result<SearchResult, Error>
+# where S: Store + Clone + Send + Sync, S::Error: Send + Sync {
+let (turboquant, _) = TurboQuantizer::build(
+    map,
+    TurboQuantizationConfig::default(),
+    BuildParallelism::new(4)?,
+)?;
+let mut request = SearchRequest::exact(query, 10);
+request.policy = SearchPolicy::FixedBudget;
+request.options.backend = SearchBackend::TurboQuantized;
+turboquant.search(map, request)
+# }
+```
+
+The map's descriptor remains the durable snapshot identity; retain and publish
+the TurboQuant manifest only as a disposable derived sidecar. TurboQuant is
+currently explicit-only and supports fixed dimensions divisible by eight in
+the range 8 through 16,384. Always validate recall for the embedding model and
+filters used by the application.
 
 Choose this path for immutable versions, exact historical replay, duplicate
 vector identities, structural sharing, deterministic accelerators, and

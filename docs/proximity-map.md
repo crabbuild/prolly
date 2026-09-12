@@ -25,14 +25,15 @@ PRXI descriptor
     └── optional PQS8 node-local routing data
 
 PQPQ product-quantization sidecar ──bound to PRXI CID
+TQMS TurboQuant-MSE sidecar       ──bound to PRXI CID
 HNSW graph sidecar                ──bound to PRXI CID
 Composite accelerator            ──current PRXI + ancestor base + delta/shadow
 Accelerator catalog              ──bound to one current PRXI CID
 ```
 
-The application-visible immutable version is the PRXI descriptor CID. PQ and
-HNSW are derived, independently retained sidecars and never replace exact
-directory values.
+The application-visible immutable version is the PRXI descriptor CID. PQ,
+TurboQuant, and HNSW are derived, independently retained sidecars and never
+replace exact directory values.
 
 ## Build, reopen, and exact lookup
 
@@ -218,7 +219,7 @@ pages and recursive directories. `VectorStorageConfig` deterministically moves
 large vectors to PRXV objects. Immediate-child summaries commit key ranges,
 subtree counts, representatives, and conservatively rounded L2 radii.
 
-## SQ8, product quantization, and HNSW
+## SQ8, TurboQuant, product quantization, and HNSW
 
 Node-local SQ8 is enabled in `ProximityConfig`. It influences approximate
 routing only; leaf candidates are resolved and reranked from full vectors.
@@ -244,7 +245,13 @@ where
         BuildParallelism::new(4)?,
     )?;
     let (hnsw, _) = HnswIndex::build(map, HnswConfig::default())?;
-    let accelerators = AcceleratorSet::try_new(map.tree(), Some(hnsw), Some(pq))?;
+    let (turboquant, _) = TurboQuantizer::build(
+        map,
+        TurboQuantizationConfig::default(),
+        BuildParallelism::new(4)?,
+    )?;
+    let accelerators = AcceleratorSet::try_new(map.tree(), Some(hnsw), Some(pq))?
+        .with_turboquant(map.tree(), turboquant)?;
     let runtime = std::sync::Arc::new(SearchRuntime::default());
     let search_io = SearchIo::new(store, runtime);
 
@@ -258,15 +265,37 @@ where
 }
 ```
 
-PQ uses deterministic bounded training samples and streams its code pass.
-HNSW embeds routing vectors and uses bounded graph insertion. Both manifests
-bind source descriptor, dimensions, metric, count, and configuration. `Auto`
-may select native while planning when an accelerator is absent, stale, or not
-budget-admissible. Corruption or store/decode failure after execution begins is
-returned; execution never switches backends. Neither PQ nor HNSW claims exact
-completion.
+TurboQuant is a training-free routing accelerator for dimensions 8 through
+16,384 that are divisible by eight. It normalizes each vector, applies a
+deterministic structured orthogonal rotation, and scalar-quantizes every
+coordinate to two, three, or four bits. Four bits, an eight-times rerank
+shortlist, and seed zero are the defaults. Candidate scores are approximate,
+but every shortlisted key is resolved from the authoritative PRVR directory
+and reranked with the requested exact metric. A forced search therefore never
+claims exact completion even when its shortlist happens to contain every
+record.
 
-Accelerator component names are unversioned: HNSW, PQ,
+This structured rotation is a portable engineering variant of the
+`TurboQuant_mse` algorithm described in the public Google Research paper. It
+is not the paper's dense Gaussian-QR/Haar rotation and does not claim the
+paper's exact dense-rotation theorem. The implementation is independent and
+does not depend on, read, or write Turbovec formats.
+
+TurboQuant is currently explicit-only: set
+`request.options.backend = SearchBackend::TurboQuantized`. `Auto` ignores it
+until the checked-in recall and comparative performance qualification has
+passed. Applications should retain the source PRXI root and treat the
+TurboQuant manifest as disposable derived content.
+
+PQ uses deterministic bounded training samples and streams its code pass.
+HNSW embeds routing vectors and uses bounded graph insertion. All three
+manifests bind source descriptor, dimensions, metric, count, and
+configuration. `Auto` may select native while planning when an accelerator is
+absent, stale, or not budget-admissible. Corruption or store/decode failure
+after execution begins is returned; execution never switches backends. No
+accelerator claims exact completion.
+
+Accelerator component names are unversioned: HNSW, PQ, `TurboQuantizer`,
 `CompositeAccelerator`, and `AcceleratorCatalog` always identify the current
 data structures. Accelerator codec changes are hard cutovers; the engine does
 not expose parallel generation types, compatibility aliases, or legacy
@@ -278,7 +307,8 @@ accelerator readers.
 context automatically, avoiding a cache-configuration footgun. Call
 `search_with_runtime` so physical-byte statistics reflect actual cache misses
 rather than logical object use. Async-only object stores can construct and
-publish canonical HNSW/PQ catalogs with `AsyncAcceleratorCatalog::build`, load
+publish canonical HNSW/PQ/TurboQuant catalogs with
+`AsyncAcceleratorCatalog::build`, load
 individual sidecars, validate them into an `AsyncAcceleratorSet`, and call
 `search_with_accelerators`. Construction stages deterministic CPU work away
 from the remote adapter, then publishes the authenticated closure in bounded
@@ -287,7 +317,8 @@ provider batches. The planner and plan summaries are identical to
 
 ## Composite accelerators and catalogs
 
-`CompositeAccelerator` avoids rebuilding a large HNSW or PQ sidecar for every
+`CompositeAccelerator` avoids rebuilding a large HNSW, PQ, or TurboQuant
+sidecar for every
 immutable snapshot. It structurally diffs the ancestor and current ordered
 directories, stores inserts and vector updates in a bounded delta tree, and
 stores deleted and vector-updated keys in a shadow tree. Value-only changes use
@@ -337,7 +368,8 @@ deep, so composites cannot form unbounded chains. If the current source is
 empty, rebuild resolution returns `NoAcceleratorRequired` because native empty
 search needs no derived sidecar.
 
-Accelerator catalogs contain validated direct HNSW, direct PQ, and composite roots.
+Accelerator catalogs contain validated direct HNSW, direct PQ, direct
+TurboQuant, and composite roots.
 Publish `catalog.typed_root()` with `put_named_content_root` or
 `compare_and_swap_named_content_root`; replacement is atomic and independent
 of PRXI publication. `AsyncAcceleratorCatalog::load` and
@@ -391,7 +423,8 @@ the content-root manifest. Interrupted copies remain unreachable.
 
 Use `compare_and_swap_named_content_root` for concurrent heads.
 `plan_content_gc`/`sweep_content_gc_with_invalidator` mark any number of ordered,
-PRXI, snapshot, PQ, HNSW, composite, or accelerator-catalog roots and preserve shared objects. Candidate sets
+PRXI, snapshot, PQ, TurboQuant, HNSW, composite, or accelerator-catalog roots
+and preserve shared objects. Candidate sets
 are explicit; the invalidator lets applications evict swept process caches.
 
 ## Proofs
@@ -422,7 +455,7 @@ Membership proofs bind PRXI bytes, the ordered path, and exact PRVR bytes.
 Structural proofs carry the exact typed closure and replay every summary,
 radius, routing, vector, and directory invariant in an isolated store. Native
 search proofs commit request/filter/budgets/kernel and record frontier, visited
-objects, candidates, and completion. PQ, HNSW, and composite proofs authenticate
+objects, candidates, and completion. PQ, TurboQuant, HNSW, and composite proofs authenticate
 sidecar closures and replay execution. Only exact native L2 returns
 `ExactL2Optimal`; other modes return `HonestExecution`.
 
@@ -452,14 +485,16 @@ claim Dolt byte compatibility.
 ## Benchmarking
 
 The harness covers dimensions 8/128/768/1536, build worker counts, localized
-mutation, exact/adaptive/SQ8 search, scalar/SIMD, PQ/HNSW/composite, overflow, content
-graph copy/GC, and proofs. Async parity is exercised by the all-feature test
-suite and benchmark compilation.
+mutation, exact/adaptive/SQ8 search, scalar/SIMD, TurboQuant/PQ/HNSW/composite,
+overflow, content graph copy/GC, and proofs. TurboQuant rows report build work,
+encoded bytes, scalar/SIMD search work, rerank count, recall, and persisted
+mean-squared error. Async parity is exercised by the all-feature test suite and
+benchmark compilation.
 
 ```sh
 PROLLY_PROXIMITY_BENCH_RECORDS=10000 \
 PROLLY_PROXIMITY_BENCH_DIMENSIONS=8,128,768,1536 \
-cargo bench --all-features --bench proximity_bench
+cargo bench --all-features --bench prolly_proximity_bench
 ```
 
 For large cardinality tests, set `PROLLY_PROXIMITY_BENCH_SCALE_ONLY=1`. The
@@ -472,9 +507,12 @@ PROLLY_PROXIMITY_BENCH_RECORDS=10000000 \
 PROLLY_PROXIMITY_BENCH_DIMENSIONS=8 \
 PROLLY_PROXIMITY_BENCH_THREADS=1 \
 PROLLY_PROXIMITY_BENCH_SCALE_ONLY=1 \
-cargo bench --all-features --bench proximity_bench
+cargo bench --all-features --bench prolly_proximity_bench
 ```
 
 Benchmark rows are machine-specific evidence, not performance guarantees. See
 [`proximity-map-completion-audit.md`](proximity-map-completion-audit.md)
 for the release evidence matrix.
+TurboQuant's larger release/qualification matrix and its current explicit-only
+status are recorded in
+[`proximity-turboquant-qualification.md`](proximity-turboquant-qualification.md).
