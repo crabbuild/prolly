@@ -579,6 +579,8 @@ fn bench_accelerators<S>(
     S: prolly::Store + Clone + Send + Sync,
     S::Error: Send + Sync,
 {
+    #[cfg(not(feature = "async-store"))]
+    let _ = options.async_quantizers;
     let AcceleratorBenchCase {
         records,
         query,
@@ -632,6 +634,7 @@ fn bench_accelerators<S>(
         let (turboquant, stats) = selected
             .zip(canonical.map(|(_, stats)| stats))
             .expect("validated worker list is non-empty");
+        #[cfg(feature = "async-store")]
         let turboquant_manifest = turboquant.manifest_cid().clone();
         #[cfg(feature = "async-store")]
         if options.async_quantizers {
@@ -847,6 +850,7 @@ fn bench_accelerators<S>(
     let (pq, stats) = selected
         .zip(canonical.map(|(_, stats)| stats))
         .expect("validated worker list is non-empty");
+    #[cfg(feature = "async-store")]
     let pq_manifest = pq.manifest_cid().clone();
     #[cfg(feature = "async-store")]
     if options.async_quantizers {

@@ -58,8 +58,10 @@ func (*remoteStoreStub) CommitTransaction(context.Context, []NodeMutation, []Roo
 }
 
 func TestAsyncEngineCancellationReachesStore(t *testing.T) {
+	started := make(chan struct{})
 	cancelled := make(chan struct{})
 	store := &remoteStoreStub{descriptor: func(ctx context.Context) (StoreDescriptor, error) {
+		close(started)
 		<-ctx.Done()
 		close(cancelled)
 		return StoreDescriptor{}, ctx.Err()
@@ -71,6 +73,11 @@ func TestAsyncEngineCancellationReachesStore(t *testing.T) {
 		_, err := NewAsyncEngine(ctx, store, nil)
 		done <- err
 	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("NewAsyncEngine did not reach the store callback")
+	}
 	cancel()
 
 	select {
