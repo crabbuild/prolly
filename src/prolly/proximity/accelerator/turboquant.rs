@@ -1464,6 +1464,7 @@ pub(crate) fn validate_code_value(
 pub(crate) struct TurboQuantPreparedQuery {
     weighted: Vec<f64>,
     product_table: TurboQuantProductTable,
+    reconstructed_squares: [f64; 16],
     norm_squared: f64,
 }
 
@@ -1487,10 +1488,20 @@ impl TurboQuantProductTable {
 
 impl TurboQuantPreparedQuery {
     fn new(weighted: Vec<f64>, norm_squared: f64, bit_width: u8, kernel: QueryKernel) -> Self {
+        let inverse_sqrt_dimensions = 1.0 / sqrt_down(weighted.len() as f64);
+        let codebook = codebook(bit_width);
+        let mut reconstructed_squares = [0.0; 16];
+        for (code, square) in reconstructed_squares
+            .iter_mut()
+            .enumerate()
+            .take(1usize << bit_width)
+        {
+            let reconstructed = codebook.centroid(code as u8) * inverse_sqrt_dimensions;
+            *square = reconstructed * reconstructed;
+        }
         let product_table = if matches!(kernel, QueryKernel::SimdDeterministic) {
             TurboQuantProductTable::None
         } else {
-            let codebook = codebook(bit_width);
             match bit_width {
                 2 => TurboQuantProductTable::TwoBit(
                     weighted
@@ -1534,6 +1545,7 @@ impl TurboQuantPreparedQuery {
         Self {
             weighted,
             product_table,
+            reconstructed_squares,
             norm_squared,
         }
     }
@@ -1588,19 +1600,25 @@ pub(crate) fn score_code_value(
 ) -> Result<f64, Error> {
     let norm = validate_code_value(bytes, dimensions, bit_width)?;
     let packed = &bytes[8..];
-    let reconstructed_unit_dot = if norm == 0.0 {
-        0.0
+    let (reconstructed_unit_dot, reconstructed_norm_squared) = if norm == 0.0 {
+        (0.0, 0.0)
     } else if matches!(
         kernel,
         QueryKernel::ScalarDeterministic | QueryKernel::AutoDeterministic
     ) {
-        score_precomputed_centroids(packed, prepared_query, bit_width)
+        if metric == DistanceMetric::L2Squared {
+            score_precomputed_centroids::<true>(packed, prepared_query, bit_width)
+        } else {
+            score_precomputed_centroids::<false>(packed, prepared_query, bit_width)
+        }
     } else {
         let codebook = codebook(bit_width);
+        let inverse_sqrt_dimensions = 1.0 / sqrt_down(dimensions as f64);
         const PRODUCT_SLOTS: usize = 64;
         let mut centroids = [0.0f64; PRODUCT_SLOTS];
         let mut products = [0.0f64; PRODUCT_SLOTS];
         let mut reduced = 0.0;
+        let mut reconstructed_norm_squared = 0.0;
         let mut start = 0usize;
         while start < dimensions {
             let end = start.saturating_add(PRODUCT_SLOTS).min(dimensions);
@@ -1611,6 +1629,12 @@ pub(crate) fn score_code_value(
                 codebook,
                 &mut centroids[..end - start],
             );
+            if metric == DistanceMetric::L2Squared {
+                for &centroid in &centroids[..end - start] {
+                    let reconstructed = centroid * inverse_sqrt_dimensions;
+                    reconstructed_norm_squared += reconstructed * reconstructed;
+                }
+            }
             fill_query_products_f64(
                 kernel,
                 &prepared_query.weighted[start..end],
@@ -1622,7 +1646,7 @@ pub(crate) fn score_code_value(
             }
             start = end;
         }
-        reduced
+        (reduced, reconstructed_norm_squared)
     };
     let dot = if metric == DistanceMetric::Cosine {
         // Cosine preparation normalizes both query and source. Multiplying by
@@ -1634,8 +1658,6 @@ pub(crate) fn score_code_value(
     };
     let distance = match metric {
         DistanceMetric::L2Squared => {
-            let reconstructed_norm_squared =
-                reconstructed_unit_norm_squared(packed, dimensions, bit_width);
             (prepared_query.norm_squared + norm * norm * reconstructed_norm_squared - 2.0 * dot)
                 .max(0.0)
         }
@@ -1646,49 +1668,33 @@ pub(crate) fn score_code_value(
 }
 
 #[inline]
-fn reconstructed_unit_norm_squared(packed: &[u8], dimensions: usize, bit_width: u8) -> f64 {
-    let codebook = codebook(bit_width);
-    let inverse_sqrt_dimensions = 1.0 / sqrt_down(dimensions as f64);
-    const CENTROID_SLOTS: usize = 64;
-    let mut centroids = [0.0f64; CENTROID_SLOTS];
-    let mut squared = 0.0;
-    let mut start = 0usize;
-    while start < dimensions {
-        let end = start.saturating_add(CENTROID_SLOTS).min(dimensions);
-        fill_centroids(
-            packed,
-            start,
-            bit_width,
-            codebook,
-            &mut centroids[..end - start],
-        );
-        for &centroid in &centroids[..end - start] {
-            let reconstructed = centroid * inverse_sqrt_dimensions;
-            squared += reconstructed * reconstructed;
-        }
-        start = end;
-    }
-    squared
-}
-
-#[inline]
-fn score_precomputed_centroids(
+fn score_precomputed_centroids<const INCLUDE_RECONSTRUCTED_NORM: bool>(
     packed: &[u8],
     prepared: &TurboQuantPreparedQuery,
     bit_width: u8,
-) -> f64 {
+) -> (f64, f64) {
     debug_assert_eq!(
         prepared.product_table.product_count(),
         prepared.weighted.len() * (1usize << (bit_width - 1))
     );
     let mut reduced = 0.0;
+    let mut reconstructed_norm_squared = 0.0;
     match (&prepared.product_table, bit_width) {
         (TurboQuantProductTable::TwoBit(groups), 2) => {
             for (rows, byte) in groups.iter().zip(packed.iter().copied()) {
-                reduced += symmetric_row_product_2(&rows[0], byte & 0x03);
-                reduced += symmetric_row_product_2(&rows[1], (byte >> 2) & 0x03);
-                reduced += symmetric_row_product_2(&rows[2], (byte >> 4) & 0x03);
-                reduced += symmetric_row_product_2(&rows[3], byte >> 6);
+                let codes = [
+                    byte & 0x03,
+                    (byte >> 2) & 0x03,
+                    (byte >> 4) & 0x03,
+                    byte >> 6,
+                ];
+                for (row, code) in rows.iter().zip(codes) {
+                    reduced += symmetric_row_product_2(row, code);
+                    if INCLUDE_RECONSTRUCTED_NORM {
+                        reconstructed_norm_squared +=
+                            prepared.reconstructed_squares[usize::from(code)];
+                    }
+                }
             }
         }
         (TurboQuantProductTable::ThreeBit(groups), 3) => {
@@ -1696,20 +1702,30 @@ fn score_precomputed_centroids(
                 let codes =
                     u32::from(bytes[0]) | (u32::from(bytes[1]) << 8) | (u32::from(bytes[2]) << 16);
                 for (row, products) in rows.iter().enumerate() {
-                    reduced +=
-                        symmetric_row_product_4(products, ((codes >> (row * 3)) & 0x07) as u8);
+                    let code = ((codes >> (row * 3)) & 0x07) as u8;
+                    reduced += symmetric_row_product_4(products, code);
+                    if INCLUDE_RECONSTRUCTED_NORM {
+                        reconstructed_norm_squared +=
+                            prepared.reconstructed_squares[usize::from(code)];
+                    }
                 }
             }
         }
         (TurboQuantProductTable::FourBit(groups), 4) => {
             for (rows, byte) in groups.iter().zip(packed.iter().copied()) {
-                reduced += symmetric_row_product_8(&rows[0], byte & 0x0f);
-                reduced += symmetric_row_product_8(&rows[1], byte >> 4);
+                let codes = [byte & 0x0f, byte >> 4];
+                for (row, code) in rows.iter().zip(codes) {
+                    reduced += symmetric_row_product_8(row, code);
+                    if INCLUDE_RECONSTRUCTED_NORM {
+                        reconstructed_norm_squared +=
+                            prepared.reconstructed_squares[usize::from(code)];
+                    }
+                }
             }
         }
         _ => unreachable!("validated TurboQuant bit width"),
     }
-    reduced
+    (reduced, reconstructed_norm_squared)
 }
 
 #[inline(always)]
