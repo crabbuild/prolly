@@ -4,7 +4,8 @@ use prolly::{
     CompositeBuildOutcome, ContentGraphLimits, DistanceMetric, HnswConfig, HnswIndex, MemStore,
     ProductQuantizationConfig, ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap,
     ProximityMutation, ProximityRecord, QueryKernel, ScalarQuantizationConfig, SearchBackend,
-    SearchIo, SearchPolicy, SearchRequest, SearchRuntime, TypedContentRoot,
+    SearchIo, SearchPolicy, SearchRequest, SearchRuntime, TurboQuantizationConfig, TurboQuantizer,
+    TypedContentRoot,
 };
 #[cfg(feature = "async-store")]
 use prolly::{AsyncProximityMap, AsyncSearchControl, SyncStoreAsAsync};
@@ -28,10 +29,29 @@ fn main() {
         .max(1);
     let reset_search_cache = env_bool("PROLLY_PROXIMITY_BENCH_RESET_SEARCH_CACHE");
     let simd_first = env_bool("PROLLY_PROXIMITY_BENCH_SIMD_FIRST");
+    let metric = env_metric("PROLLY_PROXIMITY_BENCH_METRIC").unwrap_or(DistanceMetric::L2Squared);
+    let k = env_usize("PROLLY_PROXIMITY_BENCH_K").unwrap_or(10).max(1);
+    let eligibility_ppm = env_usize("PROLLY_PROXIMITY_BENCH_ELIGIBILITY_PPM")
+        .unwrap_or(1_000_000)
+        .clamp(1, 1_000_000);
+    let turboquant_config = TurboQuantizationConfig {
+        bit_width: env_usize("PROLLY_PROXIMITY_BENCH_TURBOQUANT_BITS")
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(4),
+        rerank_multiplier: env_usize("PROLLY_PROXIMITY_BENCH_RERANK_MULTIPLIER")
+            .and_then(|value| u32::try_from(value).ok())
+            .unwrap_or(8),
+        seed: 0,
+    };
     println!("prolly proximity benchmark");
     println!("records={records}");
     println!("profile={}", if scale_only { "scale" } else { "complete" });
     println!("search_repeats={search_repeats}");
+    println!("metric={metric:?}");
+    println!("k={k}");
+    println!("eligibility_ppm={eligibility_ppm}");
+    println!("turboquant_bits={}", turboquant_config.bit_width);
+    println!("rerank_multiplier={}", turboquant_config.rerank_multiplier);
     println!(
         "search_cache={}",
         if reset_search_cache { "reset" } else { "warm" }
@@ -45,32 +65,51 @@ fn main() {
         }
     );
     println!("operation,dimensions,threads,micros,metric_a,metric_b");
+    let settings = BenchSettings {
+        threads: &threads,
+        scale_only,
+        search_repeats,
+        reset_search_cache,
+        simd_first,
+        metric,
+        requested_k: k,
+        eligibility_ppm,
+        turboquant_config: &turboquant_config,
+    };
     for dimension in dimensions {
-        bench_case(
-            records,
-            dimension,
-            &threads,
-            scale_only,
-            search_repeats,
-            reset_search_cache,
-            simd_first,
-        );
+        bench_case(records, dimension, &settings);
     }
 }
 
-fn bench_case(
-    count: usize,
-    dimensions: usize,
-    threads: &[usize],
+#[derive(Clone, Copy)]
+struct BenchSettings<'a> {
+    threads: &'a [usize],
     scale_only: bool,
     search_repeats: usize,
     reset_search_cache: bool,
     simd_first: bool,
-) {
+    metric: DistanceMetric,
+    requested_k: usize,
+    eligibility_ppm: usize,
+    turboquant_config: &'a TurboQuantizationConfig,
+}
+
+fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
+    let BenchSettings {
+        threads,
+        scale_only,
+        search_repeats,
+        reset_search_cache,
+        simd_first,
+        metric,
+        requested_k,
+        eligibility_ppm,
+        turboquant_config,
+    } = *settings;
     let records = make_records(count, dimensions);
     for &workers in threads {
         let store = Arc::new(MemStore::new());
-        let config = config(dimensions);
+        let config = config(dimensions, metric);
         let started = Instant::now();
         let (_, stats) = ProximityMap::build_with_parallelism(
             store,
@@ -90,9 +129,20 @@ fn bench_case(
     }
 
     let store = Arc::new(MemStore::new());
-    let map = ProximityMap::build(store.clone(), config(dimensions), records.clone()).unwrap();
+    let map =
+        ProximityMap::build(store.clone(), config(dimensions, metric), records.clone()).unwrap();
     let query = make_vector(count / 3, dimensions);
-    let k = 10.min(count.max(1));
+    let eligible_count = count
+        .saturating_mul(eligibility_ppm)
+        .div_ceil(1_000_000)
+        .max(1)
+        .min(count.max(1));
+    let eligible_keys: Vec<_> = records
+        .iter()
+        .take(eligible_count)
+        .map(|record| record.key.clone())
+        .collect();
+    let k = requested_k.min(eligible_count);
 
     let search_specs = if simd_first {
         [
@@ -135,7 +185,7 @@ fn bench_case(
         let mut request = SearchRequest::exact(&query, k);
         request.policy = policy;
         request.kernel = kernel;
-        request.filter = ProximityFilter::Prefix(b"record-");
+        request.filter = benchmark_filter(&eligible_keys, eligibility_ppm);
         let started = Instant::now();
         let mut result = None;
         for _ in 0..search_repeats {
@@ -154,7 +204,7 @@ fn bench_case(
             result.stats.distance_evaluations + result.stats.quantized_distance_evaluations,
         );
         if name == "search_exact_scalar" && !scale_only {
-            let recall = recall_at_k(&records, &query, &result, k);
+            let recall = recall_at_k(&records[..eligible_count], &query, &result, k, metric);
             println!("recall_exact,{dimensions},0,0,{:.6},0", recall);
         }
     }
@@ -234,23 +284,122 @@ fn bench_case(
         verified.result.neighbors.len(),
     );
 
-    if dimensions <= 128 && count >= 16 {
-        bench_accelerators(&map, store.clone(), &query, k, dimensions);
+    if count >= 16 {
+        bench_accelerators(
+            &map,
+            store.clone(),
+            AcceleratorBenchCase {
+                records: &records,
+                query: &query,
+                k,
+                dimensions,
+                turboquant_config,
+            },
+            SearchBenchOptions {
+                repeats: search_repeats,
+                reset_cache: reset_search_cache,
+                eligible_keys: &eligible_keys,
+                eligibility_ppm,
+                eligible_count,
+            },
+        );
     }
     #[cfg(feature = "async-store")]
     bench_async(&map, store, &query, k, dimensions);
 }
 
+#[derive(Clone, Copy)]
+struct AcceleratorBenchCase<'a> {
+    records: &'a [ProximityRecord],
+    query: &'a [f32],
+    k: usize,
+    dimensions: usize,
+    turboquant_config: &'a TurboQuantizationConfig,
+}
+
+#[derive(Clone, Copy)]
+struct SearchBenchOptions<'a> {
+    repeats: usize,
+    reset_cache: bool,
+    eligible_keys: &'a [Vec<u8>],
+    eligibility_ppm: usize,
+    eligible_count: usize,
+}
+
 fn bench_accelerators<S>(
     map: &ProximityMap<S>,
     store: S,
-    query: &[f32],
-    k: usize,
-    dimensions: usize,
+    case: AcceleratorBenchCase<'_>,
+    options: SearchBenchOptions<'_>,
 ) where
     S: prolly::Store + Clone + Send + Sync,
     S::Error: Send + Sync,
 {
+    let AcceleratorBenchCase {
+        records,
+        query,
+        k,
+        dimensions,
+        turboquant_config,
+    } = case;
+    if dimensions >= 8 && dimensions.is_multiple_of(8) {
+        let started = Instant::now();
+        let (turboquant, stats) = TurboQuantizer::build(
+            map,
+            turboquant_config.clone(),
+            BuildParallelism::new(2).unwrap(),
+        )
+        .unwrap();
+        row(
+            "turboquant_build",
+            dimensions,
+            2,
+            started.elapsed(),
+            stats.transformed_components,
+            stats.encoded_output_bytes,
+        );
+        for (name, kernel) in [
+            ("turboquant_search_scalar", QueryKernel::ScalarDeterministic),
+            ("turboquant_search_simd", QueryKernel::SimdDeterministic),
+        ] {
+            let mut request = SearchRequest::exact(query, k);
+            request.policy = SearchPolicy::FixedBudget;
+            request.kernel = kernel;
+            request.options.backend = SearchBackend::TurboQuantized;
+            request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
+            let started = Instant::now();
+            let mut result = None;
+            for _ in 0..options.repeats {
+                if options.reset_cache {
+                    map.clear_content_cache().unwrap();
+                }
+                result = Some(turboquant.search(map, request.clone()).unwrap());
+            }
+            let result = result.expect("search repeats is positive");
+            row(
+                name,
+                dimensions,
+                0,
+                started.elapsed().div_f64(options.repeats as f64),
+                result.stats.quantized_distance_evaluations,
+                result.stats.reranked_candidates,
+            );
+            if kernel == QueryKernel::ScalarDeterministic {
+                println!(
+                    "turboquant_recall,{dimensions},0,0,{:.6},{}",
+                    recall_at_k(
+                        &records[..options.eligible_count],
+                        query,
+                        &result,
+                        k,
+                        map.tree().config.metric,
+                    ),
+                    turboquant.quality().mean_squared_error,
+                );
+            }
+        }
+    }
+
     let started = Instant::now();
     let (pq, stats) = ProductQuantizer::build(
         map,
@@ -258,7 +407,7 @@ fn bench_accelerators<S>(
             subquantizers: (dimensions as u32).min(8),
             centroids_per_subquantizer: 16,
             training_iterations: 4,
-            rerank_multiplier: 8,
+            rerank_multiplier: turboquant_config.rerank_multiplier,
             seed: 17,
             max_training_vectors: 65_536,
         },
@@ -276,15 +425,33 @@ fn bench_accelerators<S>(
     let mut request = SearchRequest::exact(query, k);
     request.policy = SearchPolicy::FixedBudget;
     request.options.backend = SearchBackend::ProductQuantized;
+    request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
     let started = Instant::now();
-    let result = pq.search(map, request).unwrap();
+    let mut result = None;
+    for _ in 0..options.repeats {
+        if options.reset_cache {
+            map.clear_content_cache().unwrap();
+        }
+        result = Some(pq.search(map, request.clone()).unwrap());
+    }
+    let result = result.expect("search repeats is positive");
     row(
         "pq_search",
         dimensions,
         0,
-        started.elapsed(),
+        started.elapsed().div_f64(options.repeats as f64),
         result.stats.distance_evaluations,
         result.stats.reranked_candidates,
+    );
+    println!(
+        "pq_recall,{dimensions},0,0,{:.6},0",
+        recall_at_k(
+            &records[..options.eligible_count],
+            query,
+            &result,
+            k,
+            map.tree().config.metric,
+        ),
     );
 
     let started = Instant::now();
@@ -407,9 +574,9 @@ fn block_on<F: Future>(future: F) -> F::Output {
     }
 }
 
-fn config(dimensions: usize) -> ProximityConfig {
+fn config(dimensions: usize, metric: DistanceMetric) -> ProximityConfig {
     let mut config = ProximityConfig::new(dimensions as u32);
-    config.metric = DistanceMetric::L2Squared;
+    config.metric = metric;
     config.hierarchy.level_hash_seed = 42;
     config.overflow.min_page_bytes = 4 * 1024;
     config.overflow.target_page_bytes = 16 * 1024;
@@ -461,19 +628,43 @@ fn recall_at_k(
     query: &[f32],
     result: &prolly::SearchResult,
     k: usize,
+    metric: DistanceMetric,
 ) -> f64 {
     let mut scored: Vec<_> = records
         .iter()
         .map(|record| {
-            let distance = record
+            let dot = record
                 .vector
                 .iter()
                 .zip(query)
-                .map(|(&left, &right)| {
-                    let delta = f64::from(left) - f64::from(right);
-                    delta * delta
-                })
+                .map(|(&left, &right)| f64::from(left) * f64::from(right))
                 .sum::<f64>();
+            let distance = match metric {
+                DistanceMetric::L2Squared => record
+                    .vector
+                    .iter()
+                    .zip(query)
+                    .map(|(&left, &right)| {
+                        let delta = f64::from(left) - f64::from(right);
+                        delta * delta
+                    })
+                    .sum(),
+                DistanceMetric::InnerProduct => -dot,
+                DistanceMetric::Cosine => {
+                    let left_norm = record
+                        .vector
+                        .iter()
+                        .map(|value| f64::from(*value).powi(2))
+                        .sum::<f64>()
+                        .sqrt();
+                    let right_norm = query
+                        .iter()
+                        .map(|value| f64::from(*value).powi(2))
+                        .sum::<f64>()
+                        .sqrt();
+                    1.0 - dot / (left_norm * right_norm)
+                }
+            };
             (distance, record.key.clone())
         })
         .collect();
@@ -489,6 +680,28 @@ fn recall_at_k(
         .filter(|neighbor| exact.contains(&neighbor.key))
         .count() as f64
         / k.max(1) as f64
+}
+
+fn benchmark_filter<'a>(keys: &'a [Vec<u8>], eligibility_ppm: usize) -> ProximityFilter<'a> {
+    if eligibility_ppm == 1_000_000 {
+        ProximityFilter::Prefix(b"record-")
+    } else {
+        ProximityFilter::EligibleKeys(keys)
+    }
+}
+
+fn env_metric(name: &str) -> Option<DistanceMetric> {
+    match std::env::var(name)
+        .ok()?
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "l2" | "l2_squared" => Some(DistanceMetric::L2Squared),
+        "cosine" => Some(DistanceMetric::Cosine),
+        "inner_product" | "ip" => Some(DistanceMetric::InnerProduct),
+        _ => None,
+    }
 }
 
 fn env_usize(name: &str) -> Option<usize> {

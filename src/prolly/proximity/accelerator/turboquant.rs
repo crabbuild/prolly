@@ -920,68 +920,68 @@ struct Codebook {
 // Symmetric Lloyd-Max solutions for N(0,1), generated in binary64 and frozen
 // as bits. Equality with a threshold selects the lower centroid.
 const THRESHOLDS_2: &[u64] = &[
-    0xbfef_6941_ee8d_a039,
+    0xbfef_6941_ee8d_a043,
     0x0000_0000_0000_0000,
-    0x3fef_6941_ee8d_a039,
+    0x3fef_6941_ee8d_a043,
 ];
 const CENTROIDS_2: &[u64] = &[
-    0xbff8_2aab_a77c_e5f2,
-    0xbfdc_fa59_1c42_e91c,
-    0x3fdc_fa59_1c42_e91c,
-    0x3ff8_2aab_a77c_e5f2,
+    0xbff8_2aab_a77c_e5fa,
+    0xbfdc_fa59_1c42_e927,
+    0x3fdc_fa59_1c42_e927,
+    0x3ff8_2aab_a77c_e5fa,
 ];
 const THRESHOLDS_3: &[u64] = &[
-    0xbffb_f782_d13d_ca9a,
-    0xbff0_cca0_0132_d1ca,
-    0xbfe0_0480_de16_34ea,
+    0xbffb_f782_d13d_cab0,
+    0xbff0_cca0_0132_d1d5,
+    0xbfe0_0480_de16_34f6,
     0x0000_0000_0000_0000,
-    0x3fe0_0480_de16_34ea,
-    0x3ff0_cca0_0132_d1ca,
-    0x3ffb_f782_d13d_ca9a,
+    0x3fe0_0480_de16_34f6,
+    0x3ff0_cca0_0132_d1d5,
+    0x3ffb_f782_d13d_cab0,
 ];
 const CENTROIDS_3: &[u64] = &[
-    0xc001_372f_4f3e_0836,
-    0xbff5_80a7_03ff_84c8,
-    0xbfe8_3131_fccc_3d96,
-    0xbfcf_5f3e_fd80_b0f4,
-    0x3fcf_5f3e_fd80_b0f4,
-    0x3fe8_3131_fccc_3d96,
-    0x3ff5_80a7_03ff_84c8,
-    0x4001_372f_4f3e_0836,
+    0xc001_372f_4f3e_0846,
+    0xbff5_80a7_03ff_84d6,
+    0xbfe8_3131_fccc_3da8,
+    0xbfcf_5f3e_fd80_b113,
+    0x3fcf_5f3e_fd80_b113,
+    0x3fe8_3131_fccc_3da8,
+    0x3ff5_80a7_03ff_84d6,
+    0x4001_372f_4f3e_0846,
 ];
 const THRESHOLDS_4: &[u64] = &[
-    0xc003_34d8_698e_82d9,
-    0xbffd_7f1b_3511_80af,
-    0xbff6_fe85_3ee1_915a,
-    0xbff1_96ac_bc39_0aaf,
-    0xbfe9_95e9_6f9c_1822,
-    0xbfe0_b787_fbb0_6a10,
-    0xbfd0_86b4_2938_4834,
+    0xc003_34d8_698e_82e4,
+    0xbffd_7f1b_3511_80d5,
+    0xbff6_fe85_3ee1_9176,
+    0xbff1_96ac_bc39_0ac5,
+    0xbfe9_95e9_6f9c_1848,
+    0xbfe0_b787_fbb0_6a33,
+    0xbfd0_86b4_2938_4856,
     0x0000_0000_0000_0000,
-    0x3fd0_86b4_2938_4834,
-    0x3fe0_b787_fbb0_6a10,
-    0x3fe9_95e9_6f9c_1822,
-    0x3ff1_96ac_bc39_0aaf,
-    0x3ff6_fe85_3ee1_915a,
-    0x3ffd_7f1b_3511_80af,
-    0x4003_34d8_698e_82d9,
+    0x3fd0_86b4_2938_4856,
+    0x3fe0_b787_fbb0_6a33,
+    0x3fe9_95e9_6f9c_1848,
+    0x3ff1_96ac_bc39_0ac5,
+    0x3ff6_fe85_3ee1_9176,
+    0x3ffd_7f1b_3511_80d5,
+    0x4003_34d8_698e_82e4,
 ];
 const CENTROIDS_4: &[u64] = &[
     0xc005_dc57_ebc6_84e8,
-    0xc000_8d58_e756_80ca,
-    0xbff9_e384_9b75_ffca,
-    0xbff4_1985_e24d_22ea,
-    0xbfee_27a7_2c49_e4e8,
-    0xbfe5_042b_b2ee_4b5b,
-    0xbfd8_d5c8_88e5_118c,
-    0xbfc0_6f3f_9316_fdb8,
-    0x3fc0_6f3f_9316_fdb8,
-    0x3fd8_d5c8_88e5_118c,
-    0x3fe5_042b_b2ee_4b5b,
-    0x3fee_27a7_2c49_e4e8,
-    0x3ff4_1985_e24d_22ea,
-    0x3ff9_e384_9b75_ffca,
-    0x4000_8d58_e756_80ca,
+    0xc000_8d58_e756_80e1,
+    0xbff9_e384_9b75_ffe8,
+    0xbff4_1985_e24d_2303,
+    0xbfee_27a7_2c49_e50d,
+    0xbfe5_042b_b2ee_4b83,
+    0xbfd8_d5c8_88e5_11c6,
+    0xbfc0_6f3f_9316_fdcb,
+    0x3fc0_6f3f_9316_fdcb,
+    0x3fd8_d5c8_88e5_11c6,
+    0x3fe5_042b_b2ee_4b83,
+    0x3fee_27a7_2c49_e50d,
+    0x3ff4_1985_e24d_2303,
+    0x3ff9_e384_9b75_ffe8,
+    0x4000_8d58_e756_80e1,
     0x4005_dc57_ebc6_84e8,
 ];
 
@@ -1417,6 +1417,9 @@ mod tests {
         assert_eq!(stream.next(), 0xe220_a839_7b1d_cdaf);
         assert_eq!(stream.next(), 0x6e78_9e6a_a1b9_65f4);
         assert_eq!(stream.next(), 0x06c4_5d18_8009_454f);
+        assert_eq!(multiply_high(u64::MAX, 1), 0);
+        assert_eq!(multiply_high(u64::MAX, u64::MAX), u64::MAX - 1);
+        assert_eq!(multiply_high(0x8000_0000_0000_0000, 8), 4);
     }
 
     #[test]
@@ -1463,7 +1466,17 @@ mod tests {
             let before = input.iter().fold(0.0, |sum, value| sum + value * value);
             let after = left.iter().fold(0.0, |sum, value| sum + value * value);
             assert!((before - after).abs() <= before.max(1.0) * 1e-12);
+            for round in &plan.rounds {
+                let mut permutation = round.permutation.clone();
+                permutation.sort_unstable();
+                assert_eq!(permutation, (0..dimensions).collect::<Vec<_>>());
+                assert!(round.signs.iter().all(|sign| matches!(sign, -1 | 1)));
+            }
         }
+        let left = StructuredRotation::derive(128, 0x5eed).unwrap();
+        let right = StructuredRotation::derive(128, 0x5eee).unwrap();
+        assert_ne!(left.rounds[0].permutation, right.rounds[0].permutation);
+        assert_ne!(left.rounds[0].signs, right.rounds[0].signs);
     }
 
     #[test]
@@ -1523,6 +1536,141 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn l2_approximate_score_clamps_negative_estimates_to_positive_zero() {
+        let prepared = TurboQuantPreparedQuery {
+            weighted: vec![1_000.0; 8],
+            norm_squared: 1.0,
+        };
+        let codes = vec![3; 8];
+        let mut encoded = 1.0f64.to_le_bytes().to_vec();
+        encoded.extend_from_slice(&pack_codes(&codes, 2).unwrap());
+        let score = score_code_value(
+            &encoded,
+            &prepared,
+            DistanceMetric::L2Squared,
+            8,
+            2,
+            QueryKernel::ScalarDeterministic,
+        )
+        .unwrap();
+        assert_eq!(score.to_bits(), 0.0f64.to_bits());
+    }
+
+    #[test]
+    fn malformed_manifest_and_code_fuzz_smoke_is_bounded() {
+        let mut state = 0x4d59_5df4_d0f3_3173u64;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        for _ in 0..10_000 {
+            let length = next() as usize % 1025;
+            let bytes = (0..length).map(|_| next() as u8).collect::<Vec<_>>();
+            let _ = Manifest::decode(&bytes);
+            for bit_width in [2, 3, 4] {
+                let _ = validate_code_value(&bytes, 8 + (next() as usize % 257), bit_width);
+            }
+        }
+        assert_eq!(packed_len(MAX_DIMENSIONS as usize, 4).unwrap(), 8192);
+    }
+
+    #[test]
+    fn checked_in_turboquant_conformance_values_are_frozen() {
+        let hex = |cid: Cid| {
+            cid.as_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        };
+        let bytes_hex = |bytes: &[u8]| {
+            bytes
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        };
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../conformance/proximity-fixtures.json"
+        ))
+        .unwrap();
+        let fixture = &fixture["turboquant"];
+
+        let mut splitmix = SplitMix64::new(0);
+        for expected in fixture["splitmix64_seed_zero"].as_array().unwrap() {
+            assert_eq!(
+                format!("{:016x}", splitmix.next()),
+                expected.as_str().unwrap()
+            );
+        }
+        for dimensions in [8usize, 24, 128, 200, 768, 1536, 3072] {
+            let plan = StructuredRotation::derive(dimensions, 0x5eed).unwrap();
+            let mut plan_bytes = Vec::new();
+            for round in &plan.rounds {
+                for &index in &round.permutation {
+                    plan_bytes.extend_from_slice(&(index as u64).to_le_bytes());
+                }
+                plan_bytes.extend(round.signs.iter().map(|sign| *sign as u8));
+            }
+            let input: Vec<_> = (0..dimensions)
+                .map(|index| (index as f64 * 0.03125).sin())
+                .collect();
+            let output = plan.apply(&input);
+            let output_bytes: Vec<_> = output
+                .iter()
+                .flat_map(|value| value.to_bits().to_le_bytes())
+                .collect();
+            let expected = &fixture["rotation"][dimensions.to_string()];
+            assert_eq!(
+                hex(Cid::from_bytes(&plan_bytes)),
+                expected["plan_sha256"].as_str().unwrap(),
+            );
+            assert_eq!(
+                hex(Cid::from_bytes(&output_bytes)),
+                expected["output_sha256"].as_str().unwrap(),
+            );
+        }
+        for bit_width in [2, 3, 4] {
+            let maximum = 1u8 << bit_width;
+            let codes: Vec<_> = (0..19).map(|index| index as u8 % maximum).collect();
+            assert_eq!(
+                bytes_hex(&pack_codes(&codes, bit_width).unwrap()),
+                fixture["packing_19_codes"][bit_width.to_string()]
+                    .as_str()
+                    .unwrap(),
+            );
+            let codebook = codebook(bit_width);
+            let expected = &fixture["codebooks"][bit_width.to_string()];
+            assert_eq!(
+                codebook
+                    .thresholds
+                    .iter()
+                    .map(|bits| format!("{bits:016x}"))
+                    .collect::<Vec<_>>(),
+                expected["threshold_bits"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_str().unwrap())
+                    .collect::<Vec<_>>(),
+            );
+            assert_eq!(
+                codebook
+                    .centroids
+                    .iter()
+                    .map(|bits| format!("{bits:016x}"))
+                    .collect::<Vec<_>>(),
+                expected["centroid_bits"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_str().unwrap())
+                    .collect::<Vec<_>>(),
+            );
         }
     }
 }

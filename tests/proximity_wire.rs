@@ -1,6 +1,7 @@
 use prolly::{
-    BatchOp, Cid, DistanceMetric, Error, MemStore, NodePublication, ProximityConfig, ProximityMap,
-    ProximityRecord, Store,
+    walk_content_graph, BatchOp, BuildParallelism, Cid, ContentGraphLimits, ContentObjectKind,
+    DistanceMetric, Error, MemStore, NodePublication, ProximityConfig, ProximityMap,
+    ProximityRecord, Store, TurboQuantizationConfig, TurboQuantizer, TypedContentRoot,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -238,4 +239,75 @@ fn proximity_build_publishes_the_descriptor_only_after_descendants() {
         .get(reference.tree().descriptor.as_bytes())
         .unwrap()
         .is_none());
+}
+
+#[test]
+fn checked_in_turboquant_wire_fixture_matches_canonical_closure() {
+    let store = Arc::new(MemStore::new());
+    let map = ProximityMap::build(
+        store.clone(),
+        ProximityConfig::new(8),
+        [
+            ProximityRecord {
+                key: b"a".to_vec(),
+                vector: vec![0.0; 8],
+                value: b"zero".to_vec(),
+            },
+            ProximityRecord {
+                key: b"b".to_vec(),
+                vector: vec![1.0, 0.0, -1.0, 0.5, 2.0, -2.0, 0.25, -0.25],
+                value: b"one".to_vec(),
+            },
+            ProximityRecord {
+                key: b"c".to_vec(),
+                vector: vec![0.25, 0.5, 0.75, 1.0, -0.25, -0.5, -0.75, -1.0],
+                value: b"two".to_vec(),
+            },
+        ],
+    )
+    .unwrap();
+    let (index, _) = TurboQuantizer::build(
+        &map,
+        TurboQuantizationConfig {
+            bit_width: 3,
+            rerank_multiplier: 8,
+            seed: 0x5eed,
+        },
+        BuildParallelism::new(2).unwrap(),
+    )
+    .unwrap();
+    let walk = walk_content_graph(
+        &store,
+        &[TypedContentRoot::new(
+            ContentObjectKind::TurboQuantization,
+            index.manifest_cid().clone(),
+        )],
+        &ContentGraphLimits::default(),
+    )
+    .unwrap();
+    let hex = |bytes: &[u8]| {
+        bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    };
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../conformance/proximity-fixtures.json")).unwrap();
+    let fixture = &fixture["turboquant"]["wire_fixture"];
+    assert_eq!(
+        hex(index.manifest_cid().as_bytes()),
+        fixture["manifest_cid"].as_str().unwrap(),
+    );
+    let actual = walk
+        .objects
+        .iter()
+        .map(|object| {
+            serde_json::json!({
+                "kind": format!("{:?}", object.root.kind),
+                "cid": hex(object.root.cid.as_bytes()),
+                "bytes": hex(&object.bytes),
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(actual, fixture["objects"].as_array().unwrap().clone());
 }

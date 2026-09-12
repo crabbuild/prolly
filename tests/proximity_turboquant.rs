@@ -27,11 +27,19 @@ fn records(count: usize, dimensions: usize) -> Vec<ProximityRecord> {
 
 #[test]
 fn turboquant_is_canonical_bounded_verified_and_exhaustively_reranked() {
-    for metric in [DistanceMetric::L2Squared, DistanceMetric::InnerProduct] {
+    for metric in [
+        DistanceMetric::L2Squared,
+        DistanceMetric::Cosine,
+        DistanceMetric::InnerProduct,
+    ] {
         let store = Arc::new(MemStore::new());
         let mut map_config = ProximityConfig::new(128);
         map_config.metric = metric;
-        let map = ProximityMap::build(store.clone(), map_config, records(193, 128)).unwrap();
+        let mut source = records(193, 128);
+        if metric == DistanceMetric::Cosine {
+            source[0].vector[0] = 1.0;
+        }
+        let map = ProximityMap::build(store.clone(), map_config, source).unwrap();
         let config = TurboQuantizationConfig {
             bit_width: 4,
             rerank_multiplier: 256,
@@ -40,7 +48,10 @@ fn turboquant_is_canonical_bounded_verified_and_exhaustively_reranked() {
         let (serial, serial_stats) =
             TurboQuantizer::build(&map, config.clone(), BuildParallelism::serial()).unwrap();
         assert_eq!(serial_stats.encoded_vectors, 193);
-        assert_eq!(serial_stats.zero_vectors, 1);
+        assert_eq!(
+            serial_stats.zero_vectors,
+            usize::from(metric != DistanceMetric::Cosine),
+        );
         assert_eq!(serial_stats.encoded_output_bytes, 193 * (8 + 64));
         assert_eq!(serial.verify(&map).unwrap().quality, serial.quality());
 
@@ -128,6 +139,56 @@ fn turboquant_catalog_and_typed_graph_include_complete_closure() {
             .unwrap_or_default()
             > 0
     );
+}
+
+#[test]
+fn turboquant_missing_or_corrupt_content_fails_closed() {
+    use prolly::{Cid, Store};
+
+    let store = Arc::new(MemStore::new());
+    let map =
+        ProximityMap::build(store.clone(), ProximityConfig::new(128), records(33, 128)).unwrap();
+    let (index, _) = TurboQuantizer::build(
+        &map,
+        TurboQuantizationConfig::default(),
+        BuildParallelism::serial(),
+    )
+    .unwrap();
+    let manifest = index.manifest_cid().clone();
+    let manifest_bytes = store.get(manifest.as_bytes()).unwrap().unwrap();
+
+    for (offset, replacement) in [(4usize, 0xff), (5, 1)] {
+        let mut corrupt = manifest_bytes.clone();
+        corrupt[offset] = replacement;
+        let cid = Cid::from_bytes(&corrupt);
+        store.put(cid.as_bytes(), &corrupt).unwrap();
+        assert!(TurboQuantizer::load(store.clone(), cid).is_err());
+    }
+    let mut trailing = manifest_bytes;
+    trailing.push(0);
+    let trailing_cid = Cid::from_bytes(&trailing);
+    store.put(trailing_cid.as_bytes(), &trailing).unwrap();
+    assert!(TurboQuantizer::load(store.clone(), trailing_cid).is_err());
+
+    let walk = walk_content_graph(
+        &store,
+        &[TypedContentRoot::new(
+            ContentObjectKind::TurboQuantization,
+            manifest,
+        )],
+        &ContentGraphLimits::default(),
+    )
+    .unwrap();
+    let code_root = walk
+        .objects
+        .iter()
+        .find(|object| object.root.kind == ContentObjectKind::OrderedNode)
+        .unwrap()
+        .root
+        .cid
+        .clone();
+    store.delete(code_root.as_bytes()).unwrap();
+    assert!(index.verify(&map).is_err());
 }
 
 #[test]
