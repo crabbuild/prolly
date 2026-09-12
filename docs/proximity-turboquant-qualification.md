@@ -23,6 +23,12 @@ wire format is used.
 The detailed independent-implementation and release-owner record is in
 [`proximity-turboquant-provenance.md`](proximity-turboquant-provenance.md).
 
+The development-only dense Gaussian-QR oracle and all-dimension comparison are
+documented in
+[`proximity-turboquant-dense-reference.md`](proximity-turboquant-dense-reference.md).
+That evidence checks the structured-transform engineering deviation; it does
+not replace the production-scale recall and performance matrix below.
+
 ## Checked-in correctness evidence
 
 | Requirement | Evidence | Status |
@@ -34,8 +40,8 @@ The detailed independent-implementation and release-owner record is in
 | Sync/async, catalog, composite, proof, content graph, and GC integration | focused proximity accelerator, async, proof, and content-graph tests | Implemented |
 | Maintained portable binding lifecycle | UniFFI plus Python, Go, Node, Kotlin, Java, Ruby, Swift, and WASM facades/tests | Implemented |
 | Cross-target fixture execution on x86_64, aarch64, and browser WASM | CI or retained target logs | Pending |
-| Dense paper-reference distortion comparison | retained development report | Pending |
-| Complete adversarial fault injection at every read/write boundary | deterministic fault-injection report | Pending |
+| Dense paper-reference distortion and recall comparison | [`proximity-turboquant-dense-reference.md`](proximity-turboquant-dense-reference.md), retained raw JSON, reproducible generator | Implemented |
+| Complete adversarial fault injection at every read/write boundary | [`proximity-turboquant-fault-injection.md`](proximity-turboquant-fault-injection.md), ordinal cold-read/publication tests | Implemented |
 
 ## Benchmark protocol
 

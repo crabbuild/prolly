@@ -1,10 +1,104 @@
 use prolly::{
-    walk_content_graph, AcceleratorCatalog, AcceleratorSet, BuildParallelism, ContentGraphLimits,
-    ContentObjectKind, DistanceMetric, MemStore, ProximityConfig, ProximityFilter, ProximityMap,
-    ProximityRecord, SearchBackend, SearchPolicy, SearchRequest, TurboQuantizationBuildLimits,
-    TurboQuantizationConfig, TurboQuantizer, TypedContentRoot,
+    walk_content_graph, AcceleratorCatalog, AcceleratorSet, BatchOp, BuildParallelism,
+    ContentGraphLimits, ContentObjectKind, DistanceMetric, MemStore, NodePublication,
+    ProximityConfig, ProximityFilter, ProximityMap, ProximityRecord, SearchBackend, SearchPolicy,
+    SearchRequest, Store, TurboQuantizationBuildLimits, TurboQuantizationConfig, TurboQuantizer,
+    TypedContentRoot,
 };
+use std::io;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+
+const NO_FAULT: usize = usize::MAX;
+
+#[derive(Default)]
+struct FaultControl {
+    reads: AtomicUsize,
+    publications: AtomicUsize,
+    fail_read_at: AtomicUsize,
+    fail_publication_at: AtomicUsize,
+}
+
+impl FaultControl {
+    fn reset(&self) {
+        self.reads.store(0, Ordering::SeqCst);
+        self.publications.store(0, Ordering::SeqCst);
+        self.fail_read_at.store(NO_FAULT, Ordering::SeqCst);
+        self.fail_publication_at.store(NO_FAULT, Ordering::SeqCst);
+    }
+
+    fn fail_read(&self, operation: usize) {
+        self.reset();
+        self.fail_read_at.store(operation, Ordering::SeqCst);
+    }
+
+    fn fail_publication(&self, operation: usize) {
+        self.reset();
+        self.fail_publication_at.store(operation, Ordering::SeqCst);
+    }
+
+    fn before_read(&self) -> io::Result<()> {
+        let operation = self.reads.fetch_add(1, Ordering::SeqCst) + 1;
+        if operation == self.fail_read_at.load(Ordering::SeqCst) {
+            Err(io::Error::other("injected TurboQuant read failure"))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn before_publication(&self) -> io::Result<()> {
+        let operation = self.publications.fetch_add(1, Ordering::SeqCst) + 1;
+        if operation == self.fail_publication_at.load(Ordering::SeqCst) {
+            Err(io::Error::other("injected TurboQuant publication failure"))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(Clone)]
+struct FaultStore {
+    inner: Arc<MemStore>,
+    control: Arc<FaultControl>,
+}
+
+impl FaultStore {
+    fn new() -> Self {
+        let control = Arc::new(FaultControl::default());
+        control.reset();
+        Self {
+            inner: Arc::new(MemStore::new()),
+            control,
+        }
+    }
+}
+
+impl Store for FaultStore {
+    type Error = io::Error;
+
+    fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        self.control.before_read()?;
+        Store::get(&*self.inner, key).map_err(|error| io::Error::other(error.to_string()))
+    }
+
+    fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        Store::put(&*self.inner, key, value).map_err(|error| io::Error::other(error.to_string()))
+    }
+
+    fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        Store::delete(&*self.inner, key).map_err(|error| io::Error::other(error.to_string()))
+    }
+
+    fn batch(&self, operations: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        Store::batch(&*self.inner, operations).map_err(|error| io::Error::other(error.to_string()))
+    }
+
+    fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.control.before_publication()?;
+        Store::publish_nodes(&*self.inner, publication)
+            .map_err(|error| io::Error::other(error.to_string()))
+    }
+}
 
 fn records(count: usize, dimensions: usize) -> Vec<ProximityRecord> {
     (0..count)
@@ -23,6 +117,40 @@ fn records(count: usize, dimensions: usize) -> Vec<ProximityRecord> {
             value: record.to_le_bytes().to_vec(),
         })
         .collect()
+}
+
+fn forced_turboquant_request(query: &[f32], k: usize) -> SearchRequest<'_> {
+    let mut request = SearchRequest::exact(query, k);
+    request.policy = SearchPolicy::FixedBudget;
+    request.options.backend = SearchBackend::TurboQuantized;
+    request
+}
+
+fn assert_every_cold_read_fails<F>(control: &FaultControl, operation: F) -> usize
+where
+    F: Fn() -> Result<(), prolly::Error>,
+{
+    control.reset();
+    operation().expect("unfaulted operation must succeed");
+    let reads = control.reads.load(Ordering::SeqCst);
+    assert!(
+        reads > 0,
+        "operation must cross at least one store read boundary"
+    );
+    for fail_at in 1..=reads {
+        control.fail_read(fail_at);
+        let error = operation().expect_err("injected read must fail closed");
+        assert!(
+            matches!(error, prolly::Error::Store(_)),
+            "read {fail_at}/{reads} returned the wrong error: {error:?}",
+        );
+        assert!(
+            control.reads.load(Ordering::SeqCst) >= fail_at,
+            "fault boundary {fail_at}/{reads} was not reached",
+        );
+    }
+    control.reset();
+    reads
 }
 
 #[test]
@@ -189,6 +317,109 @@ fn turboquant_missing_or_corrupt_content_fails_closed() {
         .clone();
     store.delete(code_root.as_bytes()).unwrap();
     assert!(index.verify(&map).is_err());
+}
+
+#[test]
+fn turboquant_fails_closed_at_every_publication_boundary() {
+    let successful_store = FaultStore::new();
+    let successful_map = ProximityMap::build(
+        successful_store.clone(),
+        ProximityConfig::new(128),
+        records(193, 128),
+    )
+    .unwrap();
+    successful_store.control.reset();
+    let (successful, _) = TurboQuantizer::build(
+        &successful_map,
+        TurboQuantizationConfig::default(),
+        BuildParallelism::serial(),
+    )
+    .unwrap();
+    let expected_manifest = successful.manifest_cid().clone();
+    let publications = successful_store.control.publications.load(Ordering::SeqCst);
+    assert!(
+        publications >= 2,
+        "code tree and manifest publish separately"
+    );
+    eprintln!("TurboQuant publication boundaries exercised: {publications}");
+
+    for fail_at in 1..=publications {
+        let store = FaultStore::new();
+        let map = ProximityMap::build(store.clone(), ProximityConfig::new(128), records(193, 128))
+            .unwrap();
+        store.control.fail_publication(fail_at);
+        let error = match TurboQuantizer::build(
+            &map,
+            TurboQuantizationConfig::default(),
+            BuildParallelism::serial(),
+        ) {
+            Ok(_) => panic!("injected publication must fail the build"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, prolly::Error::Store(_)));
+        assert_eq!(
+            store.control.publications.load(Ordering::SeqCst),
+            fail_at,
+            "build continued after publication failure {fail_at}/{publications}",
+        );
+        assert!(
+            Store::get(&*store.inner, expected_manifest.as_bytes())
+                .unwrap()
+                .is_none(),
+            "failed build published its manifest at boundary {fail_at}/{publications}",
+        );
+    }
+}
+
+#[test]
+fn turboquant_fails_closed_at_every_manifest_tree_proof_and_rerank_read() {
+    let store = FaultStore::new();
+    let map =
+        ProximityMap::build(store.clone(), ProximityConfig::new(128), records(193, 128)).unwrap();
+    let (index, _) = TurboQuantizer::build(
+        &map,
+        TurboQuantizationConfig {
+            rerank_multiplier: 8,
+            ..TurboQuantizationConfig::default()
+        },
+        BuildParallelism::serial(),
+    )
+    .unwrap();
+    let descriptor = map.tree().descriptor.clone();
+    let manifest = index.manifest_cid().clone();
+    let query: Vec<_> = (0..128)
+        .map(|coordinate| coordinate as f32 / 31.0 - 1.0)
+        .collect();
+
+    let verify_reads = assert_every_cold_read_fails(&store.control, || {
+        let map = ProximityMap::load(store.clone(), descriptor.clone())?;
+        let index = TurboQuantizer::load(store.clone(), manifest.clone())?;
+        index.verify(&map).map(|_| ())
+    });
+    let search_reads = assert_every_cold_read_fails(&store.control, || {
+        let map = ProximityMap::load(store.clone(), descriptor.clone())?;
+        let index = TurboQuantizer::load(store.clone(), manifest.clone())?;
+        index
+            .search(&map, forced_turboquant_request(&query, 7))
+            .map(|_| ())
+    });
+    let proof_reads = assert_every_cold_read_fails(&store.control, || {
+        let map = ProximityMap::load(store.clone(), descriptor.clone())?;
+        let index = TurboQuantizer::load(store.clone(), manifest.clone())?;
+        index
+            .prove_search(
+                &map,
+                forced_turboquant_request(&query, 7),
+                &ContentGraphLimits::default(),
+            )
+            .map(|_| ())
+    });
+
+    eprintln!(
+        "TurboQuant cold-read boundaries exercised: verify={verify_reads}, search={search_reads}, proof={proof_reads}"
+    );
+    assert!(verify_reads > search_reads / 2);
+    assert!(proof_reads >= search_reads);
 }
 
 #[test]
