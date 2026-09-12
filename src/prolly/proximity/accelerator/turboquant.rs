@@ -845,13 +845,20 @@ where
     }
 
     fn validate_binding(&self, map: &ProximityMap<S>, expected_source: &Cid) -> Result<(), Error> {
-        if &self.source != expected_source
-            || self.dimensions != map.tree().config.dimensions
-            || self.metric != map.tree().config.metric
-        {
-            return Err(invalid_search(
-                "TurboQuant is bound to a different source descriptor",
-            ));
+        if &self.source != expected_source {
+            return Err(invalid_search("TurboQuant source descriptor mismatch"));
+        }
+        if self.dimensions != map.tree().config.dimensions {
+            return Err(invalid_search("TurboQuant source dimensions mismatch"));
+        }
+        if self.metric != map.tree().config.metric {
+            return Err(invalid_search("TurboQuant source metric mismatch"));
+        }
+        // Direct execution has the authoritative source count available. A
+        // composite executes its immutable base against a newer map and binds
+        // the base count when the composite is built or loaded instead.
+        if expected_source == &map.tree().descriptor && self.count != map.tree().count {
+            return Err(invalid_search("TurboQuant source count mismatch"));
         }
         Ok(())
     }
@@ -1831,6 +1838,89 @@ mod tests {
             Err(error) => error,
         };
         assert_root_count_error(error);
+    }
+
+    #[test]
+    fn direct_search_rejects_a_manifest_count_that_disagrees_with_the_source() {
+        use crate::prolly::proximity::{
+            CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits,
+            ProximityConfig, ProximityRecord,
+        };
+
+        let store = Arc::new(MemStore::new());
+        let map = ProximityMap::build(
+            store.clone(),
+            ProximityConfig::new(8),
+            [
+                ProximityRecord {
+                    key: b"first".to_vec(),
+                    vector: vec![1.0; 8],
+                    value: b"first value".to_vec(),
+                },
+                ProximityRecord {
+                    key: b"second".to_vec(),
+                    vector: vec![2.0; 8],
+                    value: b"second value".to_vec(),
+                },
+            ],
+        )
+        .unwrap();
+        let (index, _) = TurboQuantizer::build(
+            &map,
+            TurboQuantizationConfig::default(),
+            BuildParallelism::serial(),
+        )
+        .unwrap();
+
+        // Construct an internally valid one-record code tree, then bind it to
+        // the real two-record descriptor through a forged manifest. Loading
+        // authenticates the complete derived closure; execution must still
+        // reject the manifest/source cardinality disagreement before scanning.
+        let (key, code) = index
+            .codes
+            .range(&index.code_tree, &[], None)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap();
+        let mut builder = SortedBatchBuilder::new_with_origin(
+            store.clone(),
+            turboquant_code_tree_config(),
+            PublicationOrigin::Maintenance,
+        );
+        builder.add(key, code).unwrap();
+        let partial_tree = builder.build().unwrap();
+        let original_manifest = Store::get(&store, index.manifest_cid().as_bytes())
+            .unwrap()
+            .unwrap();
+        let mut forged = Manifest::decode(&original_manifest).unwrap();
+        forged.count = 1;
+        forged.code_root = partial_tree.root.unwrap();
+        let forged_bytes = forged.encode().unwrap();
+        let forged_cid = Cid::from_bytes(&forged_bytes);
+        Store::put(&store, forged_cid.as_bytes(), &forged_bytes).unwrap();
+        let forged = TurboQuantizer::load(store, forged_cid).unwrap();
+
+        let mut request = SearchRequest::exact(&[1.0; 8], 1);
+        request.policy = SearchPolicy::FixedBudget;
+        request.options.backend = SearchBackend::TurboQuantized;
+        assert!(matches!(
+            forged.search(&map, request),
+            Err(Error::InvalidProximitySearch { reason })
+                if reason == "TurboQuant source count mismatch"
+        ));
+        assert!(matches!(
+            CompositeAccelerator::build(
+                &map,
+                &map,
+                CompositeBase::TurboQuantized(forged),
+                CompositeAcceleratorConfig::default(),
+                CompositeBuildLimits::default(),
+            ),
+            Err(Error::InvalidProximitySearch { reason })
+                if reason
+                    == "composite base/current sources or accelerator configuration disagree"
+        ));
     }
 
     #[cfg(feature = "async-store")]

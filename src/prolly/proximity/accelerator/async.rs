@@ -357,6 +357,9 @@ impl AsyncCompositeAccelerator {
         if base_map.tree().config.dimensions != current_map.tree().config.dimensions
             || base_map.tree().config.metric != current_map.tree().config.metric
             || base.source_descriptor() != &base_map.tree().descriptor
+            || base.dimensions != base_map.tree().config.dimensions
+            || base.metric != base_map.tree().config.metric
+            || base.count != base_map.tree().count
         {
             return Err(invalid(
                 "composite base/current sources or TurboQuant configuration disagree",
@@ -423,6 +426,9 @@ impl AsyncCompositeAccelerator {
         .await?;
         if persisted_base.source_descriptor() != base.source_descriptor()
             || persisted_base.config() != base.config()
+            || persisted_base.dimensions != base_map.tree().config.dimensions
+            || persisted_base.metric != base_map.tree().config.metric
+            || persisted_base.count != base_map.tree().count
             || persisted_source.tree() != base_map.tree()
         {
             return Err(invalid(
@@ -616,6 +622,9 @@ impl AsyncCompositeAccelerator {
             CompositeBaseKind::Hnsw => {
                 let index = AsyncHnswIndex::load(store, object.base_manifest.clone()).await?;
                 if index.source != object.base_source
+                    || index.dimensions != object.dimensions
+                    || index.metric != object.metric
+                    || index.count != object.base_count
                     || hnsw_fingerprint(&index.config) != object.base_fingerprint
                 {
                     return Err(invalid("async composite HNSW base binding mismatch"));
@@ -626,6 +635,9 @@ impl AsyncCompositeAccelerator {
                 let index =
                     AsyncProductQuantizer::load(store, object.base_manifest.clone()).await?;
                 if index.source != object.base_source
+                    || index.dimensions != object.dimensions
+                    || index.metric != object.metric
+                    || index.count != object.base_count
                     || pq_fingerprint(&index.config) != object.base_fingerprint
                 {
                     return Err(invalid("async composite PQ base binding mismatch"));
@@ -635,6 +647,9 @@ impl AsyncCompositeAccelerator {
             CompositeBaseKind::TurboQuantized => {
                 let index = AsyncTurboQuantizer::load(store, object.base_manifest.clone()).await?;
                 if index.source != object.base_source
+                    || index.dimensions != object.dimensions
+                    || index.metric != object.metric
+                    || index.count != object.base_count
                     || turboquant_fingerprint(&index.config) != object.base_fingerprint
                 {
                     return Err(invalid("async composite TurboQuant base binding mismatch"));

@@ -92,6 +92,30 @@ where
         }
     }
 
+    fn dimensions(&self) -> u32 {
+        match self {
+            Self::Hnsw(index) => index.dimensions,
+            Self::ProductQuantized(index) => index.dimensions,
+            Self::TurboQuantized(index) => index.dimensions,
+        }
+    }
+
+    fn metric(&self) -> DistanceMetric {
+        match self {
+            Self::Hnsw(index) => index.metric,
+            Self::ProductQuantized(index) => index.metric,
+            Self::TurboQuantized(index) => index.metric,
+        }
+    }
+
+    fn count(&self) -> u64 {
+        match self {
+            Self::Hnsw(index) => index.count,
+            Self::ProductQuantized(index) => index.count,
+            Self::TurboQuantized(index) => index.count,
+        }
+    }
+
     pub(crate) fn hnsw(&self) -> Option<&HnswIndex<S>> {
         match self {
             Self::Hnsw(index) => Some(index),
@@ -769,6 +793,9 @@ where
     if base.config.dimensions != current.config.dimensions
         || base.config.metric != current.config.metric
         || accelerator.source_descriptor() != &base.descriptor
+        || accelerator.dimensions() != base.config.dimensions
+        || accelerator.metric() != base.config.metric
+        || accelerator.count() != base.count
     {
         return Err(Error::InvalidProximitySearch {
             reason: "composite base/current sources or accelerator configuration disagree"
@@ -787,6 +814,9 @@ where
         || base.manifest_cid() != &manifest.base_manifest
         || base.kind() != manifest.base_kind
         || base.config_fingerprint() != manifest.base_fingerprint
+        || base.dimensions() != manifest.dimensions
+        || base.metric() != manifest.metric
+        || base.count() != manifest.base_count
     {
         return Err(invalid_object("composite base manifest binding mismatch"));
     }
