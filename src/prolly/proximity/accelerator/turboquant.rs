@@ -220,6 +220,7 @@ where
         let plan = StructuredRotation::derive(dimensions_usize, config.seed)?;
         let per_worker_buffers = dimensions_usize
             .checked_mul(25)
+            .and_then(|value| value.checked_add(packed_len))
             .ok_or_else(|| resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX))?;
         let required_temporary_bytes = plan
             .owned_bytes()
@@ -313,15 +314,42 @@ where
                     })?;
                 peak_temporary_bytes = peak_temporary_bytes.max(logical_peak);
 
-                let encode = |(key, vector): (Vec<u8>, Vec<f32>)| {
-                    let encoded =
-                        encode_vector(&vector, &plan, codebook, config.bit_width, sqrt_dimensions);
-                    (key, encoded)
-                };
                 let encoded = if let Some(pool) = &pool {
-                    pool.install(|| batch.into_par_iter().map(encode).collect::<Vec<_>>())
+                    pool.install(|| {
+                        batch
+                            .into_par_iter()
+                            .map_init(
+                                || EncodingScratch::new(dimensions_usize, packed_len),
+                                |scratch, (key, vector)| {
+                                    let encoded = encode_vector_reusing(
+                                        &vector,
+                                        &plan,
+                                        codebook,
+                                        config.bit_width,
+                                        sqrt_dimensions,
+                                        scratch,
+                                    );
+                                    (key, encoded)
+                                },
+                            )
+                            .collect::<Vec<_>>()
+                    })
                 } else {
-                    batch.into_iter().map(encode).collect()
+                    let mut scratch = EncodingScratch::new(dimensions_usize, packed_len);
+                    batch
+                        .into_iter()
+                        .map(|(key, vector)| {
+                            let encoded = encode_vector_reusing(
+                                &vector,
+                                &plan,
+                                codebook,
+                                config.bit_width,
+                                sqrt_dimensions,
+                                &mut scratch,
+                            );
+                            (key, encoded)
+                        })
+                        .collect()
                 };
                 // Rayon indexed collection preserves input order. Errors are
                 // inspected only here so the earliest source key wins.
@@ -529,6 +557,8 @@ where
         let mut zeros = 0u64;
         let mut quality_sum = 0.0;
         let mut quality_maximum = 0.0f64;
+        let packed_len = packed_len(self.dimensions as usize, self.config.bit_width)?;
+        let mut scratch = EncodingScratch::new(self.dimensions as usize, packed_len);
         loop {
             match (source.next(), codes.next()) {
                 (None, None) => break,
@@ -541,12 +571,13 @@ where
                         ));
                     }
                     let stored = StoredRecord::decode(&source_bytes, self.dimensions)?;
-                    let expected = encode_vector(
+                    let expected = encode_vector_reusing(
                         &stored.vector,
                         &self.plan,
                         codebook(self.config.bit_width),
                         self.config.bit_width,
                         sqrt_down(f64::from(self.dimensions)),
+                        &mut scratch,
                     )?;
                     validate_code_value(&actual, self.dimensions as usize, self.config.bit_width)?;
                     if actual != expected.bytes {
@@ -830,8 +861,17 @@ impl StructuredRotation {
 
     fn apply(&self, input: &[f64]) -> Vec<f64> {
         debug_assert_eq!(input.len(), self.dimensions);
-        let mut current = input.to_vec();
+        let mut current = Vec::with_capacity(self.dimensions);
         let mut work = vec![0.0; self.dimensions];
+        self.apply_with_buffers(input, &mut current, &mut work);
+        current
+    }
+
+    fn apply_with_buffers(&self, input: &[f64], current: &mut Vec<f64>, work: &mut Vec<f64>) {
+        debug_assert_eq!(input.len(), self.dimensions);
+        current.clear();
+        current.extend_from_slice(input);
+        work.resize(self.dimensions, 0.0);
         for round in &self.rounds {
             for index in 0..self.dimensions {
                 let value = current[round.permutation[index]];
@@ -861,9 +901,8 @@ impl StructuredRotation {
                     }
                 }
             }
-            std::mem::swap(&mut current, &mut work);
+            std::mem::swap(current, work);
         }
-        current
     }
 
     fn butterfly_operations_per_vector(&self) -> usize {
@@ -999,9 +1038,7 @@ fn codebook(bit_width: u8) -> Codebook {
 impl Codebook {
     fn quantize(&self, value: f64) -> u8 {
         self.thresholds
-            .iter()
-            .position(|threshold| value <= f64::from_bits(*threshold))
-            .unwrap_or(self.centroids.len() - 1) as u8
+            .partition_point(|threshold| value > f64::from_bits(*threshold)) as u8
     }
 
     fn centroid(&self, code: u8) -> f64 {
@@ -1015,12 +1052,33 @@ struct EncodedVector {
     zero: bool,
 }
 
-fn encode_vector(
+struct EncodingScratch {
+    unit: Vec<f64>,
+    current: Vec<f64>,
+    work: Vec<f64>,
+    codes: Vec<u8>,
+    packed: Vec<u8>,
+}
+
+impl EncodingScratch {
+    fn new(dimensions: usize, packed_len: usize) -> Self {
+        Self {
+            unit: Vec::with_capacity(dimensions),
+            current: Vec::with_capacity(dimensions),
+            work: vec![0.0; dimensions],
+            codes: Vec::with_capacity(dimensions),
+            packed: Vec::with_capacity(packed_len),
+        }
+    }
+}
+
+fn encode_vector_reusing(
     vector: &[f32],
     plan: &StructuredRotation,
     codebook: Codebook,
     bit_width: u8,
     sqrt_dimensions: f64,
+    scratch: &mut EncodingScratch,
 ) -> Result<EncodedVector, Error> {
     let norm_squared = vector.iter().fold(0.0, |sum, component| {
         let value = f64::from(*component);
@@ -1038,24 +1096,31 @@ fn encode_vector(
             zero: true,
         });
     }
-    let unit: Vec<_> = vector
-        .iter()
-        .map(|component| f64::from(*component) / norm)
-        .collect();
-    let rotated = plan.apply(&unit);
-    let codes: Vec<_> = rotated
-        .iter()
-        .map(|value| codebook.quantize(value * sqrt_dimensions))
-        .collect();
-    let packed = pack_codes(&codes, bit_width)?;
+    scratch.unit.clear();
+    scratch
+        .unit
+        .extend(vector.iter().map(|component| f64::from(*component) / norm));
+    plan.apply_with_buffers(&scratch.unit, &mut scratch.current, &mut scratch.work);
+    scratch.codes.clear();
+    scratch.codes.extend(
+        scratch
+            .current
+            .iter()
+            .map(|value| codebook.quantize(value * sqrt_dimensions)),
+    );
+    pack_codes_into(&scratch.codes, bit_width, &mut scratch.packed)?;
     let inverse_sqrt_dimensions = 1.0 / sqrt_dimensions;
-    let error = rotated.iter().zip(&codes).fold(0.0, |sum, (actual, code)| {
-        let delta = actual - codebook.centroid(*code) * inverse_sqrt_dimensions;
-        sum + delta * delta
-    });
-    let mut bytes = Vec::with_capacity(8 + packed.len());
+    let error = scratch
+        .current
+        .iter()
+        .zip(&scratch.codes)
+        .fold(0.0, |sum, (actual, code)| {
+            let delta = actual - codebook.centroid(*code) * inverse_sqrt_dimensions;
+            sum + delta * delta
+        });
+    let mut bytes = Vec::with_capacity(8 + scratch.packed.len());
     bytes.extend_from_slice(&norm.to_bits().to_le_bytes());
-    bytes.extend_from_slice(&packed);
+    bytes.extend_from_slice(&scratch.packed);
     Ok(EncodedVector {
         bytes,
         error,
@@ -1070,13 +1135,52 @@ fn packed_len(dimensions: usize, bit_width: u8) -> Result<usize, Error> {
         .ok_or_else(|| resource_limit("TurboQuant packed code bytes", usize::MAX, usize::MAX))
 }
 
+#[cfg(test)]
 fn pack_codes(codes: &[u8], bit_width: u8) -> Result<Vec<u8>, Error> {
-    let mut packed = vec![0u8; packed_len(codes.len(), bit_width)?];
+    let mut packed = Vec::new();
+    pack_codes_into(codes, bit_width, &mut packed)?;
+    Ok(packed)
+}
+
+fn pack_codes_into(codes: &[u8], bit_width: u8, packed: &mut Vec<u8>) -> Result<(), Error> {
+    packed.clear();
+    packed.resize(packed_len(codes.len(), bit_width)?, 0);
     let maximum = 1u8 << bit_width;
-    for (index, code) in codes.iter().copied().enumerate() {
-        if code >= maximum {
-            return Err(invalid_object("TurboQuant centroid code is out of range"));
+    if codes.iter().any(|code| *code >= maximum) {
+        return Err(invalid_object("TurboQuant centroid code is out of range"));
+    }
+    let grouped_codes = match bit_width {
+        2 => {
+            for (input, output) in codes.chunks_exact(4).zip(packed.iter_mut()) {
+                *output = input[0] | (input[1] << 2) | (input[2] << 4) | (input[3] << 6);
+            }
+            codes.len() / 4 * 4
         }
+        3 => {
+            for (group, input) in codes.chunks_exact(8).enumerate() {
+                let output = u32::from(input[0])
+                    | (u32::from(input[1]) << 3)
+                    | (u32::from(input[2]) << 6)
+                    | (u32::from(input[3]) << 9)
+                    | (u32::from(input[4]) << 12)
+                    | (u32::from(input[5]) << 15)
+                    | (u32::from(input[6]) << 18)
+                    | (u32::from(input[7]) << 21);
+                packed[group * 3] = output as u8;
+                packed[group * 3 + 1] = (output >> 8) as u8;
+                packed[group * 3 + 2] = (output >> 16) as u8;
+            }
+            codes.len() / 8 * 8
+        }
+        4 => {
+            for (input, output) in codes.chunks_exact(2).zip(packed.iter_mut()) {
+                *output = input[0] | (input[1] << 4);
+            }
+            codes.len() / 2 * 2
+        }
+        _ => unreachable!("validated TurboQuant bit width"),
+    };
+    for (index, code) in codes.iter().copied().enumerate().skip(grouped_codes) {
         let bit_offset = index * bit_width as usize;
         for bit in 0..bit_width as usize {
             if code & (1 << bit) != 0 {
@@ -1085,7 +1189,7 @@ fn pack_codes(codes: &[u8], bit_width: u8) -> Result<Vec<u8>, Error> {
             }
         }
     }
-    Ok(packed)
+    Ok(())
 }
 
 #[cfg(test)]
