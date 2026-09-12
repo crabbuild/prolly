@@ -1757,6 +1757,8 @@ mod tests {
             }
         }
         assert_eq!(packed_len(MAX_DIMENSIONS as usize, 4).unwrap(), 8192);
+        assert!(packed_len(usize::MAX, 4).is_err());
+        assert!(packed_len(usize::MAX / 2 + 1, 3).is_err());
     }
 
     #[test]

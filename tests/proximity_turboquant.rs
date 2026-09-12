@@ -1,9 +1,9 @@
 use prolly::{
-    walk_content_graph, AcceleratorCatalog, AcceleratorSet, BatchOp, BuildParallelism,
-    ContentGraphLimits, ContentObjectKind, DistanceMetric, MemStore, NodePublication,
-    ProximityConfig, ProximityFilter, ProximityMap, ProximityRecord, SearchBackend, SearchBudget,
-    SearchCompletion, SearchPolicy, SearchRequest, Store, TurboQuantizationBuildLimits,
-    TurboQuantizationConfig, TurboQuantizer, TypedContentRoot,
+    copy_content_graph, plan_content_gc, sweep_content_gc, walk_content_graph, AcceleratorCatalog,
+    AcceleratorSet, BatchOp, BuildParallelism, ContentGraphLimits, ContentObjectKind,
+    DistanceMetric, MemStore, NodePublication, ProximityConfig, ProximityFilter, ProximityMap,
+    ProximityRecord, SearchBackend, SearchBudget, SearchCompletion, SearchPolicy, SearchRequest,
+    Store, TurboQuantizationBuildLimits, TurboQuantizationConfig, TurboQuantizer, TypedContentRoot,
 };
 use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -644,6 +644,8 @@ fn turboquant_remains_explicit_only_until_auto_qualification() {
 
 #[test]
 fn turboquant_proof_replays_the_committed_plan_and_closure() {
+    use prolly::{Cid, ProximitySearchClaim, SearchPlan};
+
     let store = Arc::new(MemStore::new());
     let map =
         ProximityMap::build(store.clone(), ProximityConfig::new(128), records(65, 128)).unwrap();
@@ -666,9 +668,390 @@ fn turboquant_proof_replays_the_committed_plan_and_closure() {
     let verified = proof.verify(&ContentGraphLimits::default()).unwrap();
     assert_eq!(verified.result.plan.backend, SearchBackend::TurboQuantized);
 
+    let assert_rejected = |candidate: &prolly::ProximitySearchProof| {
+        assert!(candidate.verify(&ContentGraphLimits::default()).is_err());
+    };
+
+    let mut version = proof.clone();
+    version.format_version = version.format_version.wrapping_add(1);
+    assert_rejected(&version);
+
+    let mut source = proof.clone();
+    source.source.descriptor = Cid::from_bytes(b"tampered source");
+    assert_rejected(&source);
+
+    let mut root = proof.clone();
+    root.accelerator_root.as_mut().unwrap().kind = ContentObjectKind::ProductQuantization;
+    assert_rejected(&root);
+
+    let mut object = proof.clone();
+    object.accelerator_objects[0].bytes[0] ^= 1;
+    assert_rejected(&object);
+
+    let mut request = proof.clone();
+    request.request.query[0] += 1.0;
+    assert_rejected(&request);
+
+    let mut commitment = proof.clone();
+    commitment.request_commitment = Cid::from_bytes(b"tampered request commitment");
+    assert_rejected(&commitment);
+
+    let mut result = proof.clone();
+    result.result.neighbors[0].distance += 1.0;
+    assert_rejected(&result);
+
+    let mut plan = proof.clone();
+    match &mut plan.plan {
+        SearchPlan::TurboQuantized { rerank_target, .. } => *rerank_target += 1,
+        other => panic!("unexpected TurboQuant proof plan: {other:?}"),
+    }
+    assert_rejected(&plan);
+
+    let mut transcript = proof.clone();
+    transcript.events.pop();
+    assert_rejected(&transcript);
+
+    let mut claim = proof.clone();
+    claim.claim = ProximitySearchClaim::ExactL2Optimal {
+        terminal_lower_bound: 0.0,
+    };
+    assert_rejected(&claim);
+
     let mut incomplete = proof;
     incomplete.accelerator_objects.pop();
-    assert!(incomplete.verify(&ContentGraphLimits::default()).is_err());
+    assert_rejected(&incomplete);
+}
+
+#[test]
+fn turboquant_proofs_cover_every_metric_filter_and_budget_completion() {
+    let limits = ContentGraphLimits::default();
+    let eligible: Vec<_> = (10..40)
+        .map(|record| format!("vector-{record:04}").into_bytes())
+        .collect();
+    for metric in [
+        DistanceMetric::L2Squared,
+        DistanceMetric::Cosine,
+        DistanceMetric::InnerProduct,
+    ] {
+        let store = Arc::new(MemStore::new());
+        let mut source = records(65, 128);
+        if metric == DistanceMetric::Cosine {
+            source[0].vector[0] = 1.0;
+        }
+        let mut config = ProximityConfig::new(128);
+        config.metric = metric;
+        let map = ProximityMap::build(store, config, source).unwrap();
+        let (index, _) = TurboQuantizer::build(
+            &map,
+            TurboQuantizationConfig {
+                rerank_multiplier: 128,
+                ..TurboQuantizationConfig::default()
+            },
+            BuildParallelism::new(2).unwrap(),
+        )
+        .unwrap();
+        let query: Vec<_> = (0..128)
+            .map(|coordinate| coordinate as f32 / 41.0 - 1.0)
+            .collect();
+
+        for filter_case in 0..5 {
+            for budgeted in [false, true] {
+                let mut request = forced_turboquant_request(&query, 5);
+                request.filter = match filter_case {
+                    0 => ProximityFilter::All,
+                    1 => ProximityFilter::Prefix(b"vector-0"),
+                    2 => ProximityFilter::KeyRange {
+                        start: Some(b"vector-0010"),
+                        end: Some(b"vector-0050"),
+                    },
+                    3 => ProximityFilter::EligibleKeys(&eligible),
+                    4 => ProximityFilter::SecondaryEligible {
+                        keys: &eligible,
+                        source_directory: &map.tree().directory,
+                    },
+                    _ => unreachable!(),
+                };
+                if budgeted {
+                    request.budget.max_distance_evaluations = Some(3);
+                }
+                let proof = index.prove_search(&map, request, &limits).unwrap();
+                let verified = proof.verify(&limits).unwrap();
+                assert_eq!(verified.result, proof.result);
+                assert_eq!(verified.result.plan.backend, SearchBackend::TurboQuantized);
+                assert_eq!(
+                    verified.result.completion,
+                    if budgeted {
+                        SearchCompletion::BudgetExhausted
+                    } else {
+                        SearchCompletion::ApproximatePolicySatisfied
+                    },
+                    "metric={metric:?}, filter_case={filter_case}, budgeted={budgeted}",
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn turboquant_copy_reopen_search_and_gc_preserve_only_the_live_closure() {
+    let store = Arc::new(MemStore::new());
+    let map =
+        ProximityMap::build(store.clone(), ProximityConfig::new(128), records(65, 128)).unwrap();
+    let config = TurboQuantizationConfig {
+        rerank_multiplier: 128,
+        seed: 0x5eed,
+        ..TurboQuantizationConfig::default()
+    };
+    let (index, _) =
+        TurboQuantizer::build(&map, config.clone(), BuildParallelism::new(2).unwrap()).unwrap();
+    let manifest = index.manifest_cid().clone();
+    let root = TypedContentRoot::new(ContentObjectKind::TurboQuantization, manifest.clone());
+    let limits = ContentGraphLimits::default();
+    let live = walk_content_graph(&store, std::slice::from_ref(&root), &limits).unwrap();
+
+    let destination = Arc::new(MemStore::new());
+    let copied = copy_content_graph(&store, &destination, root.clone(), &limits).unwrap();
+    assert_eq!(copied.copied_objects, copied.required_objects);
+    let copied_map =
+        ProximityMap::load(destination.clone(), map.tree().descriptor.clone()).unwrap();
+    let copied_index = TurboQuantizer::load(destination, manifest.clone()).unwrap();
+    copied_index.verify(&copied_map).unwrap();
+    let query: Vec<_> = (0..128)
+        .map(|coordinate| coordinate as f32 / 37.0 - 1.0)
+        .collect();
+    let exact = copied_map.search(SearchRequest::exact(&query, 11)).unwrap();
+    let accelerated = copied_index
+        .search(&copied_map, forced_turboquant_request(&query, 11))
+        .unwrap();
+    assert_eq!(accelerated.neighbors, exact.neighbors);
+
+    let orphan_map =
+        ProximityMap::build(store.clone(), ProximityConfig::new(128), records(66, 128)).unwrap();
+    let (orphan, _) =
+        TurboQuantizer::build(&orphan_map, config, BuildParallelism::serial()).unwrap();
+    let orphan_manifest = orphan.manifest_cid().clone();
+    let orphan_root = TypedContentRoot::new(
+        ContentObjectKind::TurboQuantization,
+        orphan_manifest.clone(),
+    );
+    let orphan_walk = walk_content_graph(&store, &[orphan_root], &limits).unwrap();
+    let mut candidates: Vec<_> = live
+        .objects
+        .iter()
+        .chain(&orphan_walk.objects)
+        .map(|object| object.root.cid.clone())
+        .collect();
+    candidates.sort();
+    candidates.dedup();
+    let plan = plan_content_gc(&store, std::slice::from_ref(&root), &candidates, &limits).unwrap();
+    assert!(plan.reclaimable_cids.contains(&orphan_manifest));
+    assert!(!plan.reclaimable_cids.contains(&manifest));
+    let swept =
+        sweep_content_gc(&store, std::slice::from_ref(&root), &candidates, &limits).unwrap();
+    assert_eq!(swept.deleted_objects, plan.reclaimable_cids.len());
+    assert!(Store::get(&store, orphan_manifest.as_bytes())
+        .unwrap()
+        .is_none());
+
+    let reopened_map = ProximityMap::load(store.clone(), map.tree().descriptor.clone()).unwrap();
+    let reopened = TurboQuantizer::load(store, manifest).unwrap();
+    reopened.verify(&reopened_map).unwrap();
+    assert_eq!(
+        reopened
+            .search(&reopened_map, forced_turboquant_request(&query, 11))
+            .unwrap()
+            .neighbors,
+        exact.neighbors,
+    );
+}
+
+#[test]
+fn turboquant_composite_value_only_and_full_rebuild_preserve_configuration() {
+    use prolly::{
+        CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits,
+        CompositeBuildOrRebuildOutcome, CompositeBuildOutcome, CompositeRebuildOptions,
+        ProximityMutation, SearchIo, SearchRuntime,
+    };
+
+    let store = Arc::new(MemStore::new());
+    let source = records(65, 128);
+    let original_vector = source[7].vector.clone();
+    let base_map = ProximityMap::build(store.clone(), ProximityConfig::new(128), source).unwrap();
+    let config = TurboQuantizationConfig {
+        bit_width: 3,
+        rerank_multiplier: 128,
+        seed: 0xfeed_beef,
+    };
+    let (base, _) =
+        TurboQuantizer::build(&base_map, config.clone(), BuildParallelism::serial()).unwrap();
+    let (value_changed, _) = base_map
+        .mutate_batch([ProximityMutation {
+            key: b"vector-0007".to_vec(),
+            value: Some((original_vector.clone(), b"value-only".to_vec())),
+        }])
+        .unwrap();
+    let composite = match CompositeAccelerator::build(
+        &base_map,
+        &value_changed,
+        CompositeBase::TurboQuantized(base),
+        CompositeAcceleratorConfig::default(),
+        CompositeBuildLimits::default(),
+    )
+    .unwrap()
+    {
+        CompositeBuildOutcome::Composite { accelerator, stats } => {
+            assert_eq!(stats.value_only_records, 1);
+            assert_eq!(stats.delta_records, 0);
+            assert_eq!(stats.shadow_records, 0);
+            accelerator
+        }
+        CompositeBuildOutcome::FullRebuildRequired { reasons, .. } => {
+            panic!("value-only change unexpectedly required rebuild: {reasons:?}")
+        }
+    };
+    let set = AcceleratorSet::empty()
+        .with_composite(value_changed.tree(), *composite)
+        .unwrap();
+    let mut request = forced_turboquant_request(&original_vector, 1);
+    request.options.backend = SearchBackend::Composite;
+    let result = value_changed
+        .search_with(
+            &set,
+            &SearchIo::new(store.clone(), Arc::new(SearchRuntime::default())),
+            request,
+        )
+        .unwrap();
+    assert_eq!(result.neighbors[0].key, b"vector-0007");
+    assert_eq!(result.neighbors[0].value, b"value-only");
+
+    let (changed, _) = base_map
+        .mutate_batch([ProximityMutation {
+            key: b"vector-0008".to_vec(),
+            value: Some((vec![0.0; 128], b"vector-change".to_vec())),
+        }])
+        .unwrap();
+    let (base, _) =
+        TurboQuantizer::build(&base_map, config.clone(), BuildParallelism::serial()).unwrap();
+    let rebuilt = CompositeAccelerator::build_or_rebuild(
+        &base_map,
+        &changed,
+        CompositeBase::TurboQuantized(base),
+        CompositeAcceleratorConfig {
+            max_delta_records: 0,
+            ..CompositeAcceleratorConfig::default()
+        },
+        CompositeBuildLimits::default(),
+        CompositeRebuildOptions {
+            turboquant_parallelism: BuildParallelism::new(4).unwrap(),
+            ..CompositeRebuildOptions::default()
+        },
+    )
+    .unwrap();
+    let (rebuilt, rebuild_stats) = match rebuilt {
+        CompositeBuildOrRebuildOutcome::TurboQuantizedRebuilt {
+            accelerator,
+            reasons,
+            rebuild_stats,
+            ..
+        } => {
+            assert!(!reasons.is_empty());
+            (accelerator, rebuild_stats)
+        }
+        _ => panic!("TurboQuant threshold crossing did not rebuild TurboQuant"),
+    };
+    assert_eq!(rebuilt.config(), &config);
+    assert_eq!(rebuilt.source_descriptor(), &changed.tree().descriptor);
+    rebuilt.verify(&changed).unwrap();
+    let (expected, expected_stats) =
+        TurboQuantizer::build(&changed, config, BuildParallelism::serial()).unwrap();
+    assert_eq!(rebuilt.manifest_cid(), expected.manifest_cid());
+    assert_eq!(rebuild_stats, expected_stats);
+}
+
+#[test]
+fn turboquant_extreme_vectors_long_keys_and_equal_scores_are_exact_when_exhaustive() {
+    for metric in [DistanceMetric::L2Squared, DistanceMetric::InnerProduct] {
+        let store = Arc::new(MemStore::new());
+        let source = (0usize..17).map(|index| {
+            let mut key = vec![b'x'; 8 * 1024];
+            key.extend_from_slice(&(index as u64).to_be_bytes());
+            let vector = if index == 0 {
+                vec![f32::MAX; 8]
+            } else if index == 1 {
+                vec![-f32::MAX; 8]
+            } else {
+                (0..8)
+                    .map(|coordinate| {
+                        if (index + coordinate).is_multiple_of(3) {
+                            f32::MIN_POSITIVE
+                        } else if (index + coordinate).is_multiple_of(2) {
+                            f32::MAX / 4.0
+                        } else {
+                            -f32::MAX / 4.0
+                        }
+                    })
+                    .collect()
+            };
+            ProximityRecord {
+                key,
+                vector,
+                value: index.to_le_bytes().to_vec(),
+            }
+        });
+        let mut map_config = ProximityConfig::new(8);
+        map_config.metric = metric;
+        let map = ProximityMap::build(store, map_config, source).unwrap();
+        let (index, _) = TurboQuantizer::build(
+            &map,
+            TurboQuantizationConfig {
+                rerank_multiplier: 32,
+                ..TurboQuantizationConfig::default()
+            },
+            BuildParallelism::new(2).unwrap(),
+        )
+        .unwrap();
+        let query: Vec<_> = (0..8)
+            .map(|coordinate| {
+                if coordinate % 2 == 0 {
+                    f32::MAX / 4.0
+                } else {
+                    -f32::MAX / 4.0
+                }
+            })
+            .collect();
+        let exact = map.search(SearchRequest::exact(&query, 17)).unwrap();
+        let accelerated = index
+            .search(&map, forced_turboquant_request(&query, 17))
+            .unwrap();
+        assert_eq!(accelerated.neighbors, exact.neighbors, "metric={metric:?}");
+    }
+
+    let store = Arc::new(MemStore::new());
+    let equal = (0usize..33).map(|index| ProximityRecord {
+        key: format!("equal-{index:04}").into_bytes(),
+        vector: vec![1.0; 24],
+        value: index.to_le_bytes().to_vec(),
+    });
+    let map = ProximityMap::build(store, ProximityConfig::new(24), equal).unwrap();
+    let (index, _) = TurboQuantizer::build(
+        &map,
+        TurboQuantizationConfig {
+            bit_width: 2,
+            rerank_multiplier: 64,
+            seed: u64::MAX,
+        },
+        BuildParallelism::new(4).unwrap(),
+    )
+    .unwrap();
+    let exact = map.search(SearchRequest::exact(&[1.0; 24], 33)).unwrap();
+    let accelerated = index
+        .search(&map, forced_turboquant_request(&[1.0; 24], 33))
+        .unwrap();
+    assert_eq!(accelerated.neighbors, exact.neighbors);
+    assert!(accelerated
+        .neighbors
+        .windows(2)
+        .all(|pair| pair[0].key < pair[1].key));
 }
 
 #[test]
@@ -804,6 +1187,11 @@ fn turboquant_async_build_load_search_verify_and_cancel_match_sync() {
             .unwrap();
         assert_eq!(result.neighbors, sync.neighbors);
         assert_eq!(result.plan.backend, SearchBackend::TurboQuantized);
+
+        assert!(asynchronous
+            .prove_search(request.clone(), &ContentGraphLimits::default())
+            .await
+            .is_err());
 
         let cancellation = CancellationToken::default();
         cancellation.cancel();
