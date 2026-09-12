@@ -111,7 +111,7 @@ fn main() {
         );
     }
     println!("prolly proximity benchmark");
-    println!("schema_version=3");
+    println!("schema_version=4");
     println!("dataset={BENCHMARK_DATASET_ID}");
     println!("revision={}", command_output("git", &["rev-parse", "HEAD"]));
     println!(
@@ -364,14 +364,18 @@ fn bench_case<S, F>(
         .map(|record| record.key.clone())
         .collect();
     let k = requested_k.min(eligible_count);
+    let exact_oracle = (!scale_only)
+        .then(|| authoritative_exact_oracle(&map, &query, k, &eligible_keys, eligibility_ppm));
 
     if quantizers_only {
         bench_accelerators(
             &map,
             store,
             AcceleratorBenchCase {
-                records: &records,
                 query: &query,
+                exact_oracle: exact_oracle
+                    .as_ref()
+                    .expect("quantizer benchmark requires an exact oracle"),
                 k,
                 dimensions,
                 workers: threads,
@@ -383,7 +387,6 @@ fn bench_case<S, F>(
                 async_quantizers,
                 eligible_keys: &eligible_keys,
                 eligibility_ppm,
-                eligible_count,
             },
             false,
         );
@@ -450,7 +453,13 @@ fn bench_case<S, F>(
             result.stats.distance_evaluations + result.stats.quantized_distance_evaluations,
         );
         if name == "search_exact_scalar" && !scale_only {
-            let recall = recall_at_k(&records[..eligible_count], &query, &result, k, metric);
+            let recall = recall_at_k(
+                exact_oracle
+                    .as_ref()
+                    .expect("complete benchmark requires an exact oracle"),
+                &result,
+                k,
+            );
             println!("recall_exact,{dimensions},0,0,{:.6},0", recall);
         }
     }
@@ -535,8 +544,10 @@ fn bench_case<S, F>(
             &map,
             store.clone(),
             AcceleratorBenchCase {
-                records: &records,
                 query: &query,
+                exact_oracle: exact_oracle
+                    .as_ref()
+                    .expect("complete benchmark requires an exact oracle"),
                 k,
                 dimensions,
                 workers: threads,
@@ -548,7 +559,6 @@ fn bench_case<S, F>(
                 async_quantizers,
                 eligible_keys: &eligible_keys,
                 eligibility_ppm,
-                eligible_count,
             },
             true,
         );
@@ -559,8 +569,8 @@ fn bench_case<S, F>(
 
 #[derive(Clone, Copy)]
 struct AcceleratorBenchCase<'a> {
-    records: &'a [ProximityRecord],
     query: &'a [f32],
+    exact_oracle: &'a prolly::SearchResult,
     k: usize,
     dimensions: usize,
     workers: &'a [usize],
@@ -574,7 +584,6 @@ struct SearchBenchOptions<'a> {
     async_quantizers: bool,
     eligible_keys: &'a [Vec<u8>],
     eligibility_ppm: usize,
-    eligible_count: usize,
 }
 
 fn bench_accelerators<S>(
@@ -590,8 +599,8 @@ fn bench_accelerators<S>(
     #[cfg(not(feature = "async-store"))]
     let _ = options.async_quantizers;
     let AcceleratorBenchCase {
-        records,
         query,
+        exact_oracle,
         k,
         dimensions,
         workers,
@@ -783,13 +792,7 @@ fn bench_accelerators<S>(
             if kernel == QueryKernel::ScalarDeterministic {
                 println!(
                     "turboquant_recall,{dimensions},0,0,{:.6},{}",
-                    recall_at_k(
-                        &records[..options.eligible_count],
-                        query,
-                        &result,
-                        k,
-                        map.tree().config.metric,
-                    ),
+                    recall_at_k(exact_oracle, &result, k),
                     quality.mean_squared_error,
                 );
             }
@@ -801,8 +804,8 @@ fn bench_accelerators<S>(
                 store.clone(),
                 turboquant_manifest,
                 AsyncQuantizerBenchCase {
-                    records,
                     query,
+                    exact_oracle,
                     k,
                     dimensions,
                     options,
@@ -978,13 +981,7 @@ fn bench_accelerators<S>(
     );
     println!(
         "pq_recall,{dimensions},0,0,{:.6},0",
-        recall_at_k(
-            &records[..options.eligible_count],
-            query,
-            &result,
-            k,
-            map.tree().config.metric,
-        ),
+        recall_at_k(exact_oracle, &result, k),
     );
     #[cfg(feature = "async-store")]
     if options.async_quantizers {
@@ -993,8 +990,8 @@ fn bench_accelerators<S>(
             store.clone(),
             pq_manifest,
             AsyncQuantizerBenchCase {
-                records,
                 query,
+                exact_oracle,
                 k,
                 dimensions,
                 options,
@@ -1088,8 +1085,8 @@ fn bench_accelerators<S>(
 #[cfg(feature = "async-store")]
 #[derive(Clone, Copy)]
 struct AsyncQuantizerBenchCase<'a> {
-    records: &'a [ProximityRecord],
     query: &'a [f32],
+    exact_oracle: &'a prolly::SearchResult,
     k: usize,
     dimensions: usize,
     options: SearchBenchOptions<'a>,
@@ -1255,8 +1252,8 @@ fn bench_async_turboquant<S>(
     S::Error: Send + Sync,
 {
     let AsyncQuantizerBenchCase {
-        records,
         query,
+        exact_oracle,
         k,
         dimensions,
         options,
@@ -1364,13 +1361,7 @@ fn bench_async_turboquant<S>(
     );
     println!(
         "turboquant_recall_async,{dimensions},0,0,{:.6},0",
-        recall_at_k(
-            &records[..options.eligible_count],
-            query,
-            &result,
-            k,
-            map.tree().config.metric,
-        ),
+        recall_at_k(exact_oracle, &result, k),
     );
 }
 
@@ -1385,8 +1376,8 @@ fn bench_async_pq<S>(
     S::Error: Send + Sync,
 {
     let AsyncQuantizerBenchCase {
-        records,
         query,
+        exact_oracle,
         k,
         dimensions,
         options,
@@ -1493,13 +1484,7 @@ fn bench_async_pq<S>(
     );
     println!(
         "pq_recall_async,{dimensions},0,0,{:.6},0",
-        recall_at_k(
-            &records[..options.eligible_count],
-            query,
-            &result,
-            k,
-            map.tree().config.metric,
-        ),
+        recall_at_k(exact_oracle, &result, k),
     );
 }
 
@@ -1814,57 +1799,41 @@ fn make_vector(index: usize, dimensions: usize) -> Vec<f32> {
         .collect()
 }
 
-fn recall_at_k(
-    records: &[ProximityRecord],
+fn authoritative_exact_oracle<S>(
+    map: &ProximityMap<S>,
     query: &[f32],
-    result: &prolly::SearchResult,
     k: usize,
-    metric: DistanceMetric,
-) -> f64 {
-    let mut scored: Vec<_> = records
+    eligible_keys: &[Vec<u8>],
+    eligibility_ppm: usize,
+) -> prolly::SearchResult
+where
+    S: prolly::Store + Clone,
+{
+    let mut request = SearchRequest::exact(query, k);
+    request.kernel = QueryKernel::ScalarDeterministic;
+    request.filter = benchmark_filter(eligible_keys, eligibility_ppm);
+    let result = map.search(request).unwrap();
+    assert_eq!(
+        result.completion,
+        SearchCompletion::Exact,
+        "qualification oracle must complete an authoritative exact search"
+    );
+    assert_eq!(
+        result.neighbors.len(),
+        k,
+        "qualification oracle must return the effective k"
+    );
+    result
+}
+
+fn recall_at_k(exact: &prolly::SearchResult, result: &prolly::SearchResult, k: usize) -> f64 {
+    let exact: HashSet<_> = exact
+        .neighbors
         .iter()
-        .map(|record| {
-            let dot = record
-                .vector
-                .iter()
-                .zip(query)
-                .map(|(&left, &right)| f64::from(left) * f64::from(right))
-                .sum::<f64>();
-            let distance = match metric {
-                DistanceMetric::L2Squared => record
-                    .vector
-                    .iter()
-                    .zip(query)
-                    .map(|(&left, &right)| {
-                        let delta = f64::from(left) - f64::from(right);
-                        delta * delta
-                    })
-                    .sum(),
-                DistanceMetric::InnerProduct => -dot,
-                DistanceMetric::Cosine => {
-                    let left_norm = record
-                        .vector
-                        .iter()
-                        .map(|value| f64::from(*value).powi(2))
-                        .sum::<f64>()
-                        .sqrt();
-                    let right_norm = query
-                        .iter()
-                        .map(|value| f64::from(*value).powi(2))
-                        .sum::<f64>()
-                        .sqrt();
-                    1.0 - dot / (left_norm * right_norm)
-                }
-            };
-            (distance, record.key.clone())
-        })
+        .take(k)
+        .map(|neighbor| neighbor.key.clone())
         .collect();
-    scored.sort_by(|left, right| {
-        left.0
-            .total_cmp(&right.0)
-            .then_with(|| left.1.cmp(&right.1))
-    });
-    let exact: HashSet<_> = scored.into_iter().take(k).map(|(_, key)| key).collect();
+    assert_eq!(exact.len(), k, "qualification oracle keys must be unique");
     result
         .neighbors
         .iter()

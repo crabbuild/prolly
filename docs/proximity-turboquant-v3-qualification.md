@@ -1,4 +1,12 @@
-# TurboQuant Schema-v3 Partial Qualification Evidence
+# TurboQuant Schema-v3 Superseded Qualification Evidence
+
+> **Superseded recall oracle:** Benchmark schema 3 rescored raw
+> pre-ingestion vectors and used platform `sqrt` for cosine instead of using
+> ProximityMap's persisted canonical vectors and deterministic exact scorer.
+> On the nearly tied schema-v3 cosine fixture, exhaustive reranking reported
+> recall 0.50 instead of the required 1.00. Benchmark schema 4 fixes the
+> oracle. None of the rows in this document is GA qualification evidence;
+> latency, size, and non-cosine results are retained only as diagnostics.
 
 This report retains ten real cells from the corrected TurboQuant production
 matrix: the default four-bit, 8× rerank path at 10K and 100K records, 768

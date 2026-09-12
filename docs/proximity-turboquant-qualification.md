@@ -108,9 +108,9 @@ peaks. `_work` rows retain frontier peak and the completion discriminator (`0`
 exact, `1` approximate-policy-satisfied, `2` budget-exhausted, `3` cancelled,
 `4` deadline-exceeded). `_io` records logical nodes consumed and actual store
 read operations, while `_rerank` records authoritative candidates reranked and
-committed logical bytes. The output preamble's `schema_version=3` identifies
-these counter meanings and the corrected, architecture-stable qualification
-dataset contract.
+committed logical bytes. The output preamble's `schema_version=4` identifies
+these counter meanings, the corrected architecture-stable dataset, and the
+authoritative exact-search recall oracle contract.
 `turboquant_build_resources` reports peak owned scratch bytes and butterfly
 operations, while
 `source_closure_bytes` reports the authoritative map closure and
@@ -207,12 +207,21 @@ compiler, target, store, and cache mode.
 ### Qualification runner
 
 `scripts/run_turboquant_qualification.py` is the authoritative native-matrix
-orchestrator. Qualification schema v3 requires the
+orchestrator. Qualification schema v4 requires the
 `linear-mod-2000003-v2` dataset identifier. Its `u64` arithmetic is identical
 on native and WASM targets, and its 2,000,003-record period exceeds the largest
 1M matrix tier. The superseded generator repeated complete vectors every
 20,003 records and used architecture-width `usize` wrapping; retained v2 rows
 remain reproducible diagnostics but are not GA matrix evidence.
+
+Schema 4 obtains recall truth from an exact scalar ProximityMap search over
+the persisted canonical vectors. Schema 3 independently rescored raw
+pre-ingestion vectors and used platform `sqrt` for cosine. That formula is
+mathematically equivalent before rounding, but it can choose different
+neighbors after canonical fixed-point normalization when distances are nearly
+tied. Schema-3 cosine recall is invalid for release qualification; the runner
+and summarizer reject every older-schema row rather than migrating or
+averaging it into current evidence.
 
 The full profile deterministically enumerates 45,360 cells: all
 required count, dimension, metric, requested-`k`, eligibility, bit-width, and
@@ -375,20 +384,11 @@ v3 production matrix.
 
 The retained
 [`proximity-turboquant-v3-qualification.md`](proximity-turboquant-v3-qualification.md)
-report records the first six corrected schema-v3 cells: 10K and 100K × 768
-default-path coverage for every metric. Correct reconstructed-vector norm
-scoring restores squared-L2 recall to 1.00 at both scales. Correct cosine
-reconstruction normalization raises 10K recall from 0.00 to 0.40 but leaves
-100K recall at 0.00. Correcting inner-product reconstruction-direction norm
-drift raises the 10K default row from 0.00 to 1.00; the 100K default row stays
-at 0.00 but reaches 1.00 with the approved 16× window. Every row exceeds the
-1.25× PQ warm-p95 ceiling. Matching 16× cosine diagnostics still fail the
-recall floor, ruling out that approved larger shortlist as a sufficient
-general fix. Fusing the corrected L2 dot-product and
-reconstruction-norm work into one packed-code pass reduces the retained
-TurboQuant median by
-44.52% at 10K and 41.63% at 100K with bit-identical scores and unchanged
-logical counters. The remaining per-row failures keep `Auto` and forced-backend GA closed;
-the ten characterized configurations span development revisions, so all
-45,360 schema-v3 cells still require one final frozen-revision run. The other
-release gates remain open.
+report is superseded because its raw-vector cosine oracle did not implement
+ProximityMap's canonical fixed-point metric semantics. An exhaustive 10K
+cosine run incorrectly reported recall 0.50 instead of 1.00, proving that the
+old oracle could not validate candidate quality. Its latency, size, and
+non-cosine results remain useful diagnostics, but none of its rows counts as
+current qualification evidence. All 45,360 schema-4 cells require execution
+from one final frozen revision; `Auto`, forced-backend GA, pinned-host,
+binding-inventory, and legal gates remain open.

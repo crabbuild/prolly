@@ -20,8 +20,8 @@ from datetime import datetime, timezone
 from typing import Iterable, Sequence
 
 
-CONTRACT_SCHEMA = "prolly-turboquant-qualification-v3"
-BENCH_SCHEMA_VERSION = 3
+CONTRACT_SCHEMA = "prolly-turboquant-qualification-v4"
+BENCH_SCHEMA_VERSION = 4
 BENCH_DATASET = "linear-mod-2000003-v2"
 FULL_RECORDS = (1_000, 10_000, 100_000, 1_000_000)
 FULL_DIMENSIONS = (128, 200, 768, 1_536, 3_072)

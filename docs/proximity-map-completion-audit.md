@@ -84,18 +84,16 @@ and test smoke gate. `scripts/summarize_turboquant_qualification.py` accepts
 only the complete, disjoint shard set and emits consolidated rows plus separate
 forced-backend and `Auto` gate results.
 
-The first ten corrected schema-v3 cells are retained in
+The first ten schema-v3 cells are retained as superseded diagnostics in
 [`proximity-turboquant-v3-qualification.md`](proximity-turboquant-v3-qualification.md).
 They cover 10K and 100K × 768 at the default four-bit, 8× setting for all
 three metrics, plus matching 16× cosine and inner-product diagnostics.
-Squared-L2 recall is 1.00 after correcting reconstructed-vector norm scoring.
-Correct cosine reconstruction normalization raises 10K recall to 0.40 but
-still fails the floor. Correct inner-product direction normalization raises
-10K default recall to 1.00 and 100K 16× recall to 1.00, while the 100K default
-row remains at 0.00. This partial evidence spans development revisions and
-cannot be combined by the strict
-summarizer. All 45,360 cells still require a single frozen-revision run, and
-all final release gates remain open.
+Their cosine oracle rescored raw pre-ingestion vectors with platform `sqrt`
+instead of using persisted canonical vectors and the authoritative
+deterministic scorer; exhaustive reranking consequently reported only 0.50
+recall. Benchmark schema 4 corrects the oracle and rejects every older row.
+All 45,360 current-schema cells still require a single frozen-revision run,
+and all final release gates remain open.
 
 Smoke command:
 

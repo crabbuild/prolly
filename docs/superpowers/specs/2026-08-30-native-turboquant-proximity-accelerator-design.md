@@ -1051,6 +1051,14 @@ store, and WASM smoke coverage. Every row records:
 Raw rows are retained under `performance-results/proximity-turboquant/`.
 Absolute latency is evidence, not a portable correctness claim.
 
+The brute-force recall oracle is an authoritative exact ProximityMap search
+over the persisted canonical vectors, using the same deterministic scalar
+metric implementation, filter, `k`, and `(exact_score, key)` ordering as
+reranking. It must not independently rescore the pre-ingestion input vectors
+or use platform `sqrt`: cosine ingestion projects vectors to a canonical
+fixed point, and a mathematically equivalent raw-vector formula can produce a
+different order when exact distances are separated only by rounding noise.
+
 ## GA Acceptance Gates
 
 Every item is mandatory unless explicitly scoped to `Auto` qualification.
