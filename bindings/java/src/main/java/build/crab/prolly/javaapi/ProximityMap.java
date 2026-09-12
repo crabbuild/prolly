@@ -83,6 +83,28 @@ public final class ProximityMap implements AutoCloseable {
     public ProductQuantizer loadPq(byte[] manifest) {
         return new ProductQuantizer(JavaPortableBridge.loadPq(open(), manifest.clone()));
     }
+    public TurboQuantizationBuildResult buildTurboquant() {
+        return buildTurboquant(
+                TurboQuantizationConfig.defaults(), 1, TurboQuantizationBuildLimits.defaults());
+    }
+    public TurboQuantizationBuildResult buildTurboquant(
+            TurboQuantizationConfig config, long workerThreads) {
+        return buildTurboquant(config, workerThreads, TurboQuantizationBuildLimits.defaults());
+    }
+    public TurboQuantizationBuildResult buildTurboquant(
+            TurboQuantizationConfig config,
+            long workerThreads,
+            TurboQuantizationBuildLimits limits) {
+        if (workerThreads <= 0) throw new IllegalArgumentException("workerThreads must be positive");
+        var result = JavaPortableBridge.buildTurboquant(
+                open(), config.toNative(), workerThreads, limits.toNative());
+        return new TurboQuantizationBuildResult(
+                new TurboQuantizer(result.getIndex()),
+                TurboQuantizationBuildStats.fromNative(result.getStats()));
+    }
+    public TurboQuantizer loadTurboquant(byte[] manifest) {
+        return new TurboQuantizer(JavaPortableBridge.loadTurboquant(open(), manifest.clone()));
+    }
     public CompositeBuildOutcome buildCompositeHnsw(ProximityMap baseMap, HnswIndex base) {
         return buildCompositeHnsw(
                 baseMap, base, CompositeAcceleratorConfig.defaults(), CompositeBuildLimits.defaults());
@@ -107,6 +129,20 @@ public final class ProximityMap implements AutoCloseable {
         return compositeOutcome(JavaPortableBridge.buildCompositePq(
                 open(), baseMap.open(), base.open(), config.toNative(), limits.toNative()));
     }
+    public CompositeBuildOutcome buildCompositeTurboquant(
+            ProximityMap baseMap, TurboQuantizer base) {
+        return buildCompositeTurboquant(
+                baseMap, base, CompositeAcceleratorConfig.defaults(),
+                CompositeBuildLimits.defaults());
+    }
+    public CompositeBuildOutcome buildCompositeTurboquant(
+            ProximityMap baseMap,
+            TurboQuantizer base,
+            CompositeAcceleratorConfig config,
+            CompositeBuildLimits limits) {
+        return compositeOutcome(JavaPortableBridge.buildCompositeTurboquant(
+                open(), baseMap.open(), base.open(), config.toNative(), limits.toNative()));
+    }
     public CompositeBuildOrRebuildOutcome buildOrRebuildCompositeHnsw(
             ProximityMap baseMap,
             HnswIndex base,
@@ -125,13 +161,30 @@ public final class ProximityMap implements AutoCloseable {
                 CompositeBuildLimits.defaults().toNative(),
                 CompositeRebuildOptions.defaults().toNative()));
     }
+    public CompositeBuildOrRebuildOutcome buildOrRebuildCompositeTurboquant(
+            ProximityMap baseMap,
+            TurboQuantizer base,
+            CompositeAcceleratorConfig config) {
+        return compositeRebuildOutcome(JavaPortableBridge.buildOrRebuildCompositeTurboquant(
+                open(), baseMap.open(), base.open(), config.toNative(),
+                CompositeBuildLimits.defaults().toNative(),
+                CompositeRebuildOptions.defaults().toNative()));
+    }
     public CompositeAccelerator loadComposite(byte[] manifest) {
         return new CompositeAccelerator(JavaPortableBridge.loadComposite(open(), manifest.clone()));
     }
     public AcceleratorCatalog buildAcceleratorCatalog(
             HnswIndex hnsw, ProductQuantizer pq, CompositeAccelerator composite) {
+        return buildAcceleratorCatalog(hnsw, pq, null, composite);
+    }
+    public AcceleratorCatalog buildAcceleratorCatalog(
+            HnswIndex hnsw,
+            ProductQuantizer pq,
+            TurboQuantizer turboquant,
+            CompositeAccelerator composite) {
         return new AcceleratorCatalog(JavaPortableBridge.buildAcceleratorCatalog(
                 open(), hnsw == null ? null : hnsw.open(), pq == null ? null : pq.open(),
+                turboquant == null ? null : turboquant.open(),
                 composite == null ? null : composite.open()));
     }
     public AcceleratorCatalog loadAcceleratorCatalog(byte[] manifest) {
@@ -152,11 +205,15 @@ public final class ProximityMap implements AutoCloseable {
                 value.getComposite() == null ? null : new CompositeAccelerator(value.getComposite()),
                 value.getHnsw() == null ? null : new HnswIndex(value.getHnsw()),
                 value.getPq() == null ? null : new ProductQuantizer(value.getPq()),
+                value.getTurboquant() == null ? null : new TurboQuantizer(value.getTurboquant()),
                 value.getReasons().stream().map(FullRebuildReason::fromNative).toList(),
                 CompositeBuildStats.fromNative(value.getCompositeStats()),
                 value.getHnswStats() == null ? null : HnswBuildStats.fromNative(value.getHnswStats()),
                 value.getPqStats() == null
-                        ? null : ProductQuantizationBuildStats.fromNative(value.getPqStats()));
+                        ? null : ProductQuantizationBuildStats.fromNative(value.getPqStats()),
+                value.getTurboquantStats() == null
+                        ? null : TurboQuantizationBuildStats.fromNative(
+                                value.getTurboquantStats()));
     }
     public ProximityReadSession read() { return new ProximityReadSession(this, open().read()); }
     public SearchResult search(SearchRequest request) {

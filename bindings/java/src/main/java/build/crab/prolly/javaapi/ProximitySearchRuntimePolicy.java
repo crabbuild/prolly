@@ -7,10 +7,11 @@ public record ProximitySearchRuntimePolicy(
         long maxBytes,
         long authoritativeMaxBytes,
         long hnswMaxBytes,
-        long pqMaxBytes) {
+        long pqMaxBytes,
+        long turboquantMaxBytes) {
     public ProximitySearchRuntimePolicy {
         if (maxEntries <= 0 || maxBytes <= 0 || authoritativeMaxBytes < 0
-                || hnswMaxBytes < 0 || pqMaxBytes < 0) {
+                || hnswMaxBytes < 0 || pqMaxBytes < 0 || turboquantMaxBytes < 0) {
             throw new IllegalArgumentException("search runtime limits must be non-negative and totals positive");
         }
     }
@@ -26,11 +27,13 @@ public record ProximitySearchRuntimePolicy(
                 value.getMaxBytes(),
                 value.getAuthoritativeMaxBytes(),
                 value.getHnswMaxBytes(),
-                value.getPqMaxBytes());
+                value.getPqMaxBytes(),
+                value.getTurboquantMaxBytes());
     }
 
     build.crab.prolly.api.JavaProximitySearchRuntimePolicy toNative() {
         return new build.crab.prolly.api.JavaProximitySearchRuntimePolicy(
-                maxEntries, maxBytes, authoritativeMaxBytes, hnswMaxBytes, pqMaxBytes);
+                maxEntries, maxBytes, authoritativeMaxBytes, hnswMaxBytes, pqMaxBytes,
+                turboquantMaxBytes);
     }
 }

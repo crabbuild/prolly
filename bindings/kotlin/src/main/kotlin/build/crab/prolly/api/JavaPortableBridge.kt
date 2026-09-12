@@ -58,6 +58,11 @@ import build.crab.prolly.ProductQuantizationBuildLimitsRecord
 import build.crab.prolly.ProductQuantizationBuildStatsRecord
 import build.crab.prolly.ProductQuantizationConfigRecord
 import build.crab.prolly.ProductQuantizationQualityRecord
+import build.crab.prolly.TurboQuantizationBuildLimitsRecord
+import build.crab.prolly.TurboQuantizationBuildStatsRecord
+import build.crab.prolly.TurboQuantizationConfigRecord
+import build.crab.prolly.TurboQuantizationQualityRecord
+import build.crab.prolly.TurboQuantizationVerificationRecord
 import build.crab.prolly.QueryKernelRecord
 import build.crab.prolly.RangeCursorRecord
 import build.crab.prolly.RangePageRecord
@@ -78,6 +83,8 @@ import build.crab.prolly.defaultHnswBuildLimits as nativeDefaultHnswBuildLimits
 import build.crab.prolly.defaultHnswConfig as nativeDefaultHnswConfig
 import build.crab.prolly.defaultPqBuildLimits as nativeDefaultPqBuildLimits
 import build.crab.prolly.defaultPqConfig as nativeDefaultPqConfig
+import build.crab.prolly.defaultTurboquantBuildLimits as nativeDefaultTurboquantBuildLimits
+import build.crab.prolly.defaultTurboquantConfig as nativeDefaultTurboquantConfig
 import build.crab.prolly.defaultCompositeAcceleratorConfig as nativeDefaultCompositeAcceleratorConfig
 import build.crab.prolly.defaultCompositeBuildLimits as nativeDefaultCompositeBuildLimits
 import build.crab.prolly.defaultCompositeRebuildOptions as nativeDefaultCompositeRebuildOptions
@@ -143,6 +150,7 @@ data class JavaProximitySearchRequest(
     val backend: String,
     val hnswEfSearch: Int?,
     val pqRerankMultiplier: Int?,
+    val turboquantRerankMultiplier: Int?,
 ) {
     fun toNative() = ProximitySearchRequestRecord(
         query = query.toList(),
@@ -166,6 +174,7 @@ data class JavaProximitySearchRequest(
         backend = SearchBackendRecord.valueOf(backend),
         hnswEfSearch = hnswEfSearch?.toUInt(),
         pqRerankMultiplier = pqRerankMultiplier?.toUShort(),
+        turboquantRerankMultiplier = turboquantRerankMultiplier?.toUShort(),
     )
 }
 
@@ -323,6 +332,81 @@ private fun ProductQuantizationQualityRecord.toJava() = JavaProductQuantizationQ
     meanSquaredError, maximumSquaredError,
 )
 
+data class JavaTurboQuantizationConfig(
+    val bitWidth: Int,
+    val rerankMultiplier: Long,
+    val seed: Long,
+) {
+    fun toNative() = TurboQuantizationConfigRecord(
+        bitWidth.toUByte(), rerankMultiplier.toUInt(), seed.toULong(),
+    )
+}
+
+data class JavaTurboQuantizationBuildLimits(
+    val maxRecords: Long?,
+    val maxInputBytes: Long?,
+    val maxTemporaryBytes: Long?,
+    val maxTransformOperations: Long?,
+    val maxEncodedOutputBytes: Long?,
+    val maxWorkerThreads: Long?,
+) {
+    fun toNative() = TurboQuantizationBuildLimitsRecord(
+        maxRecords?.toULong(), maxInputBytes?.toULong(), maxTemporaryBytes?.toULong(),
+        maxTransformOperations?.toULong(), maxEncodedOutputBytes?.toULong(),
+        maxWorkerThreads?.toULong(),
+    )
+}
+
+data class JavaTurboQuantizationBuildStats(
+    val encodedVectors: Long,
+    val zeroVectors: Long,
+    val transformedComponents: Long,
+    val butterflyOperations: Long,
+    val inputBytes: Long,
+    val encodedOutputBytes: Long,
+    val peakTemporaryBytes: Long,
+)
+
+data class JavaTurboQuantizationQuality(
+    val meanSquaredError: Double,
+    val maximumSquaredError: Double,
+)
+
+data class JavaTurboQuantizationVerification(
+    val encodedVectors: Long,
+    val zeroVectors: Long,
+    val quality: JavaTurboQuantizationQuality,
+)
+
+data class JavaTurboQuantizationBuildResult(
+    val index: TurboQuantizer,
+    val stats: JavaTurboQuantizationBuildStats,
+)
+
+private fun TurboQuantizationConfigRecord.toJava() = JavaTurboQuantizationConfig(
+    bitWidth.toInt(), rerankMultiplier.toLong(), seed.toLong(),
+)
+
+private fun TurboQuantizationBuildLimitsRecord.toJava() = JavaTurboQuantizationBuildLimits(
+    maxRecords?.toLong(), maxInputBytes?.toLong(), maxTemporaryBytes?.toLong(),
+    maxTransformOperations?.toLong(), maxEncodedOutputBytes?.toLong(),
+    maxWorkerThreads?.toLong(),
+)
+
+private fun TurboQuantizationBuildStatsRecord.toJava() = JavaTurboQuantizationBuildStats(
+    encodedVectors.toLong(), zeroVectors.toLong(), transformedComponents.toLong(),
+    butterflyOperations.toLong(), inputBytes.toLong(), encodedOutputBytes.toLong(),
+    peakTemporaryBytes.toLong(),
+)
+
+private fun TurboQuantizationQualityRecord.toJava() = JavaTurboQuantizationQuality(
+    meanSquaredError, maximumSquaredError,
+)
+
+private fun TurboQuantizationVerificationRecord.toJava() = JavaTurboQuantizationVerification(
+    encodedVectors.toLong(), zeroVectors.toLong(), quality.toJava(),
+)
+
 data class JavaCompositeAcceleratorConfig(
     val maxDeltaRecords: Long,
     val maxShadowRecords: Long,
@@ -367,9 +451,12 @@ data class JavaCompositeRebuildOptions(
     val hnswLimits: JavaHnswBuildLimits,
     val pqWorkerThreads: Long,
     val pqLimits: JavaProductQuantizationBuildLimits,
+    val turboquantWorkerThreads: Long,
+    val turboquantLimits: JavaTurboQuantizationBuildLimits,
 ) {
     fun toNative() = CompositeRebuildOptionsRecord(
         hnswLimits.toNative(), pqWorkerThreads.toULong(), pqLimits.toNative(),
+        turboquantWorkerThreads.toULong(), turboquantLimits.toNative(),
     )
 }
 
@@ -384,10 +471,12 @@ data class JavaCompositeBuildOrRebuildOutcome(
     val composite: CompositeAccelerator?,
     val hnsw: HnswIndex?,
     val pq: ProductQuantizer?,
+    val turboquant: TurboQuantizer?,
     val reasons: List<JavaFullRebuildReason>,
     val compositeStats: JavaCompositeBuildStats,
     val hnswStats: JavaHnswBuildStats?,
     val pqStats: JavaProductQuantizationBuildStats?,
+    val turboquantStats: JavaTurboQuantizationBuildStats?,
 )
 
 data class JavaAcceleratorCatalogEntry(
@@ -420,8 +509,8 @@ private fun CompositeBuildOutcome.toJava() = JavaCompositeBuildOutcome(
     accelerator, reasons.map(FullRebuildReasonRecord::toJava), stats.toJava(),
 )
 private fun CompositeBuildOrRebuildOutcome.toJava() = JavaCompositeBuildOrRebuildOutcome(
-    kind.name, composite, hnsw, pq, reasons.map(FullRebuildReasonRecord::toJava),
-    compositeStats.toJava(), hnswStats?.toJava(), pqStats?.toJava(),
+    kind.name, composite, hnsw, pq, turboquant, reasons.map(FullRebuildReasonRecord::toJava),
+    compositeStats.toJava(), hnswStats?.toJava(), pqStats?.toJava(), turboquantStats?.toJava(),
 )
 
 data class JavaMapUpdate(
@@ -707,10 +796,11 @@ data class JavaProximitySearchRuntimePolicy(
     val authoritativeMaxBytes: Long,
     val hnswMaxBytes: Long,
     val pqMaxBytes: Long,
+    val turboquantMaxBytes: Long,
 ) {
     fun toNative() = ProximitySearchRuntimePolicyRecord(
         maxEntries.toULong(), maxBytes.toULong(), authoritativeMaxBytes.toULong(),
-        hnswMaxBytes.toULong(), pqMaxBytes.toULong(),
+        hnswMaxBytes.toULong(), pqMaxBytes.toULong(), turboquantMaxBytes.toULong(),
     )
 }
 
@@ -721,7 +811,7 @@ data class JavaProximitySearchRuntimeStats(
 
 private fun ProximitySearchRuntimePolicyRecord.toJava() = JavaProximitySearchRuntimePolicy(
     maxEntries.toLong(), maxBytes.toLong(), authoritativeMaxBytes.toLong(),
-    hnswMaxBytes.toLong(), pqMaxBytes.toLong(),
+    hnswMaxBytes.toLong(), pqMaxBytes.toLong(), turboquantMaxBytes.toLong(),
 )
 
 private fun ProximitySearchRuntimeStatsRecord.toJava() = JavaProximitySearchRuntimeStats(
@@ -1287,6 +1377,76 @@ object JavaPortableBridge {
     ): ProximitySearchProof = index.proveSearch(map, request.toNative())
 
     @JvmStatic
+    fun defaultTurboquantConfig(): JavaTurboQuantizationConfig =
+        nativeDefaultTurboquantConfig().toJava()
+
+    @JvmStatic
+    fun defaultTurboquantBuildLimits(): JavaTurboQuantizationBuildLimits =
+        nativeDefaultTurboquantBuildLimits().toJava()
+
+    @JvmStatic
+    fun buildTurboquant(
+        map: ProximityMap,
+        config: JavaTurboQuantizationConfig,
+        workerThreads: Long,
+        limits: JavaTurboQuantizationBuildLimits,
+    ): JavaTurboQuantizationBuildResult =
+        map.buildTurboquant(config.toNative(), workerThreads.toULong(), limits.toNative()).let {
+            JavaTurboQuantizationBuildResult(it.index, it.stats.toJava())
+        }
+
+    @JvmStatic
+    fun loadTurboquant(map: ProximityMap, manifest: ByteArray): TurboQuantizer =
+        map.loadTurboquant(manifest.copyOf())
+
+    @JvmStatic
+    fun turboquantConfig(index: TurboQuantizer): JavaTurboQuantizationConfig =
+        index.config.toJava()
+
+    @JvmStatic
+    fun turboquantQuality(index: TurboQuantizer): JavaTurboQuantizationQuality =
+        index.quality.toJava()
+
+    @JvmStatic
+    fun turboquantVerify(
+        index: TurboQuantizer,
+        map: ProximityMap,
+    ): JavaTurboQuantizationVerification = index.verify(map).toJava()
+
+    @JvmStatic
+    fun turboquantSearch(
+        index: TurboQuantizer,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchResultRecord = index.search(map, request.toNative())
+
+    @JvmStatic
+    fun turboquantSearchWithRuntime(
+        index: TurboQuantizer,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord = index.searchWithRuntime(map, request.toNative(), runtime)
+
+    @JvmStatic
+    fun turboquantSearchCancellable(
+        index: TurboQuantizer,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+        runtime: ProximitySearchRuntime?,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = index.searchCancellable(
+        map, request.toNative(), runtime, cancellation,
+    )
+
+    @JvmStatic
+    fun turboquantProveSearch(
+        index: TurboQuantizer,
+        map: ProximityMap,
+        request: JavaProximitySearchRequest,
+    ): ProximitySearchProof = index.proveSearch(map, request.toNative())
+
+    @JvmStatic
     fun defaultCompositeAcceleratorConfig(): JavaCompositeAcceleratorConfig =
         nativeDefaultCompositeAcceleratorConfig().toJava()
 
@@ -1299,6 +1459,7 @@ object JavaPortableBridge {
         nativeDefaultCompositeRebuildOptions().let {
             JavaCompositeRebuildOptions(
                 it.hnswLimits.toJava(), it.pqWorkerThreads.toLong(), it.pqLimits.toJava(),
+                it.turboquantWorkerThreads.toLong(), it.turboquantLimits.toJava(),
             )
         }
 
@@ -1321,6 +1482,16 @@ object JavaPortableBridge {
         limits: JavaCompositeBuildLimits,
     ): JavaCompositeBuildOutcome =
         map.buildCompositePq(baseMap, base, config.toNative(), limits.toNative()).toJava()
+
+    @JvmStatic
+    fun buildCompositeTurboquant(
+        map: ProximityMap,
+        baseMap: ProximityMap,
+        base: TurboQuantizer,
+        config: JavaCompositeAcceleratorConfig,
+        limits: JavaCompositeBuildLimits,
+    ): JavaCompositeBuildOutcome =
+        map.buildCompositeTurboquant(baseMap, base, config.toNative(), limits.toNative()).toJava()
 
     @JvmStatic
     fun buildOrRebuildCompositeHnsw(
@@ -1347,6 +1518,18 @@ object JavaPortableBridge {
     ).toJava()
 
     @JvmStatic
+    fun buildOrRebuildCompositeTurboquant(
+        map: ProximityMap,
+        baseMap: ProximityMap,
+        base: TurboQuantizer,
+        config: JavaCompositeAcceleratorConfig,
+        limits: JavaCompositeBuildLimits,
+        rebuild: JavaCompositeRebuildOptions,
+    ): JavaCompositeBuildOrRebuildOutcome = map.buildOrRebuildCompositeTurboquant(
+        baseMap, base, config.toNative(), limits.toNative(), rebuild.toNative(),
+    ).toJava()
+
+    @JvmStatic
     fun loadComposite(map: ProximityMap, manifest: ByteArray): CompositeAccelerator =
         map.loadComposite(manifest.copyOf())
 
@@ -1355,8 +1538,9 @@ object JavaPortableBridge {
         map: ProximityMap,
         hnsw: HnswIndex?,
         pq: ProductQuantizer?,
+        turboquant: TurboQuantizer?,
         composite: CompositeAccelerator?,
-    ): AcceleratorCatalog = map.buildAcceleratorCatalog(hnsw, pq, composite)
+    ): AcceleratorCatalog = map.buildAcceleratorCatalog(hnsw, pq, turboquant, composite)
 
     @JvmStatic
     fun loadAcceleratorCatalog(map: ProximityMap, manifest: ByteArray): AcceleratorCatalog =

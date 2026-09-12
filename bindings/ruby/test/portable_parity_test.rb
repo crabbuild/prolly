@@ -152,7 +152,8 @@ class PortableParityTest < Minitest::Test
         filter: exact.filter, kernel: exact.kernel,
         backend: Prolly::SearchBackendRecord::COMPOSITE,
         hnsw_ef_search: exact.hnsw_ef_search,
-        pq_rerank_multiplier: exact.pq_rerank_multiplier
+        pq_rerank_multiplier: exact.pq_rerank_multiplier,
+        turboquant_rerank_multiplier: exact.turboquant_rerank_multiplier
       )
       built.accelerator.use do |composite|
         assert_equal Prolly::CompositeBaseKindRecord::HNSW, composite.base_kind
@@ -231,7 +232,8 @@ class PortableParityTest < Minitest::Test
         kernel: exact.kernel,
         backend: Prolly::SearchBackendRecord::PRODUCT_QUANTIZED,
         hnsw_ef_search: exact.hnsw_ef_search,
-        pq_rerank_multiplier: exact.pq_rerank_multiplier
+        pq_rerank_multiplier: exact.pq_rerank_multiplier,
+        turboquant_rerank_multiplier: exact.turboquant_rerank_multiplier
       )
       built.index.use do |index|
         assert_equal config, index.config
@@ -254,6 +256,60 @@ class PortableParityTest < Minitest::Test
                        proof.verify(proximity.descriptor).result.backend
         end
         proximity.load_pq(manifest).use do |loaded|
+          assert_equal manifest, loaded.manifest
+        end
+      end
+    end
+  end
+
+  def test_turboquantizer_lifecycle_is_portable_and_verified
+    Prolly::Engine.memory.use do |engine|
+      proximity = engine.build_proximity(
+        dimensions: 8,
+        records: 16.times.map do |index|
+          Prolly::ProximityRecord.new(
+            key: format('turbo-%02d', index).b,
+            vector: [index.to_f, (index % 3).to_f, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            value: format('value-%02d', index).b
+          )
+        end
+      )
+      config = Prolly::TurboQuantizationConfigRecord.new(
+        bit_width: 4,
+        rerank_multiplier: 4,
+        seed: (1 << 64) - 1
+      )
+      built = proximity.build_turboquant(config: config, worker_threads: 2)
+      assert_equal 16, built.stats.encoded_vectors
+      exact = Prolly.exact_proximity_search_request(
+        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], 3
+      )
+      request = Prolly::ProximitySearchRequestRecord.new(
+        query: exact.query,
+        k: exact.k,
+        policy: Prolly::SearchPolicyKind::FIXED_BUDGET,
+        adaptive_quality: exact.adaptive_quality,
+        budget: exact.budget,
+        filter: exact.filter,
+        kernel: exact.kernel,
+        backend: Prolly::SearchBackendRecord::TURBO_QUANTIZED,
+        hnsw_ef_search: exact.hnsw_ef_search,
+        pq_rerank_multiplier: exact.pq_rerank_multiplier,
+        turboquant_rerank_multiplier: exact.turboquant_rerank_multiplier
+      )
+      built.index.use do |index|
+        assert_equal config, index.config
+        assert_equal proximity.descriptor, index.source_descriptor
+        assert_equal 16, index.verify(proximity).encoded_vectors
+        result = index.search(proximity, request)
+        assert_equal Prolly::SearchBackendRecord::TURBO_QUANTIZED, result.backend
+        assert_equal 'turbo-00'.b, result.neighbors.first.key
+        manifest = index.manifest
+        index.prove_search(proximity, request).use do |proof|
+          assert_equal Prolly::SearchBackendRecord::TURBO_QUANTIZED,
+                       proof.verify(proximity.descriptor).result.backend
+        end
+        proximity.load_turboquant(manifest).use do |loaded|
           assert_equal manifest, loaded.manifest
         end
       end
@@ -285,7 +341,8 @@ class PortableParityTest < Minitest::Test
         kernel: exact.kernel,
         backend: Prolly::SearchBackendRecord::HNSW,
         hnsw_ef_search: exact.hnsw_ef_search,
-        pq_rerank_multiplier: exact.pq_rerank_multiplier
+        pq_rerank_multiplier: exact.pq_rerank_multiplier,
+        turboquant_rerank_multiplier: exact.turboquant_rerank_multiplier
       )
       built.index.use do |index|
         assert index.canonical?
@@ -336,7 +393,8 @@ class PortableParityTest < Minitest::Test
         kernel: Prolly::QueryKernelRecord::SCALAR_DETERMINISTIC,
         backend: Prolly::SearchBackendRecord::AUTO,
         hnsw_ef_search: nil,
-        pq_rerank_multiplier: nil
+        pq_rerank_multiplier: nil,
+        turboquant_rerank_multiplier: nil
       )
 
       result = proximity.search(request)

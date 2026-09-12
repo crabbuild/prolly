@@ -205,6 +205,49 @@ final class PortableParityTests: XCTestCase {
         }
     }
 
+    func testTurboQuantizerLifecycleIsPortableAndVerified() throws {
+        try Engine.withMemory { engine in
+            let proximity = try engine.buildProximity(
+                dimensions: 8,
+                records: (0..<16).map { index in
+                    ProximityRecord(
+                        key: Data(String(format: "turbo-%02d", index).utf8),
+                        vector: [Float(index), Float(index % 3), 0, 1, 0, 0, 0, 0],
+                        value: Data(String(format: "value-%02d", index).utf8)
+                    )
+                }
+            )
+            let config = TurboQuantizationConfigRecord(
+                bitWidth: 4,
+                rerankMultiplier: 4,
+                seed: .max
+            )
+            let built = try proximity.buildTurboquant(config: config, workerThreads: 2)
+            XCTAssertEqual(built.stats.encodedVectors, 16)
+            var request = exactProximitySearchRequest(query: [0, 0, 0, 1, 0, 0, 0, 0], k: 3)
+            request.policy = .fixedBudget
+            request.backend = .turboQuantized
+            let index = built.index
+            XCTAssertEqual(index.config, config)
+            XCTAssertEqual(index.sourceDescriptor, proximity.descriptor)
+            XCTAssertEqual(try index.verify(proximity).encodedVectors, 16)
+            let result = try index.search(proximity, request: request)
+            XCTAssertEqual(result.backend, .turboQuantized)
+            XCTAssertEqual(result.neighbors.first?.key, Data("turbo-00".utf8))
+            let manifest = index.manifest
+            let proof = try index.proveSearch(proximity, request: request)
+            XCTAssertEqual(
+                try proof.verify(expectedDescriptor: proximity.descriptor).result.backend,
+                .turboQuantized
+            )
+            proof.close()
+            index.close()
+            let loaded = try proximity.loadTurboquant(manifest)
+            XCTAssertEqual(loaded.manifest, manifest)
+            loaded.close()
+        }
+    }
+
     func testHnswAcceleratorLifecycleIsPortable() throws {
         try Engine.withMemory { engine in
             let proximity = try engine.buildProximity(
@@ -278,7 +321,8 @@ final class PortableParityTests: XCTestCase {
                 kernel: .scalarDeterministic,
                 backend: .auto,
                 hnswEfSearch: nil,
-                pqRerankMultiplier: nil
+                pqRerankMultiplier: nil,
+                turboquantRerankMultiplier: nil
             )
 
             let result = try proximity.search(request)

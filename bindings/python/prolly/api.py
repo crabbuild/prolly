@@ -73,6 +73,12 @@ class ProductQuantizationBuildResult:
 
 
 @dataclass(frozen=True)
+class TurboQuantizationBuildResult:
+    index: "TurboQuantizer"
+    stats: _native.TurboQuantizationBuildStatsRecord
+
+
+@dataclass(frozen=True)
 class CompositeBuildOutcome:
     accelerator: "CompositeAccelerator | None"
     reasons: Sequence[_native.FullRebuildReasonRecord]
@@ -85,10 +91,12 @@ class CompositeBuildOrRebuildOutcome:
     composite: "CompositeAccelerator | None"
     hnsw: "HnswIndex | None"
     pq: "ProductQuantizer | None"
+    turboquant: "TurboQuantizer | None"
     reasons: Sequence[_native.FullRebuildReasonRecord]
     composite_stats: _native.CompositeBuildStatsRecord
     hnsw_stats: _native.HnswBuildStatsRecord | None
     pq_stats: _native.ProductQuantizationBuildStatsRecord | None
+    turboquant_stats: _native.TurboQuantizationBuildStatsRecord | None
 
 
 IndexProjection = _native.IndexProjectionRecord
@@ -397,6 +405,7 @@ def _owned_proximity_search_request(request):
         backend=request.backend,
         hnsw_ef_search=request.hnsw_ef_search,
         pq_rerank_multiplier=request.pq_rerank_multiplier,
+        turboquant_rerank_multiplier=request.turboquant_rerank_multiplier,
     )
 
 
@@ -1457,6 +1466,27 @@ class ProximityMap(_Scoped):
         self._open()
         return ProductQuantizer(self._inner.load_pq(bytes(manifest)))
 
+    def build_turboquant(
+        self,
+        config: _native.TurboQuantizationConfigRecord | None = None,
+        *,
+        worker_threads: int = 1,
+        limits: _native.TurboQuantizationBuildLimitsRecord | None = None,
+    ) -> TurboQuantizationBuildResult:
+        self._open()
+        result = self._inner.build_turboquant(
+            config or _native.default_turboquant_config(),
+            worker_threads,
+            limits or _native.default_turboquant_build_limits(),
+        )
+        return TurboQuantizationBuildResult(
+            TurboQuantizer(result.index), result.stats
+        )
+
+    def load_turboquant(self, manifest: bytes) -> "TurboQuantizer":
+        self._open()
+        return TurboQuantizer(self._inner.load_turboquant(bytes(manifest)))
+
     def build_composite_hnsw(
         self,
         base_map: "ProximityMap",
@@ -1501,6 +1531,28 @@ class ProximityMap(_Scoped):
             result.stats,
         )
 
+    def build_composite_turboquant(
+        self,
+        base_map: "ProximityMap",
+        base: "TurboQuantizer",
+        config: _native.CompositeAcceleratorConfigRecord | None = None,
+        limits: _native.CompositeBuildLimitsRecord | None = None,
+    ) -> CompositeBuildOutcome:
+        self._open()
+        base_map._open()
+        base._open()
+        result = self._inner.build_composite_turboquant(
+            base_map._inner,
+            base._inner,
+            config or _native.default_composite_accelerator_config(),
+            limits or _native.default_composite_build_limits(),
+        )
+        return CompositeBuildOutcome(
+            None if result.accelerator is None else CompositeAccelerator(result.accelerator),
+            result.reasons,
+            result.stats,
+        )
+
     @staticmethod
     def _rebuild_outcome(result) -> CompositeBuildOrRebuildOutcome:
         return CompositeBuildOrRebuildOutcome(
@@ -1508,10 +1560,12 @@ class ProximityMap(_Scoped):
             None if result.composite is None else CompositeAccelerator(result.composite),
             None if result.hnsw is None else HnswIndex(result.hnsw),
             None if result.pq is None else ProductQuantizer(result.pq),
+            None if result.turboquant is None else TurboQuantizer(result.turboquant),
             result.reasons,
             result.composite_stats,
             result.hnsw_stats,
             result.pq_stats,
+            result.turboquant_stats,
         )
 
     def build_or_rebuild_composite_hnsw(
@@ -1556,6 +1610,27 @@ class ProximityMap(_Scoped):
             )
         )
 
+    def build_or_rebuild_composite_turboquant(
+        self,
+        base_map: "ProximityMap",
+        base: "TurboQuantizer",
+        config: _native.CompositeAcceleratorConfigRecord | None = None,
+        limits: _native.CompositeBuildLimitsRecord | None = None,
+        rebuild: _native.CompositeRebuildOptionsRecord | None = None,
+    ) -> CompositeBuildOrRebuildOutcome:
+        self._open()
+        base_map._open()
+        base._open()
+        return self._rebuild_outcome(
+            self._inner.build_or_rebuild_composite_turboquant(
+                base_map._inner,
+                base._inner,
+                config or _native.default_composite_accelerator_config(),
+                limits or _native.default_composite_build_limits(),
+                rebuild or _native.default_composite_rebuild_options(),
+            )
+        )
+
     def load_composite(self, manifest: bytes) -> "CompositeAccelerator":
         self._open()
         return CompositeAccelerator(self._inner.load_composite(bytes(manifest)))
@@ -1565,16 +1640,18 @@ class ProximityMap(_Scoped):
         *,
         hnsw: "HnswIndex | None" = None,
         pq: "ProductQuantizer | None" = None,
+        turboquant: "TurboQuantizer | None" = None,
         composite: "CompositeAccelerator | None" = None,
     ) -> "AcceleratorCatalog":
         self._open()
-        for value in (hnsw, pq, composite):
+        for value in (hnsw, pq, turboquant, composite):
             if value is not None:
                 value._open()
         return AcceleratorCatalog(
             self._inner.build_accelerator_catalog(
                 None if hnsw is None else hnsw._inner,
                 None if pq is None else pq._inner,
+                None if turboquant is None else turboquant._inner,
                 None if composite is None else composite._inner,
             )
         )
@@ -1861,6 +1938,121 @@ class ProductQuantizer(_Scoped):
     def quality(self) -> _native.ProductQuantizationQualityRecord:
         self._open()
         return self._inner.quality()
+
+    def search(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+    ) -> _native.ProximitySearchResultRecord:
+        self._open()
+        map._open()
+        return self._inner.search(
+            map._inner,
+            _owned_proximity_search_request(request),
+        )
+
+    def search_with_runtime(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ) -> _native.ProximitySearchResultRecord:
+        self._open()
+        map._open()
+        runtime._open()
+        return self._inner.search_with_runtime(
+            map._inner,
+            _owned_proximity_search_request(request),
+            runtime._inner,
+        )
+
+    def search_cancellable(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken,
+    ) -> _native.ProximitySearchResultRecord:
+        self._open()
+        map._open()
+        cancellation._open()
+        if runtime is not None:
+            runtime._open()
+        return self._inner.search_cancellable(
+            map._inner,
+            _owned_proximity_search_request(request),
+            None if runtime is None else runtime._inner,
+            cancellation._inner,
+        )
+
+    async def search_async(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        *,
+        runtime: ProximitySearchRuntime | None = None,
+        cancellation: ProximityCancellationToken | None = None,
+    ) -> _native.ProximitySearchResultRecord:
+        token = cancellation or ProximityCancellationToken()
+        try:
+            return await asyncio.to_thread(
+                self.search_cancellable,
+                map,
+                _owned_proximity_search_request(request),
+                runtime=runtime,
+                cancellation=token,
+            )
+        except asyncio.CancelledError:
+            token.cancel()
+            raise
+
+    def prove_search(
+        self,
+        map: ProximityMap,
+        request: _native.ProximitySearchRequestRecord,
+        limits: _native.ContentGraphLimitsRecord | None = None,
+    ) -> "ProximitySearchProof":
+        self._open()
+        map._open()
+        return ProximitySearchProof(
+            self._inner.prove_search(
+                map._inner,
+                _owned_proximity_search_request(request),
+                limits or _native.default_content_graph_limits(),
+            )
+        )
+
+
+class TurboQuantizer(_Scoped):
+    def __init__(self, inner: _native.BindingTurboQuantizer):
+        super().__init__()
+        self._inner = inner
+
+    @property
+    def manifest(self) -> bytes:
+        self._open()
+        return self._inner.manifest()
+
+    @property
+    def source_descriptor(self) -> bytes:
+        self._open()
+        return self._inner.source_descriptor()
+
+    @property
+    def config(self) -> _native.TurboQuantizationConfigRecord:
+        self._open()
+        return self._inner.config()
+
+    @property
+    def quality(self) -> _native.TurboQuantizationQualityRecord:
+        self._open()
+        return self._inner.quality()
+
+    def verify(self, map: ProximityMap) -> _native.TurboQuantizationVerificationRecord:
+        self._open()
+        map._open()
+        return self._inner.verify(map._inner)
 
     def search(
         self,
@@ -2341,6 +2533,8 @@ __all__ = [
     "ProximitySearchProof",
     "ProductQuantizationBuildResult",
     "ProductQuantizer",
+    "TurboQuantizationBuildResult",
+    "TurboQuantizer",
     "JsonValueCodec",
     "SecondaryIndex",
     "ScopedBytes",

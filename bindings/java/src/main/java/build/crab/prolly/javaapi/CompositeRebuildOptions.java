@@ -6,7 +6,9 @@ import build.crab.prolly.api.JavaPortableBridge;
 public record CompositeRebuildOptions(
         HnswBuildLimits hnswLimits,
         long pqWorkerThreads,
-        ProductQuantizationBuildLimits pqLimits) {
+        ProductQuantizationBuildLimits pqLimits,
+        long turboquantWorkerThreads,
+        TurboQuantizationBuildLimits turboquantLimits) {
     public static CompositeRebuildOptions defaults() {
         var value = JavaPortableBridge.defaultCompositeRebuildOptions();
         return new CompositeRebuildOptions(
@@ -16,10 +18,13 @@ public record CompositeRebuildOptions(
                         value.getHnswLimits().getWorkerThreads(),
                         value.getHnswLimits().getMaxEncodedGraphBytes()),
                 value.getPqWorkerThreads(),
-                ProductQuantizationBuildLimits.fromNative(value.getPqLimits()));
+                ProductQuantizationBuildLimits.fromNative(value.getPqLimits()),
+                value.getTurboquantWorkerThreads(),
+                TurboQuantizationBuildLimits.fromNative(value.getTurboquantLimits()));
     }
     JavaCompositeRebuildOptions toNative() {
         return new JavaCompositeRebuildOptions(
-                hnswLimits.toNative(), pqWorkerThreads, pqLimits.toNative());
+                hnswLimits.toNative(), pqWorkerThreads, pqLimits.toNative(),
+                turboquantWorkerThreads, turboquantLimits.toNative());
     }
 }

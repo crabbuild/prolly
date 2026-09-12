@@ -249,6 +249,55 @@ class PortableParityTest {
     }
 
     @Test
+    fun turboQuantizerLifecycleIsPortableAndVerified() {
+        ProllyNative.useLocalDebugLibrary()
+        Engine.memory().use { engine ->
+            engine.buildProximity(
+                8u,
+                (0 until 16).map { index ->
+                    ProximityRecord(
+                        "turbo-%02d".format(index).bytes(),
+                        listOf(index.toFloat(), (index % 3).toFloat(), 0f, 1f, 0f, 0f, 0f, 0f),
+                        "value-%02d".format(index).bytes(),
+                    )
+                },
+            ).use { proximity ->
+                val config = TurboQuantizationConfigRecord(
+                    bitWidth = 4u,
+                    rerankMultiplier = 4u,
+                    seed = ULong.MAX_VALUE,
+                )
+                val built = proximity.buildTurboquant(config, workerThreads = 2uL)
+                assertEquals(16uL, built.stats.encodedVectors)
+                val request = exactProximitySearchRequest(
+                    listOf(0f, 0f, 0f, 1f, 0f, 0f, 0f, 0f), 3uL,
+                ).copy(
+                    policy = SearchPolicyKind.FIXED_BUDGET,
+                    backend = SearchBackendRecord.TURBO_QUANTIZED,
+                )
+                built.index.use { index ->
+                    assertEquals(config, index.config)
+                    assertArrayEquals(proximity.descriptor, index.sourceDescriptor)
+                    assertEquals(16uL, index.verify(proximity).encodedVectors)
+                    val result = index.search(proximity, request)
+                    assertEquals(SearchBackendRecord.TURBO_QUANTIZED, result.backend)
+                    assertArrayEquals("turbo-00".bytes(), result.neighbors.first().key)
+                    val manifest = index.manifest
+                    index.proveSearch(proximity, request).use { proof ->
+                        assertEquals(
+                            SearchBackendRecord.TURBO_QUANTIZED,
+                            proof.verify(proximity.descriptor).result.backend,
+                        )
+                    }
+                    proximity.loadTurboquant(manifest).use { loaded ->
+                        assertArrayEquals(manifest, loaded.manifest)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     fun hnswAcceleratorLifecycleIsPortable() {
         ProllyNative.useLocalDebugLibrary()
         Engine.memory().use { engine ->
@@ -322,6 +371,7 @@ class PortableParityTest {
                     backend = SearchBackendRecord.AUTO,
                     hnswEfSearch = null,
                     pqRerankMultiplier = null,
+                    turboquantRerankMultiplier = null,
                 )
 
                 val result = proximity.search(request)

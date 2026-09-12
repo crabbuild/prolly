@@ -10,6 +10,7 @@ import build.crab.prolly.BindingMapComparison
 import build.crab.prolly.BindingMapMerge
 import build.crab.prolly.BindingMapSubscription
 import build.crab.prolly.BindingProductQuantizer
+import build.crab.prolly.BindingTurboQuantizer
 import build.crab.prolly.BindingProximityCancellationToken
 import build.crab.prolly.BindingProximityMap
 import build.crab.prolly.BindingProximityReadSession
@@ -58,6 +59,11 @@ import build.crab.prolly.ProductQuantizationBuildLimitsRecord
 import build.crab.prolly.ProductQuantizationBuildStatsRecord
 import build.crab.prolly.ProductQuantizationConfigRecord
 import build.crab.prolly.ProductQuantizationQualityRecord
+import build.crab.prolly.TurboQuantizationBuildLimitsRecord
+import build.crab.prolly.TurboQuantizationBuildStatsRecord
+import build.crab.prolly.TurboQuantizationConfigRecord
+import build.crab.prolly.TurboQuantizationQualityRecord
+import build.crab.prolly.TurboQuantizationVerificationRecord
 import build.crab.prolly.RangeCursorRecord
 import build.crab.prolly.ReverseCursorRecord
 import build.crab.prolly.ProximityConfigRecord
@@ -76,6 +82,8 @@ import build.crab.prolly.defaultHnswBuildLimits
 import build.crab.prolly.defaultHnswConfig
 import build.crab.prolly.defaultPqBuildLimits
 import build.crab.prolly.defaultPqConfig
+import build.crab.prolly.defaultTurboquantBuildLimits
+import build.crab.prolly.defaultTurboquantConfig
 import build.crab.prolly.defaultProximityConfig
 import build.crab.prolly.defaultProximitySearchRuntimePolicy
 import build.crab.prolly.exactProximitySearchRequest
@@ -102,6 +110,10 @@ data class ProductQuantizationBuildResult(
     val index: ProductQuantizer,
     val stats: ProductQuantizationBuildStatsRecord,
 )
+data class TurboQuantizationBuildResult(
+    val index: TurboQuantizer,
+    val stats: TurboQuantizationBuildStatsRecord,
+)
 data class CompositeBuildOutcome(
     val accelerator: CompositeAccelerator?,
     val reasons: List<FullRebuildReasonRecord>,
@@ -112,10 +124,12 @@ data class CompositeBuildOrRebuildOutcome(
     val composite: CompositeAccelerator?,
     val hnsw: HnswIndex?,
     val pq: ProductQuantizer?,
+    val turboquant: TurboQuantizer?,
     val reasons: List<FullRebuildReasonRecord>,
     val compositeStats: CompositeBuildStatsRecord,
     val hnswStats: HnswBuildStatsRecord?,
     val pqStats: ProductQuantizationBuildStatsRecord?,
+    val turboquantStats: TurboQuantizationBuildStatsRecord?,
 )
 
 private fun CompositeBuildOutcomeRecord.portable() = CompositeBuildOutcome(
@@ -127,10 +141,12 @@ private fun CompositeBuildOrRebuildOutcomeRecord.portable() = CompositeBuildOrRe
     composite?.let(::CompositeAccelerator),
     hnsw?.let(::HnswIndex),
     pq?.let(::ProductQuantizer),
+    turboquant?.let(::TurboQuantizer),
     reasons,
     compositeStats,
     hnswStats,
     pqStats,
+    turboquantStats,
 )
 
 internal fun ownedSnapshotBundle(bundle: SnapshotBundleRecord): SnapshotBundleRecord {
@@ -793,6 +809,16 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
         return ProductQuantizationBuildResult(ProductQuantizer(result.index), result.stats)
     }
     fun loadPq(manifest: ByteArray) = ProductQuantizer(native.loadPq(manifest.copyOf()))
+    fun buildTurboquant(
+        config: TurboQuantizationConfigRecord = defaultTurboquantConfig(),
+        workerThreads: ULong = 1uL,
+        limits: TurboQuantizationBuildLimitsRecord = defaultTurboquantBuildLimits(),
+    ): TurboQuantizationBuildResult {
+        val result = native.buildTurboquant(config, workerThreads, limits)
+        return TurboQuantizationBuildResult(TurboQuantizer(result.index), result.stats)
+    }
+    fun loadTurboquant(manifest: ByteArray) =
+        TurboQuantizer(native.loadTurboquant(manifest.copyOf()))
     fun buildCompositeHnsw(
         baseMap: ProximityMap,
         base: HnswIndex,
@@ -805,6 +831,12 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
         config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
         limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
     ) = native.buildCompositePq(baseMap.native, base.native, config, limits).portable()
+    fun buildCompositeTurboquant(
+        baseMap: ProximityMap,
+        base: TurboQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+    ) = native.buildCompositeTurboquant(baseMap.native, base.native, config, limits).portable()
     fun buildOrRebuildCompositeHnsw(
         baseMap: ProximityMap,
         base: HnswIndex,
@@ -823,14 +855,26 @@ class ProximityMap(internal val native: BindingProximityMap) : AutoCloseable {
     ) = native.buildOrRebuildCompositePq(
         baseMap.native, base.native, config, limits, rebuild,
     ).portable()
+    fun buildOrRebuildCompositeTurboquant(
+        baseMap: ProximityMap,
+        base: TurboQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+        rebuild: CompositeRebuildOptionsRecord = defaultCompositeRebuildOptions(),
+    ) = native.buildOrRebuildCompositeTurboquant(
+        baseMap.native, base.native, config, limits, rebuild,
+    ).portable()
     fun loadComposite(manifest: ByteArray) =
         CompositeAccelerator(native.loadComposite(manifest.copyOf()))
     fun buildAcceleratorCatalog(
         hnsw: HnswIndex? = null,
         pq: ProductQuantizer? = null,
+        turboquant: TurboQuantizer? = null,
         composite: CompositeAccelerator? = null,
     ) = AcceleratorCatalog(
-        native.buildAcceleratorCatalog(hnsw?.native, pq?.native, composite?.native),
+        native.buildAcceleratorCatalog(
+            hnsw?.native, pq?.native, turboquant?.native, composite?.native,
+        ),
     )
     fun loadAcceleratorCatalog(manifest: ByteArray) =
         AcceleratorCatalog(native.loadAcceleratorCatalog(manifest.copyOf()))
@@ -965,6 +1009,47 @@ class ProductQuantizer(internal val native: BindingProductQuantizer) : AutoClose
     val sourceDescriptor: ByteArray get() = native.sourceDescriptor().copyOf()
     val config: ProductQuantizationConfigRecord get() = native.config()
     val quality: ProductQuantizationQualityRecord get() = native.quality()
+    fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
+        native.search(map.native, ownedSearchRequest(request))
+    fun searchWithRuntime(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime,
+    ): ProximitySearchResultRecord =
+        native.searchWithRuntime(map.native, ownedSearchRequest(request), runtime.native)
+    fun searchCancellable(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken,
+    ): ProximitySearchResultRecord = native.searchCancellable(
+        map.native, ownedSearchRequest(request), runtime?.native, cancellation.native,
+    )
+    suspend fun searchAsync(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = null,
+        cancellation: ProximityCancellationToken? = null,
+    ): ProximitySearchResultRecord {
+        val owned = ownedSearchRequest(request)
+        return cooperativeSearch(cancellation) { token ->
+            searchCancellable(map, owned, runtime, token)
+        }
+    }
+    fun proveSearch(
+        map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits(),
+    ) = ProximitySearchProof(native.proveSearch(map.native, ownedSearchRequest(request), limits))
+    override fun close() = native.close()
+}
+
+class TurboQuantizer(internal val native: BindingTurboQuantizer) : AutoCloseable {
+    val manifest: ByteArray get() = native.manifest().copyOf()
+    val sourceDescriptor: ByteArray get() = native.sourceDescriptor().copyOf()
+    val config: TurboQuantizationConfigRecord get() = native.config()
+    val quality: TurboQuantizationQualityRecord get() = native.quality()
+    fun verify(map: ProximityMap): TurboQuantizationVerificationRecord = native.verify(map.native)
     fun search(map: ProximityMap, request: ProximitySearchRequestRecord): ProximitySearchResultRecord =
         native.search(map.native, ownedSearchRequest(request))
     fun searchWithRuntime(

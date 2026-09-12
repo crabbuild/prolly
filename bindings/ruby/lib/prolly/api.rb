@@ -6,9 +6,11 @@ module Prolly
   ProximityRecord = Data.define(:key, :vector, :value)
   HnswBuildResult = Data.define(:index, :stats)
   ProductQuantizationBuildResult = Data.define(:index, :stats)
+  TurboQuantizationBuildResult = Data.define(:index, :stats)
   CompositeBuildOutcome = Data.define(:accelerator, :reasons, :stats)
   CompositeBuildOrRebuildOutcome = Data.define(
-    :kind, :composite, :hnsw, :pq, :reasons, :composite_stats, :hnsw_stats, :pq_stats
+    :kind, :composite, :hnsw, :pq, :turboquant, :reasons, :composite_stats,
+    :hnsw_stats, :pq_stats, :turboquant_stats
   )
   TypedEntry = Data.define(:key, :value)
   TypedMigrationResult = Data.define(:update, :scanned_values, :rewritten_values)
@@ -173,7 +175,8 @@ module Prolly
       kernel: request.kernel,
       backend: request.backend,
       hnsw_ef_search: request.hnsw_ef_search,
-      pq_rerank_multiplier: request.pq_rerank_multiplier
+      pq_rerank_multiplier: request.pq_rerank_multiplier,
+      turboquant_rerank_multiplier: request.turboquant_rerank_multiplier
     )
   end
 
@@ -958,6 +961,17 @@ module Prolly
       end
     end
     def load_pq(manifest) = open! { ProductQuantizer.new(@native.load_pq(manifest.b)) }
+    def build_turboquant(config: Prolly.default_turboquant_config, worker_threads: 1,
+                         limits: Prolly.default_turboquant_build_limits)
+      open! do
+        result = @native.build_turboquant(config, worker_threads, limits)
+        TurboQuantizationBuildResult.new(
+          index: TurboQuantizer.new(result.index),
+          stats: result.stats
+        )
+      end
+    end
+    def load_turboquant(manifest) = open! { TurboQuantizer.new(@native.load_turboquant(manifest.b)) }
     def build_composite_hnsw(base_map, base, config: Prolly.default_composite_accelerator_config,
                              limits: Prolly.default_composite_build_limits)
       open! do
@@ -984,16 +998,33 @@ module Prolly
         )
       end
     end
+    def build_composite_turboquant(
+      base_map, base, config: Prolly.default_composite_accelerator_config,
+      limits: Prolly.default_composite_build_limits
+    )
+      open! do
+        result = @native.build_composite_turboquant(
+          base_map.send(:native_for_accelerator), base.send(:native_for_composite), config, limits
+        )
+        CompositeBuildOutcome.new(
+          accelerator: result.accelerator && CompositeAccelerator.new(result.accelerator),
+          reasons: result.reasons,
+          stats: result.stats
+        )
+      end
+    end
     def portable_rebuild_outcome(result)
       CompositeBuildOrRebuildOutcome.new(
         kind: result.kind,
         composite: result.composite && CompositeAccelerator.new(result.composite),
         hnsw: result.hnsw && HnswIndex.new(result.hnsw),
         pq: result.pq && ProductQuantizer.new(result.pq),
+        turboquant: result.turboquant && TurboQuantizer.new(result.turboquant),
         reasons: result.reasons,
         composite_stats: result.composite_stats,
         hnsw_stats: result.hnsw_stats,
-        pq_stats: result.pq_stats
+        pq_stats: result.pq_stats,
+        turboquant_stats: result.turboquant_stats
       )
     end
     private :portable_rebuild_outcome
@@ -1025,13 +1056,28 @@ module Prolly
         )
       end
     end
+    def build_or_rebuild_composite_turboquant(
+      base_map, base, config: Prolly.default_composite_accelerator_config,
+      limits: Prolly.default_composite_build_limits,
+      rebuild: Prolly.default_composite_rebuild_options
+    )
+      open! do
+        portable_rebuild_outcome(
+          @native.build_or_rebuild_composite_turboquant(
+            base_map.send(:native_for_accelerator), base.send(:native_for_composite),
+            config, limits, rebuild
+          )
+        )
+      end
+    end
     def load_composite(manifest) = open! { CompositeAccelerator.new(@native.load_composite(manifest.b)) }
-    def build_accelerator_catalog(hnsw: nil, pq: nil, composite: nil)
+    def build_accelerator_catalog(hnsw: nil, pq: nil, turboquant: nil, composite: nil)
       open! do
         AcceleratorCatalog.new(
           @native.build_accelerator_catalog(
             hnsw&.send(:native_for_composite),
             pq&.send(:native_for_composite),
+            turboquant&.send(:native_for_composite),
             composite&.send(:native_for_composite)
           )
         )
@@ -1264,6 +1310,81 @@ module Prolly
 
     def open!
       raise 'product quantizer is closed' if @closed
+      yield
+    end
+  end
+
+  class TurboQuantizer
+    def initialize(native)
+      @native = native
+      @closed = false
+    end
+
+    def manifest = open! { @native.manifest }
+    def source_descriptor = open! { @native.source_descriptor }
+    def config = open! { @native.config }
+    def quality = open! { @native.quality }
+    def verify(map) = open! { @native.verify(map.send(:native_for_accelerator)) }
+    def search(map, request)
+      open! do
+        @native.search(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request)
+        )
+      end
+    end
+    def search_with_runtime(map, request, runtime)
+      open! do
+        @native.search_with_runtime(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime.send(:native_for_search)
+        )
+      end
+    end
+    def search_cancellable(map, request, cancellation:, runtime: nil)
+      open! do
+        @native.search_cancellable(
+          map.send(:native_for_accelerator), Prolly.owned_proximity_search_request(request),
+          runtime&.send(:native_for_search), cancellation.send(:native_for_search)
+        )
+      end
+    end
+    def search_async(map, request, runtime: nil, cancellation: nil)
+      owned = Prolly.owned_proximity_search_request(request)
+      token = cancellation || ProximityCancellationToken.new
+      Future.new(cancel: -> { token.cancel }) do
+        search_cancellable(map, owned, runtime: runtime, cancellation: token)
+      end
+    end
+    def prove_search(map, request, limits = Prolly.default_content_graph_limits)
+      open! do
+        ProximitySearchProof.new(
+          @native.prove_search(
+            map.send(:native_for_accelerator),
+            Prolly.owned_proximity_search_request(request),
+            limits
+          )
+        )
+      end
+    end
+    def close = @closed = true
+
+    def use
+      raise 'TurboQuantizer is closed' if @closed
+      return self unless block_given?
+
+      begin
+        yield self
+      ensure
+        close
+      end
+    end
+
+    private
+
+    def native_for_composite = open! { @native }
+
+    def open!
+      raise 'TurboQuantizer is closed' if @closed
       yield
     end
   end
