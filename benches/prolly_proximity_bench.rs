@@ -9,8 +9,9 @@ use prolly::{
 };
 #[cfg(feature = "async-store")]
 use prolly::{
-    AsyncAcceleratorSet, AsyncProductQuantizer, AsyncProximityMap, AsyncSearchControl,
-    AsyncTurboQuantizer, SyncStoreAsAsync,
+    AsyncAcceleratorBuildOptions, AsyncAcceleratorCatalog, AsyncAcceleratorSet,
+    AsyncProductQuantizer, AsyncProductQuantizerBuild, AsyncProximityMap, AsyncSearchControl,
+    AsyncTurboQuantizer, AsyncTurboQuantizerBuild, SyncStoreAsAsync,
 };
 use std::collections::HashSet;
 #[cfg(feature = "async-store")]
@@ -623,6 +624,18 @@ fn bench_accelerators<S>(
             .zip(canonical.map(|(_, stats)| stats))
             .expect("validated worker list is non-empty");
         let turboquant_manifest = turboquant.manifest_cid().clone();
+        #[cfg(feature = "async-store")]
+        if options.async_quantizers {
+            bench_async_turboquant_builds(
+                map,
+                store.clone(),
+                workers,
+                turboquant_config,
+                &turboquant_manifest,
+                &stats,
+                dimensions,
+            );
+        }
         let sidecar = derived_closure_size(
             &store,
             map.tree().descriptor.clone(),
@@ -799,6 +812,18 @@ fn bench_accelerators<S>(
         .zip(canonical.map(|(_, stats)| stats))
         .expect("validated worker list is non-empty");
     let pq_manifest = pq.manifest_cid().clone();
+    #[cfg(feature = "async-store")]
+    if options.async_quantizers {
+        bench_async_pq_builds(
+            map,
+            store.clone(),
+            workers,
+            &pq_config,
+            &pq_manifest,
+            &stats,
+            dimensions,
+        );
+    }
     let sidecar = derived_closure_size(
         &store,
         map.tree().descriptor.clone(),
@@ -1006,6 +1031,154 @@ struct AsyncQuantizerBenchCase<'a> {
     k: usize,
     dimensions: usize,
     options: SearchBenchOptions<'a>,
+}
+
+#[cfg(feature = "async-store")]
+fn bench_async_turboquant_builds<S>(
+    map: &ProximityMap<S>,
+    store: S,
+    workers: &[usize],
+    config: &TurboQuantizationConfig,
+    expected_manifest: &Cid,
+    expected_stats: &prolly::TurboQuantizationBuildStats,
+    dimensions: usize,
+) where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let async_store = SyncStoreAsAsync::new(store);
+    let async_map = block_on(AsyncProximityMap::load(
+        async_store,
+        map.tree().descriptor.clone(),
+    ))
+    .unwrap();
+    for &worker_count in workers {
+        let started = Instant::now();
+        let (catalog, build_stats) = block_on(AsyncAcceleratorCatalog::build(
+            &async_map,
+            AsyncAcceleratorBuildOptions {
+                turboquant: Some(AsyncTurboQuantizerBuild {
+                    config: config.clone(),
+                    parallelism: BuildParallelism::new(worker_count).unwrap(),
+                    limits: Default::default(),
+                }),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
+        let duration = started.elapsed();
+        let stats = build_stats
+            .turboquant
+            .expect("async TurboQuant build must return logical statistics");
+        assert_eq!(
+            &stats, expected_stats,
+            "async TurboQuant logical build statistics differ from sync"
+        );
+        assert_eq!(
+            catalog.entries().len(),
+            1,
+            "single-accelerator async build returned an unexpected catalog"
+        );
+        assert_eq!(
+            &catalog.entries()[0].manifest,
+            expected_manifest,
+            "async TurboQuant manifest differs from sync"
+        );
+        row(
+            "turboquant_build_async",
+            dimensions,
+            worker_count,
+            duration,
+            stats.transformed_components,
+            stats.encoded_output_bytes,
+        );
+        row(
+            "turboquant_build_async_resources",
+            dimensions,
+            worker_count,
+            Duration::ZERO,
+            stats.peak_temporary_bytes,
+            stats.butterfly_operations,
+        );
+        row(
+            "turboquant_build_async_publication",
+            dimensions,
+            worker_count,
+            Duration::ZERO,
+            build_stats.objects_published,
+            build_stats.bytes_published,
+        );
+    }
+}
+
+#[cfg(feature = "async-store")]
+fn bench_async_pq_builds<S>(
+    map: &ProximityMap<S>,
+    store: S,
+    workers: &[usize],
+    config: &ProductQuantizationConfig,
+    expected_manifest: &Cid,
+    expected_stats: &prolly::ProductQuantizationBuildStats,
+    dimensions: usize,
+) where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let async_store = SyncStoreAsAsync::new(store);
+    let async_map = block_on(AsyncProximityMap::load(
+        async_store,
+        map.tree().descriptor.clone(),
+    ))
+    .unwrap();
+    for &worker_count in workers {
+        let started = Instant::now();
+        let (catalog, build_stats) = block_on(AsyncAcceleratorCatalog::build(
+            &async_map,
+            AsyncAcceleratorBuildOptions {
+                product_quantizer: Some(AsyncProductQuantizerBuild {
+                    config: config.clone(),
+                    parallelism: BuildParallelism::new(worker_count).unwrap(),
+                    limits: Default::default(),
+                }),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
+        let duration = started.elapsed();
+        let stats = build_stats
+            .product_quantizer
+            .expect("async PQ build must return logical statistics");
+        assert_eq!(
+            &stats, expected_stats,
+            "async PQ logical build statistics differ from sync"
+        );
+        assert_eq!(
+            catalog.entries().len(),
+            1,
+            "single-accelerator async build returned an unexpected catalog"
+        );
+        assert_eq!(
+            &catalog.entries()[0].manifest,
+            expected_manifest,
+            "async PQ manifest differs from sync"
+        );
+        row(
+            "pq_build_async",
+            dimensions,
+            worker_count,
+            duration,
+            stats.training_distance_evaluations,
+            stats.encoded_vectors,
+        );
+        row(
+            "pq_build_async_publication",
+            dimensions,
+            worker_count,
+            Duration::ZERO,
+            build_stats.objects_published,
+            build_stats.bytes_published,
+        );
+    }
 }
 
 #[cfg(feature = "async-store")]

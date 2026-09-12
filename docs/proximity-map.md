@@ -533,11 +533,12 @@ directory on ordinary exit; a process interruption may leave that child for
 diagnosis.
 
 Set `PROLLY_PROXIMITY_BENCH_ASYNC_QUANTIZERS=1` to add async TurboQuant and PQ
-search, percentile/work, and recall rows. Warm measurements reuse one
-authenticated runtime after an untimed warmup; combining it with
+build/publication, search, percentile/work, and recall rows. Each async build
+asserts manifest and logical-statistic identity with the synchronous build for
+every requested worker count. Warm measurements reuse one authenticated
+runtime after an untimed warmup; combining the option with
 `PROLLY_PROXIMITY_BENCH_RESET_SEARCH_CACHE=1` reloads the source and sidecar in
-a fresh runtime inside every timed sample. This option measures async/batched
-search only; the emitted quantizer build timings remain synchronous.
+a fresh runtime inside every timed sample.
 
 Benchmark rows are machine-specific evidence, not performance guarantees. See
 [`proximity-map-completion-audit.md`](proximity-map-completion-audit.md)
