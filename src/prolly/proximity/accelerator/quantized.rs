@@ -76,9 +76,13 @@ where
     stats.bytes_read = stats.bytes_read.saturating_add(code.len());
     stats.committed_bytes = stats.committed_bytes.saturating_add(code.len());
     stats.quantized_distance_evaluations += 1;
-    approximate.push(QuantizedRanked { distance, key });
-    if approximate.len() > target {
-        approximate.pop();
+    let candidate = QuantizedRanked { distance, key };
+    if approximate.len() < target {
+        approximate.push(candidate);
+    } else if target != 0 && approximate.peek().is_some_and(|worst| candidate < *worst) {
+        *approximate
+            .peek_mut()
+            .expect("non-empty quantized candidate heap") = candidate;
     }
     stats.frontier_peak = stats.frontier_peak.max(approximate.len());
     Ok(true)
@@ -179,6 +183,7 @@ mod tests {
             (b"c".to_vec(), 1.0),
             (b"a".to_vec(), 1.0),
             (b"b".to_vec(), 0.5),
+            (b"d".to_vec(), 2.0),
         ] {
             assert!(
                 admit_quantized(key, &[0], 2, &request, &mut stats, &mut heap, |_| Ok(score),)
@@ -191,5 +196,21 @@ mod tests {
         assert_eq!(retained[0].key, b"b");
         assert_eq!(retained[1].key, b"a");
         assert_eq!(stats.frontier_peak, 2);
+
+        let mut empty = BinaryHeap::new();
+        let mut empty_stats = ProximitySearchStats::default();
+        assert!(admit_quantized(
+            b"ignored".to_vec(),
+            &[0],
+            0,
+            &request,
+            &mut empty_stats,
+            &mut empty,
+            |_| Ok(0.0),
+        )
+        .unwrap());
+        assert!(empty.is_empty());
+        assert_eq!(empty_stats.frontier_peak, 0);
+        assert_eq!(empty_stats.quantized_distance_evaluations, 1);
     }
 }
