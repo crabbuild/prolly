@@ -10,8 +10,10 @@ complete production qualification, and they keep `Auto` selection disabled.
 ## Environment and contract
 
 - Date: 2026-09-12
-- Revisions: default 8× cells at
-  `43a6c55564df2750e77298542a490dec9baa6ff9`; 16× diagnostics at
+- Revisions: default 8× squared-L2 cells at
+  `f08e7dfa604bcc4bfd1c406d4c5e4dfcc8550d09`, default 8× cosine and
+  inner-product cells at `43a6c55564df2750e77298542a490dec9baa6ff9`, and
+  16× diagnostics at
   `8966204c11d3bf73173ea2f1354002344582d5b2`
 - Qualification schema: `prolly-turboquant-qualification-v3`
 - Benchmark schema: 3
@@ -35,10 +37,10 @@ its benchmark.
 
 | Records | Metric | TQ recall@10 | PQ recall@10 | TQ median | PQ median | TQ warm p95 | PQ warm p95 |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10K | Squared L2 | 1.00 | 1.00 | 16,363.959 µs | 1,420.000 µs | 16,875.125 µs | 1,518.458 µs |
+| 10K | Squared L2 | 1.00 | 1.00 | 9,078.458 µs | 1,362.500 µs | 9,467.416 µs | 1,555.000 µs |
 | 10K | Cosine | 0.00 | 0.50 | 8,839.292 µs | 1,418.292 µs | 9,126.667 µs | 1,648.667 µs |
 | 10K | Inner product | 0.00 | 0.00 | 8,633.792 µs | 1,382.125 µs | 9,063.250 µs | 1,517.000 µs |
-| 100K | Squared L2 | 1.00 | 0.00 | 192,500.708 µs | 12,693.292 µs | 213,825.000 µs | 13,674.708 µs |
+| 100K | Squared L2 | 1.00 | 0.00 | 112,362.791 µs | 21,696.166 µs | 116,111.541 µs | 40,152.750 µs |
 | 100K | Cosine | 0.00 | 0.00 | 117,354.375 µs | 13,170.208 µs | 121,304.333 µs | 14,027.917 µs |
 | 100K | Inner product | 0.00 | 0.00 | 120,492.667 µs | 12,583.125 µs | 130,040.000 µs | 13,219.042 µs |
 
@@ -51,9 +53,20 @@ enforced by regression test, but its fixed 80-candidate shortlist still misses
 the exact neighbors on this dataset. Inner product has the same shortlist
 quality failure.
 
-TurboQuant search is 11.52×/6.23×/6.25× PQ at the median and
-11.11×/5.54×/5.97× at p95 for 10K L2/cosine/inner product. At 100K it is
-15.17×/8.91×/9.58× at the median and 15.64×/8.65×/9.84× at p95.
+TurboQuant search is 6.66×/6.23×/6.25× PQ at the median and
+6.09×/5.54×/5.97× at p95 for 10K L2/cosine/inner product. At 100K it is
+5.18×/8.91×/9.58× at the median and 2.89×/8.65×/9.84× at p95.
+Absolute and paired ratios are individual development-host observations; the
+logical counters and gate disposition are deterministic.
+
+The corrected L2 scorer initially decoded every packed code twice: once for
+the query dot product and again for the reconstruction norm. The retained
+current scorer precomputes the finite centroid-square table once per query and
+accumulates both values in the same coordinate-ordered packed-code traversal.
+Relative to the retained two-pass baseline, this reduces TurboQuant L2 median
+search time by 44.52% at 10K and 41.63% at 100K, and p95 by 43.90% and 45.70%,
+without changing score bits, recall, sidecar bytes, candidates, I/O,
+completion, rerank work, or any logical statistic.
 
 The TurboQuant sidecar is 3,975,264 bytes at 10K and 39,757,465 bytes at
 100K, respectively 22.79× and 30.43× the matching PQ sidecar. The 100K
@@ -80,10 +93,10 @@ frozen default from 8× to 16× as a sufficient cosine/inner-product remedy.
 
 | Records | Metric | TQ/PQ build time, 1 worker | 2 workers | 4 workers |
 | ---: | --- | ---: | ---: | ---: |
-| 10K | Squared L2 | 33.18% | 28.65% | 26.38% |
+| 10K | Squared L2 | 30.91% | 25.32% | 23.14% |
 | 10K | Cosine | 31.11% | 31.90% | 45.59% |
 | 10K | Inner product | 31.01% | 24.96% | 24.31% |
-| 100K | Squared L2 | 36.20% | 37.62% | 41.01% |
+| 100K | Squared L2 | 31.94% | 36.71% | 31.68% |
 | 100K | Cosine | 38.24% | 36.86% | 31.32% |
 | 100K | Inner product | 33.60% | 35.78% | 40.90% |
 

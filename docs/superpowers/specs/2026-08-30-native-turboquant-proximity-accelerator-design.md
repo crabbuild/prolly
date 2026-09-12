@@ -542,7 +542,9 @@ InnerProduct = -approx_dot
 The L2 reconstruction norm is derived deterministically from the packed codes.
 It cannot be replaced by one: a particular Lloyd–Max reconstruction is not
 exactly unit length, and that substitution would no longer rank by squared
-distance to the reconstructed source vector.
+distance to the reconstructed source vector. Implementations accumulate the
+dot product and this norm in the same coordinate-ordered packed-code traversal;
+they must not decode the complete code a second time.
 
 Small negative L2 estimates caused by approximation or rounding are clamped to
 positive zero for candidate ordering. This clamp affects routing only.

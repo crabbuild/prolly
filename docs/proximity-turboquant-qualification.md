@@ -378,5 +378,8 @@ scoring restores squared-L2 recall to 1.00 at both scales. Cosine and inner
 product remain at 0.00 recall, and every row exceeds the 1.25× PQ warm-p95
 ceiling. Matching 16× cosine and inner-product diagnostics also fail every
 TurboQuant recall floor, ruling out that approved larger shortlist as a
-sufficient fix. These failures keep `Auto` and forced-backend GA closed; 45,350
-schema-v3 cells and the other release gates remain open.
+sufficient fix. Fusing the corrected L2 dot-product and reconstruction-norm
+work into one packed-code pass reduces the retained TurboQuant median by
+44.52% at 10K and 41.63% at 100K with bit-identical scores and unchanged
+logical counters. These failures keep `Auto` and forced-backend GA closed;
+45,350 schema-v3 cells and the other release gates remain open.
