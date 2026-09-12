@@ -354,17 +354,14 @@ fn turboquant_repeated_equal_errors_persist_valid_quality() {
             value: vec![38],
         })
         .collect::<Vec<_>>();
-    let map = ProximityMap::build(store.clone(), map_config, source).unwrap();
-    let (index, _) = TurboQuantizer::build(
-        &map,
-        TurboQuantizationConfig {
-            bit_width: 4,
-            rerank_multiplier: 7,
-            seed: u64::from_le_bytes([38; 8]),
-        },
-        BuildParallelism::serial(),
-    )
-    .unwrap();
+    let map = ProximityMap::build(store.clone(), map_config.clone(), source.clone()).unwrap();
+    let config = TurboQuantizationConfig {
+        bit_width: 4,
+        rerank_multiplier: 7,
+        seed: u64::from_le_bytes([38; 8]),
+    };
+    let (index, _) =
+        TurboQuantizer::build(&map, config.clone(), BuildParallelism::serial()).unwrap();
 
     assert_eq!(
         index.quality().mean_squared_error.to_bits(),
@@ -373,6 +370,52 @@ fn turboquant_repeated_equal_errors_persist_valid_quality() {
     assert_eq!(index.verify(&map).unwrap().quality, index.quality());
     let reopened = TurboQuantizer::load(store, index.manifest_cid().clone()).unwrap();
     assert_eq!(reopened.quality(), index.quality());
+
+    #[cfg(feature = "async-store")]
+    {
+        use prolly::{AsyncProximityMap, AsyncTurboQuantizer, SyncStoreAsAsync};
+        use std::future::Future;
+        use std::task::{Context, Poll};
+
+        fn block_on<F: Future>(future: F) -> F::Output {
+            let waker = futures_util::task::noop_waker();
+            let mut context = Context::from_waker(&waker);
+            let mut future = Box::pin(future);
+            loop {
+                match future.as_mut().poll(&mut context) {
+                    Poll::Ready(value) => return value,
+                    Poll::Pending => std::thread::yield_now(),
+                }
+            }
+        }
+
+        block_on(async {
+            let backing = Arc::new(MemStore::new());
+            let async_store = SyncStoreAsAsync::new(backing);
+            let async_map = AsyncProximityMap::build(async_store.clone(), map_config, source)
+                .await
+                .unwrap();
+            let (async_index, _) =
+                AsyncTurboQuantizer::build(&async_map, config, BuildParallelism::new(2).unwrap())
+                    .await
+                    .unwrap();
+            assert_eq!(async_index.manifest_cid(), index.manifest_cid());
+            assert_eq!(async_index.quality(), index.quality());
+            assert_eq!(
+                async_index
+                    .verify(&async_map, &ContentGraphLimits::default())
+                    .await
+                    .unwrap()
+                    .quality,
+                index.quality(),
+            );
+            let async_reopened =
+                AsyncTurboQuantizer::load(&async_store, async_index.manifest_cid().clone())
+                    .await
+                    .unwrap();
+            assert_eq!(async_reopened.quality(), index.quality());
+        });
+    }
 }
 
 #[test]
