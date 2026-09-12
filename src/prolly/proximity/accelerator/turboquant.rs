@@ -1363,7 +1363,7 @@ pub(crate) fn score_code_value(
         kernel,
         QueryKernel::ScalarDeterministic | QueryKernel::AutoDeterministic
     ) {
-        norm * score_precomputed_centroids(packed, prepared_query, dimensions, bit_width)
+        norm * score_precomputed_centroids(packed, prepared_query, bit_width)
     } else {
         let codebook = codebook(bit_width);
         const PRODUCT_SLOTS: usize = 64;
@@ -1407,56 +1407,48 @@ pub(crate) fn score_code_value(
 fn score_precomputed_centroids(
     packed: &[u8],
     prepared: &TurboQuantPreparedQuery,
-    dimensions: usize,
     bit_width: u8,
 ) -> f64 {
     let centroid_count = 1usize << bit_width;
     debug_assert_eq!(prepared.centroid_count, centroid_count);
     debug_assert_eq!(
         prepared.weighted_centroids.len(),
-        dimensions * centroid_count
+        prepared.weighted.len() * centroid_count
     );
     let products = &prepared.weighted_centroids;
     let mut reduced = 0.0;
     match bit_width {
         2 => {
-            for (group, byte) in packed.iter().copied().enumerate() {
-                let coordinate = group * 4;
-                reduced += products[coordinate * centroid_count + usize::from(byte & 0x03)];
-                reduced +=
-                    products[(coordinate + 1) * centroid_count + usize::from((byte >> 2) & 0x03)];
-                reduced +=
-                    products[(coordinate + 2) * centroid_count + usize::from((byte >> 4) & 0x03)];
-                reduced += products[(coordinate + 3) * centroid_count + usize::from(byte >> 6)];
+            const ROW_GROUP: usize = 4 * (1 << 2);
+            for (rows, byte) in products.chunks_exact(ROW_GROUP).zip(packed.iter().copied()) {
+                reduced += rows[usize::from(byte & 0x03)];
+                reduced += rows[4 + usize::from((byte >> 2) & 0x03)];
+                reduced += rows[8 + usize::from((byte >> 4) & 0x03)];
+                reduced += rows[12 + usize::from(byte >> 6)];
             }
         }
         3 => {
-            for (group, bytes) in packed.chunks_exact(3).enumerate() {
+            const CENTROIDS: usize = 1 << 3;
+            const ROW_GROUP: usize = 8 * CENTROIDS;
+            for (rows, bytes) in products.chunks_exact(ROW_GROUP).zip(packed.chunks_exact(3)) {
                 let codes =
                     u32::from(bytes[0]) | (u32::from(bytes[1]) << 8) | (u32::from(bytes[2]) << 16);
-                let coordinate = group * 8;
-                reduced += products[coordinate * centroid_count + (codes & 0x07) as usize];
-                reduced +=
-                    products[(coordinate + 1) * centroid_count + ((codes >> 3) & 0x07) as usize];
-                reduced +=
-                    products[(coordinate + 2) * centroid_count + ((codes >> 6) & 0x07) as usize];
-                reduced +=
-                    products[(coordinate + 3) * centroid_count + ((codes >> 9) & 0x07) as usize];
-                reduced +=
-                    products[(coordinate + 4) * centroid_count + ((codes >> 12) & 0x07) as usize];
-                reduced +=
-                    products[(coordinate + 5) * centroid_count + ((codes >> 15) & 0x07) as usize];
-                reduced +=
-                    products[(coordinate + 6) * centroid_count + ((codes >> 18) & 0x07) as usize];
-                reduced +=
-                    products[(coordinate + 7) * centroid_count + ((codes >> 21) & 0x07) as usize];
+                reduced += rows[(codes & 0x07) as usize];
+                reduced += rows[CENTROIDS + ((codes >> 3) & 0x07) as usize];
+                reduced += rows[2 * CENTROIDS + ((codes >> 6) & 0x07) as usize];
+                reduced += rows[3 * CENTROIDS + ((codes >> 9) & 0x07) as usize];
+                reduced += rows[4 * CENTROIDS + ((codes >> 12) & 0x07) as usize];
+                reduced += rows[5 * CENTROIDS + ((codes >> 15) & 0x07) as usize];
+                reduced += rows[6 * CENTROIDS + ((codes >> 18) & 0x07) as usize];
+                reduced += rows[7 * CENTROIDS + ((codes >> 21) & 0x07) as usize];
             }
         }
         4 => {
-            for (group, byte) in packed.iter().copied().enumerate() {
-                let coordinate = group * 2;
-                reduced += products[coordinate * centroid_count + usize::from(byte & 0x0f)];
-                reduced += products[(coordinate + 1) * centroid_count + usize::from(byte >> 4)];
+            const CENTROIDS: usize = 1 << 4;
+            const ROW_GROUP: usize = 2 * CENTROIDS;
+            for (rows, byte) in products.chunks_exact(ROW_GROUP).zip(packed.iter().copied()) {
+                reduced += rows[usize::from(byte & 0x0f)];
+                reduced += rows[CENTROIDS + usize::from(byte >> 4)];
             }
         }
         _ => unreachable!("validated TurboQuant bit width"),
