@@ -34,7 +34,7 @@ not replace the production-scale recall and performance matrix below.
 | Requirement | Evidence | Status |
 | --- | --- | --- |
 | Frozen PRNG, transform, codebook, packing, and wire bytes | `conformance/proximity-fixtures.json`, `scripts/generate_turboquant_codebooks.py`, TurboQuant unit tests, `tests/proximity_wire.rs` | Implemented |
-| Source-bound canonical build and validation | `src/prolly/proximity/accelerator/turboquant.rs`, `tests/proximity_turboquant.rs` | Implemented |
+| Source-bound canonical build and validation | `src/prolly/proximity/accelerator/turboquant.rs`, sync/async trusted-open root-count unit tests, `tests/proximity_turboquant.rs` | Implemented |
 | Authoritative exact reranking and bounded candidate admission | `src/prolly/proximity/accelerator/quantized.rs`, TurboQuant/PQ search tests | Implemented |
 | Scalar/SIMD bit identity | `src/prolly/proximity/distance/simd.rs`, TurboQuant unit tests | Implemented |
 | Sync/async, catalog, composite, proof, content graph, and GC integration | focused proximity accelerator, async, proof, and content-graph tests, including `turboquant_async_cancellation_covers_every_store_read_boundary` for full-scan/direct-lookup/final-rerank cancellation and zero-I/O pre-cancellation, explicit deadline completion, and typed rejection of old proof versions before closure work | Implemented |

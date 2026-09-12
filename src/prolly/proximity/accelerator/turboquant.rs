@@ -12,6 +12,7 @@ use crate::prolly::cid::Cid;
 use crate::prolly::config::Config;
 use crate::prolly::encoding::Encoding;
 use crate::prolly::error::Error;
+use crate::prolly::node::Node;
 use crate::prolly::proximity::accelerator::quantized::{
     admit_quantized, rerank_authoritative, QuantizedRanked,
 };
@@ -498,7 +499,9 @@ where
             root: Some(object.code_root),
             config: turboquant_code_tree_config(),
         };
-        load_content(&store, code_tree.root.as_ref().expect("manifest code root"))?;
+        let root_bytes =
+            load_content(&store, code_tree.root.as_ref().expect("manifest code root"))?;
+        validate_code_tree_root(&root_bytes, object.count)?;
         Ok(Self {
             codes: Prolly::new(store, code_tree.config.clone()),
             code_tree,
@@ -1589,6 +1592,37 @@ pub(crate) fn turboquant_code_tree_config() -> Config {
         .build()
 }
 
+pub(crate) fn validate_code_tree_root(bytes: &[u8], expected_count: u64) -> Result<(), Error> {
+    let config = turboquant_code_tree_config();
+    let hard_max = usize::try_from(config.format.chunking.hard_max_node_bytes)
+        .map_err(|_| invalid_object("TurboQuant code-tree hard byte limit exceeds usize"))?;
+    if bytes.len() > hard_max {
+        return Err(invalid_object(
+            "TurboQuant code-tree root exceeds its hard byte limit",
+        ));
+    }
+    let root = Node::from_bytes_with_format(bytes, &config.format)
+        .map_err(|_| invalid_object("malformed TurboQuant code-tree root"))?;
+    root.validate()
+        .map_err(|_| invalid_object("malformed TurboQuant code-tree root"))?;
+    let actual_count = if root.leaf {
+        u64::try_from(root.len())
+            .map_err(|_| invalid_object("TurboQuant code-tree root count exceeds u64"))?
+    } else {
+        root.child_counts.iter().try_fold(0u64, |count, child| {
+            count
+                .checked_add(*child)
+                .ok_or_else(|| invalid_object("TurboQuant code-tree root count overflow"))
+        })?
+    };
+    if actual_count != expected_count {
+        return Err(invalid_object(
+            "TurboQuant code-tree root count disagrees with manifest",
+        ));
+    }
+    Ok(())
+}
+
 fn require_version(found: u8) -> Result<(), Error> {
     if found == TURBOQUANT_FORMAT_VERSION {
         Ok(())
@@ -1660,6 +1694,48 @@ fn invalid_search(reason: impl Into<String>) -> Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prolly::store::MemStore;
+    use std::sync::Arc;
+
+    fn mismatched_root_count_fixture() -> (Arc<MemStore>, Cid) {
+        let store = Arc::new(MemStore::new());
+        let config = turboquant_code_tree_config();
+        let root = Node {
+            keys: vec![b"only-code".to_vec()],
+            vals: vec![vec![0; 8 + packed_len(8, 4).unwrap()]],
+            child_counts: Vec::new(),
+            leaf: true,
+            level: 0,
+            format: config.format,
+        };
+        let root_bytes = root.to_bytes();
+        let code_root = Cid::from_bytes(&root_bytes);
+        Store::put(&store, code_root.as_bytes(), &root_bytes).unwrap();
+        let manifest = Manifest {
+            source: Cid::from_bytes(b"source"),
+            dimensions: 8,
+            metric: DistanceMetric::L2Squared,
+            count: 2,
+            config: TurboQuantizationConfig::default(),
+            transform_id: STRUCTURED_ROTATION_ID,
+            codebook_id: NORMAL_LLOYD_MAX_CODEBOOK_ID,
+            code_root,
+            quality: TurboQuantizationQuality::default(),
+            zero_vectors: 0,
+        };
+        let manifest_bytes = manifest.encode().unwrap();
+        let manifest_cid = Cid::from_bytes(&manifest_bytes);
+        Store::put(&store, manifest_cid.as_bytes(), &manifest_bytes).unwrap();
+        (store, manifest_cid)
+    }
+
+    fn assert_root_count_error(error: Error) {
+        assert!(matches!(
+            error,
+            Error::InvalidProximityObject { kind: "TurboQuant", reason }
+                if reason == "TurboQuant code-tree root count disagrees with manifest"
+        ));
+    }
 
     #[test]
     fn splitmix64_v1_is_frozen() {
@@ -1670,6 +1746,45 @@ mod tests {
         assert_eq!(multiply_high(u64::MAX, 1), 0);
         assert_eq!(multiply_high(u64::MAX, u64::MAX), u64::MAX - 1);
         assert_eq!(multiply_high(0x8000_0000_0000_0000, 8), 4);
+    }
+
+    #[test]
+    fn load_rejects_a_code_tree_root_count_that_disagrees_with_the_manifest() {
+        let (store, manifest_cid) = mismatched_root_count_fixture();
+        let error = match TurboQuantizer::load(store, manifest_cid) {
+            Ok(_) => panic!("mismatched TurboQuant root count loaded"),
+            Err(error) => error,
+        };
+        assert_root_count_error(error);
+    }
+
+    #[cfg(feature = "async-store")]
+    #[test]
+    fn async_load_rejects_a_code_tree_root_count_that_disagrees_with_the_manifest() {
+        use crate::prolly::proximity::AsyncTurboQuantizer;
+        use crate::prolly::store::SyncStoreAsAsync;
+        use std::future::Future;
+        use std::task::{Context, Poll};
+
+        fn block_on<F: Future>(future: F) -> F::Output {
+            let waker = futures_util::task::noop_waker();
+            let mut context = Context::from_waker(&waker);
+            let mut future = Box::pin(future);
+            loop {
+                match future.as_mut().poll(&mut context) {
+                    Poll::Ready(value) => return value,
+                    Poll::Pending => std::thread::yield_now(),
+                }
+            }
+        }
+
+        let (store, manifest_cid) = mismatched_root_count_fixture();
+        let store = SyncStoreAsAsync::new(store);
+        let error = match block_on(AsyncTurboQuantizer::load(&store, manifest_cid)) {
+            Ok(_) => panic!("mismatched async TurboQuant root count loaded"),
+            Err(error) => error,
+        };
+        assert_root_count_error(error);
     }
 
     #[test]

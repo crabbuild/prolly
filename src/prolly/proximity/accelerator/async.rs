@@ -21,7 +21,8 @@ use super::turboquant::config_fingerprint as turboquant_fingerprint;
 use super::turboquant::{
     codebook as turboquant_codebook, encode_vector_reusing, enforce_resource,
     invalid_object as invalid_turboquant_object, packed_len as turboquant_packed_len,
-    resource_limit as turboquant_resource_limit, turboquant_code_tree_config, EncodingScratch,
+    resource_limit as turboquant_resource_limit, turboquant_code_tree_config,
+    validate_code_tree_root as validate_turboquant_code_tree_root, EncodingScratch,
     Manifest as TurboQuantManifest, StructuredRotation, TurboQuantizationBuildLimits,
     TurboQuantizationBuildStats, TurboQuantizationConfig, TurboQuantizer,
 };
@@ -919,7 +920,8 @@ impl AsyncTurboQuantizer {
         let bytes = load_content(store, &manifest).await?;
         let object = TurboQuantManifest::decode(&bytes)?;
         object.config.validate(object.dimensions)?;
-        load_content(store, &object.code_root).await?;
+        let root_bytes = load_content(store, &object.code_root).await?;
+        validate_turboquant_code_tree_root(&root_bytes, object.count)?;
         Ok(Self {
             manifest,
             source: object.source,
