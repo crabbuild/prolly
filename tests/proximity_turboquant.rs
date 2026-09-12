@@ -1518,3 +1518,320 @@ fn turboquant_async_build_streams_canonical_codes_in_bounded_publications() {
         assert!(bounded.maximum_batch.load(Ordering::SeqCst) <= 2);
     });
 }
+
+#[cfg(feature = "async-store")]
+#[test]
+fn turboquant_async_composite_streams_the_structural_delta_canonically() {
+    use prolly::{
+        walk_content_graph_async, AsyncAcceleratorSet, AsyncCompositeAccelerator,
+        AsyncCompositeBuildOptions, AsyncCompositeBuildOutcome, AsyncProximityMap,
+        AsyncSearchControl, AsyncTurboQuantizer, CompositeAccelerator, CompositeAcceleratorConfig,
+        CompositeBase, CompositeBuildLimits, CompositeBuildOutcome, ProximityMutation, SearchIo,
+        SearchRuntime,
+    };
+    use std::future::Future;
+    use std::task::{Context, Poll};
+
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let waker = futures_util::task::noop_waker();
+        let mut context = Context::from_waker(&waker);
+        let mut future = Box::pin(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(value) => return value,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    let source = records(129, 128);
+    let replacement_vector = vec![2.5; 128];
+    let inserted_vector = vec![-1.25; 128];
+    let mutations = vec![
+        ProximityMutation {
+            key: b"vector-0001".to_vec(),
+            value: None,
+        },
+        ProximityMutation {
+            key: b"vector-0021".to_vec(),
+            value: Some((replacement_vector.clone(), b"vector-updated".to_vec())),
+        },
+        ProximityMutation {
+            key: b"vector-0030".to_vec(),
+            value: Some((source[30].vector.clone(), b"value-only".to_vec())),
+        },
+        ProximityMutation {
+            key: b"vector-9999".to_vec(),
+            value: Some((inserted_vector.clone(), b"inserted".to_vec())),
+        },
+    ];
+    let quantizer_config = TurboQuantizationConfig {
+        rerank_multiplier: 256,
+        seed: 97,
+        ..TurboQuantizationConfig::default()
+    };
+
+    let sync_store = Arc::new(MemStore::new());
+    let sync_base = ProximityMap::build(
+        sync_store.clone(),
+        ProximityConfig::new(128),
+        source.clone(),
+    )
+    .unwrap();
+    let (sync_current, _) = sync_base.mutate_batch(mutations.clone()).unwrap();
+    let (sync_quantizer, _) = TurboQuantizer::build(
+        &sync_base,
+        quantizer_config.clone(),
+        BuildParallelism::new(3).unwrap(),
+    )
+    .unwrap();
+    let (sync_composite, sync_stats) = match CompositeAccelerator::build(
+        &sync_base,
+        &sync_current,
+        CompositeBase::TurboQuantized(sync_quantizer),
+        CompositeAcceleratorConfig::default(),
+        CompositeBuildLimits::default(),
+    )
+    .unwrap()
+    {
+        CompositeBuildOutcome::Composite { accelerator, stats } => (accelerator, stats),
+        CompositeBuildOutcome::FullRebuildRequired { reasons, .. } => {
+            panic!("small TurboQuant delta unexpectedly required rebuild: {reasons:?}")
+        }
+    };
+    let sync_manifest = sync_composite.manifest_cid().clone();
+    let sync_set = AcceleratorSet::empty()
+        .with_composite(sync_current.tree(), *sync_composite)
+        .unwrap();
+    let mut sync_request = SearchRequest::exact(&inserted_vector, 11);
+    sync_request.policy = SearchPolicy::FixedBudget;
+    sync_request.options.backend = SearchBackend::Composite;
+    let expected = sync_current
+        .search_with(
+            &sync_set,
+            &SearchIo::new(sync_store, Arc::new(SearchRuntime::default())),
+            sync_request.clone(),
+        )
+        .unwrap();
+
+    block_on(async {
+        let backing = Arc::new(MemStore::new());
+        let store = PublicationBoundAsyncStore::new(backing);
+        let async_base = AsyncProximityMap::build(store.clone(), ProximityConfig::new(128), source)
+            .await
+            .unwrap();
+        let (async_quantizer, _) = AsyncTurboQuantizer::build(
+            &async_base,
+            quantizer_config,
+            BuildParallelism::new(3).unwrap(),
+        )
+        .await
+        .unwrap();
+        let (async_current, _) = async_base.mutate_batch(mutations).await.unwrap();
+        assert_eq!(async_base.tree(), sync_base.tree());
+        assert_eq!(async_current.tree(), sync_current.tree());
+
+        store.publications.store(0, Ordering::SeqCst);
+        store.maximum_batch.store(0, Ordering::SeqCst);
+        let outcome = AsyncCompositeAccelerator::build_from_turboquant(
+            &async_base,
+            &async_current,
+            &async_quantizer,
+            AsyncCompositeBuildOptions {
+                publication_batch_items: 1,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let AsyncCompositeBuildOutcome::Composite {
+            accelerator,
+            stats,
+            objects_published,
+            bytes_published,
+        } = outcome
+        else {
+            panic!("small async TurboQuant delta unexpectedly required rebuild")
+        };
+        assert_eq!(accelerator.manifest_cid(), &sync_manifest);
+        assert_eq!(stats, sync_stats);
+        assert_eq!(bytes_published, stats.encoded_output_bytes);
+        assert!(objects_published >= 3);
+        assert_eq!(store.publications.load(Ordering::SeqCst), objects_published);
+        assert!(objects_published < 129);
+        assert_eq!(store.maximum_batch.load(Ordering::SeqCst), 1);
+
+        let root = TypedContentRoot::new(
+            ContentObjectKind::CompositeAccelerator,
+            accelerator.manifest_cid().clone(),
+        );
+        walk_content_graph_async(&store, &[root], &ContentGraphLimits::default())
+            .await
+            .unwrap();
+
+        let serving = AsyncProximityMap::load_with_runtime(
+            store,
+            async_current.tree().descriptor.clone(),
+            Arc::new(SearchRuntime::default()),
+        )
+        .await
+        .unwrap();
+        let async_set = AsyncAcceleratorSet::empty()
+            .with_composite(serving.tree(), *accelerator)
+            .unwrap();
+        let actual = serving
+            .search_with_accelerators(&async_set, sync_request, AsyncSearchControl::default())
+            .await
+            .unwrap();
+        assert_eq!(actual.plan, expected.plan);
+        assert_eq!(actual.neighbors, expected.neighbors);
+        assert_eq!(actual.completion, expected.completion);
+        assert_eq!(actual.stats.nodes_read, expected.stats.nodes_read);
+        assert_eq!(actual.stats.committed_bytes, expected.stats.committed_bytes);
+        assert_eq!(
+            actual.stats.distance_evaluations,
+            expected.stats.distance_evaluations
+        );
+        assert_eq!(
+            actual.stats.quantized_distance_evaluations,
+            expected.stats.quantized_distance_evaluations
+        );
+    });
+}
+
+#[cfg(feature = "async-store")]
+#[test]
+fn turboquant_async_composite_preserves_cross_store_complete_closure() {
+    use prolly::{
+        walk_content_graph_async, AsyncCompositeAccelerator, AsyncCompositeBuildOptions,
+        AsyncCompositeBuildOutcome, AsyncProximityMap, AsyncTurboQuantizer, CompositeAccelerator,
+        CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits, CompositeBuildOutcome,
+    };
+    use std::future::Future;
+    use std::task::{Context, Poll};
+
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let waker = futures_util::task::noop_waker();
+        let mut context = Context::from_waker(&waker);
+        let mut future = Box::pin(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(value) => return value,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    let base_records = records(33, 128);
+    let mut current_records = base_records.clone();
+    current_records[3].vector = vec![3.25; 128];
+    current_records.push(ProximityRecord {
+        key: b"vector-9999".to_vec(),
+        vector: vec![-2.0; 128],
+        value: b"cross-store".to_vec(),
+    });
+    let quantizer_config = TurboQuantizationConfig {
+        seed: 131,
+        ..TurboQuantizationConfig::default()
+    };
+
+    let expected_store = Arc::new(MemStore::new());
+    let expected_base = ProximityMap::build(
+        expected_store.clone(),
+        ProximityConfig::new(128),
+        base_records.clone(),
+    )
+    .unwrap();
+    let expected_current = ProximityMap::build(
+        expected_store,
+        ProximityConfig::new(128),
+        current_records.clone(),
+    )
+    .unwrap();
+    let (expected_quantizer, _) = TurboQuantizer::build(
+        &expected_base,
+        quantizer_config.clone(),
+        BuildParallelism::serial(),
+    )
+    .unwrap();
+    let (expected_manifest, expected_stats) = match CompositeAccelerator::build(
+        &expected_base,
+        &expected_current,
+        CompositeBase::TurboQuantized(expected_quantizer),
+        CompositeAcceleratorConfig::default(),
+        CompositeBuildLimits::default(),
+    )
+    .unwrap()
+    {
+        CompositeBuildOutcome::Composite { accelerator, stats } => {
+            (accelerator.manifest_cid().clone(), stats)
+        }
+        CompositeBuildOutcome::FullRebuildRequired { reasons, .. } => {
+            panic!("small cross-store delta unexpectedly required rebuild: {reasons:?}")
+        }
+    };
+
+    block_on(async {
+        let base_store = PublicationBoundAsyncStore::new(Arc::new(MemStore::new()));
+        let current_store = PublicationBoundAsyncStore::new(Arc::new(MemStore::new()));
+        let base =
+            AsyncProximityMap::build(base_store.clone(), ProximityConfig::new(128), base_records)
+                .await
+                .unwrap();
+        let current = AsyncProximityMap::build(
+            current_store.clone(),
+            ProximityConfig::new(128),
+            current_records,
+        )
+        .await
+        .unwrap();
+        let (quantizer, _) =
+            AsyncTurboQuantizer::build(&base, quantizer_config, BuildParallelism::serial())
+                .await
+                .unwrap();
+        assert_eq!(base.tree(), expected_base.tree());
+        assert_eq!(current.tree(), expected_current.tree());
+
+        current_store.publications.store(0, Ordering::SeqCst);
+        current_store.maximum_batch.store(0, Ordering::SeqCst);
+        let outcome = AsyncCompositeAccelerator::build_from_turboquant(
+            &base,
+            &current,
+            &quantizer,
+            AsyncCompositeBuildOptions {
+                publication_batch_items: 2,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let AsyncCompositeBuildOutcome::Composite {
+            accelerator,
+            stats,
+            objects_published,
+            bytes_published,
+        } = outcome
+        else {
+            panic!("small cross-store delta unexpectedly required rebuild")
+        };
+        assert_eq!(accelerator.manifest_cid(), &expected_manifest);
+        assert_eq!(stats, expected_stats);
+        assert!(objects_published > 0);
+        assert!(bytes_published >= stats.encoded_output_bytes);
+        assert!(current_store.publications.load(Ordering::SeqCst) > 0);
+        assert!(current_store.maximum_batch.load(Ordering::SeqCst) <= 2);
+
+        AsyncTurboQuantizer::load(&current_store, quantizer.manifest_cid().clone())
+            .await
+            .unwrap();
+        let root = TypedContentRoot::new(
+            ContentObjectKind::CompositeAccelerator,
+            accelerator.manifest_cid().clone(),
+        );
+        let walk =
+            walk_content_graph_async(&current_store, &[root], &ContentGraphLimits::default())
+                .await
+                .unwrap();
+        assert!(walk.objects.len() >= objects_published);
+    });
+}

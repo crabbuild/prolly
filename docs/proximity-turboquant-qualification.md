@@ -160,6 +160,16 @@ it does not materialize or restage the corpus. Async verification likewise
 streams the source and code trees in lockstep. PQ retains its established
 staging path. `*_build_async_publication` rows record published object and byte
 counts.
+
+For the normal co-resident ancestor/current case, TurboQuant composite
+construction also stays on the native async path. It structurally diffs the
+immutable directories, streams ordered delta and shadow entries into bounded
+async sorted builders, and publishes the canonical composite manifest last.
+It does not collect or rebuild either complete source corpus, and its manifest
+and logical build statistics must match synchronous construction exactly. A
+cross-store base whose authenticated closure is absent from the destination
+retains the established compatibility staging path so the operation still
+copies a complete closure rather than publishing dangling references.
 Searches execute the native async/batched engine through `SyncStoreAsAsync`,
 preserving the selected memory or file store. Warm samples share one
 authenticated `SearchIo` runtime after an untimed warmup. Cold samples create a

@@ -162,7 +162,7 @@ pub struct CompositeBuildLimits {
 }
 
 impl CompositeBuildLimits {
-    fn validate(&self) -> Result<(), Error> {
+    pub(crate) fn validate(&self) -> Result<(), Error> {
         for (resource, value) in [
             ("diff_entries", self.max_diff_entries),
             ("owned_bytes", self.max_owned_bytes),
@@ -793,7 +793,7 @@ where
     Ok(())
 }
 
-fn account_delta(
+pub(crate) fn account_delta(
     stats: &mut CompositeBuildStats,
     key: &[u8],
     value: &[u8],
@@ -803,7 +803,7 @@ fn account_delta(
     account_bytes(stats, key.len().saturating_add(value.len()), limits)
 }
 
-fn account_shadow(
+pub(crate) fn account_shadow(
     stats: &mut CompositeBuildStats,
     key: &[u8],
     limits: &CompositeBuildLimits,
@@ -825,7 +825,7 @@ fn account_bytes(
     )
 }
 
-fn rebuild_reasons(
+pub(crate) fn rebuild_reasons(
     config: &CompositeAcceleratorConfig,
     delta: usize,
     shadow: usize,
@@ -875,7 +875,11 @@ fn ratio_ppm(numerator: u64, denominator: u64) -> u32 {
     value as u32
 }
 
-fn checked_add(value: usize, increment: usize, resource: &'static str) -> Result<usize, Error> {
+pub(crate) fn checked_add(
+    value: usize,
+    increment: usize,
+    resource: &'static str,
+) -> Result<usize, Error> {
     value
         .checked_add(increment)
         .ok_or(Error::ProximityResourceLimitExceeded {
@@ -885,7 +889,11 @@ fn checked_add(value: usize, increment: usize, resource: &'static str) -> Result
         })
 }
 
-fn enforce(resource: &'static str, limit: Option<usize>, actual: usize) -> Result<(), Error> {
+pub(crate) fn enforce(
+    resource: &'static str,
+    limit: Option<usize>,
+    actual: usize,
+) -> Result<(), Error> {
     if let Some(limit) = limit {
         if actual > limit {
             return Err(Error::ProximityResourceLimitExceeded {

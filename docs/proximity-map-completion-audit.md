@@ -21,7 +21,7 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 | 11 | Typed traversal, sync, manifests, GC, proofs | `content_graph/`, `proximity/proof/` | `tests/proximity_content_graph.rs`, `tests/proximity_proofs.rs` | `content_graph_copy`, `content_graph_gc_plan`, `search_proof_*` |
 | 12 | Overflow hierarchies and external vectors | `proximity/storage/{overflow,vector}.rs` | `tests/proximity_overflow.rs` | all rows use bounded overflow and externalize vectors above 4 KiB |
 | 13 | Validated source-bound HNSW | `proximity/accelerator/hnsw/` | `tests/proximity_hnsw.rs`, `tests/proximity_proofs.rs` | `hnsw_build`, `hnsw_search` |
-| 14 | Native source-bound TurboQuant-MSE routing | `proximity/accelerator/{turboquant,quantized}.rs`, `proximity/distance/simd.rs` | `tests/proximity_turboquant.rs`, `tests/proximity_wire.rs`, async/proof/content/composite suites | `turboquant_build`, `turboquant_search_scalar`, `turboquant_search_simd`, `turboquant_recall` |
+| 14 | Native source-bound TurboQuant-MSE routing | `proximity/accelerator/{turboquant,quantized,async}.rs`, `proximity/distance/simd.rs` | `tests/proximity_turboquant.rs`, including bounded native async direct/composite construction, `tests/proximity_wire.rs`, async/proof/content/composite suites | `turboquant_build`, `turboquant_search_scalar`, `turboquant_search_simd`, `turboquant_recall` |
 
 ## Wire and migration evidence
 

@@ -3,9 +3,11 @@ use super::catalog::{
 };
 use super::composite::config_fingerprint as composite_fingerprint;
 use super::composite::{
-    composite_tree_config, CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase,
-    CompositeBaseKind, CompositeBuildLimits, CompositeBuildOutcome, CompositeBuildStats,
-    FullRebuildReason, Manifest as CompositeManifest,
+    account_delta as account_composite_delta, account_shadow as account_composite_shadow,
+    checked_add as checked_add_composite, composite_tree_config, enforce as enforce_composite,
+    rebuild_reasons as composite_rebuild_reasons, CompositeAccelerator, CompositeAcceleratorConfig,
+    CompositeBase, CompositeBaseKind, CompositeBuildLimits, CompositeBuildOutcome,
+    CompositeBuildStats, FullRebuildReason, Manifest as CompositeManifest,
 };
 use super::hnsw::storage::config_fingerprint as hnsw_fingerprint;
 use super::hnsw::storage::{graph_config, GraphNode, Manifest as HnswManifest};
@@ -30,7 +32,7 @@ use crate::prolly::content_graph::{
     walk_content_graph, walk_content_graph_async, ContentGraphLimits, ContentObjectKind,
     TypedContentRoot,
 };
-use crate::prolly::error::Error;
+use crate::prolly::error::{Diff, Error};
 use crate::prolly::proximity::distance::canonical::sqrt_down;
 use crate::prolly::proximity::storage::StoredRecord;
 use crate::prolly::proximity::{
@@ -338,33 +340,257 @@ impl AsyncCompositeAccelerator {
         S: AsyncStore + Clone,
         S::Error: Send + Sync,
     {
-        let (staging, staged_base, staged_current) =
-            stage_source_pair(base_map, current_map).await?;
-        let (rebuilt, _) = TurboQuantizer::build_with_limits(
-            &staged_base,
-            base.config.clone(),
-            options.turboquant_parallelism,
-            options.turboquant_limits.clone(),
-        )?;
-        if rebuilt.manifest_cid() != base.manifest_cid() {
+        options.config.validate()?;
+        options.limits.validate()?;
+        if options.publication_batch_items == 0 {
+            return Err(Error::InvalidProximityConfig {
+                reason: "composite publication batch size must be greater than zero".to_owned(),
+            });
+        }
+        if base_map.tree().config.dimensions != current_map.tree().config.dimensions
+            || base_map.tree().config.metric != current_map.tree().config.metric
+            || base.source_descriptor() != &base_map.tree().descriptor
+        {
             return Err(invalid(
-                "staged TurboQuant base is not canonical with async base",
+                "composite base/current sources or TurboQuant configuration disagree",
             ));
         }
-        publish_composite_outcome(
-            current_map,
-            staging,
-            CompositeAccelerator::build(
+        let target = current_map.store_clone();
+        let base_manifest_present = target
+            .get(base.manifest_cid().as_bytes())
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?
+            .is_some();
+        let base_source_present = target
+            .get(base_map.tree().descriptor.as_bytes())
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?
+            .is_some();
+        if !base_manifest_present || !base_source_present {
+            // Preserve the existing cross-store contract. Co-resident
+            // snapshots take the structural streaming path below; only a
+            // genuinely separate base store pays the compatibility staging
+            // cost needed to copy the complete authenticated closure.
+            let (staging, staged_base, staged_current) =
+                stage_source_pair(base_map, current_map).await?;
+            let (rebuilt, _) = TurboQuantizer::build_with_limits(
                 &staged_base,
-                &staged_current,
-                CompositeBase::TurboQuantized(rebuilt),
-                options.config,
-                options.limits,
-            )?,
-            options.publication_batch_items,
-            &options.graph_limits,
+                base.config.clone(),
+                options.turboquant_parallelism,
+                options.turboquant_limits.clone(),
+            )?;
+            if rebuilt.manifest_cid() != base.manifest_cid() {
+                return Err(invalid(
+                    "staged TurboQuant base is not canonical with async base",
+                ));
+            }
+            return publish_composite_outcome(
+                current_map,
+                staging,
+                CompositeAccelerator::build(
+                    &staged_base,
+                    &staged_current,
+                    CompositeBase::TurboQuantized(rebuilt),
+                    options.config,
+                    options.limits,
+                )?,
+                options.publication_batch_items,
+                &options.graph_limits,
+            )
+            .await;
+        }
+
+        let AsyncCompositeBuildOptions {
+            config,
+            limits,
+            publication_batch_items,
+            graph_limits,
+            ..
+        } = options;
+        let persisted_base =
+            AsyncTurboQuantizer::load(&target, base.manifest_cid().clone()).await?;
+        let persisted_source = crate::prolly::proximity::AsyncProximityMap::load(
+            target.clone(),
+            base_map.tree().descriptor.clone(),
         )
-        .await
+        .await?;
+        if persisted_base.source_descriptor() != base.source_descriptor()
+            || persisted_base.config() != base.config()
+            || persisted_source.tree() != base_map.tree()
+        {
+            return Err(invalid(
+                "async composite TurboQuant base or source disagrees with persisted content",
+            ));
+        }
+
+        let tree_config = composite_tree_config();
+        let mut delta_builder = AsyncSortedBatchBuilder::new_with_origin_and_batch_size(
+            target.clone(),
+            tree_config.clone(),
+            PublicationOrigin::Maintenance,
+            publication_batch_items,
+        );
+        let mut shadow_builder = AsyncSortedBatchBuilder::new_with_origin_and_batch_size(
+            target.clone(),
+            tree_config,
+            PublicationOrigin::Maintenance,
+            publication_batch_items,
+        );
+        let mut stats = CompositeBuildStats::default();
+        let mut changes = current_map
+            .directory
+            .stream_diff(&base_map.tree().directory, &current_map.tree().directory);
+        while let Some(change) = changes.next().await {
+            let change = change?;
+            stats.diff_entries = checked_add_composite(stats.diff_entries, 1, "diff_entries")?;
+            enforce_composite("diff_entries", limits.max_diff_entries, stats.diff_entries)?;
+            match change {
+                Diff::Added { key, val } => {
+                    StoredRecord::decode(&val, current_map.tree().config.dimensions)?;
+                    account_composite_delta(&mut stats, &key, &val, &limits)?;
+                    stats.inserted_records =
+                        checked_add_composite(stats.inserted_records, 1, "inserted_records")?;
+                    delta_builder.add(key, val).await?;
+                }
+                Diff::Removed { key, val } => {
+                    StoredRecord::decode(&val, base_map.tree().config.dimensions)?;
+                    account_composite_shadow(&mut stats, &key, &limits)?;
+                    stats.deleted_records =
+                        checked_add_composite(stats.deleted_records, 1, "deleted_records")?;
+                    shadow_builder.add(key, Vec::new()).await?;
+                }
+                Diff::Changed { key, old, new } => {
+                    let old_record = StoredRecord::decode(&old, base_map.tree().config.dimensions)?;
+                    let new_record =
+                        StoredRecord::decode(&new, current_map.tree().config.dimensions)?;
+                    if old_record.vector == new_record.vector {
+                        stats.value_only_records = checked_add_composite(
+                            stats.value_only_records,
+                            1,
+                            "value_only_records",
+                        )?;
+                        continue;
+                    }
+                    account_composite_delta(&mut stats, &key, &new, &limits)?;
+                    account_composite_shadow(&mut stats, &key, &limits)?;
+                    stats.vector_updated_records = checked_add_composite(
+                        stats.vector_updated_records,
+                        1,
+                        "vector_updated_records",
+                    )?;
+                    delta_builder.add(key.clone(), new).await?;
+                    shadow_builder.add(key, Vec::new()).await?;
+                }
+            }
+        }
+
+        let reasons = composite_rebuild_reasons(
+            &config,
+            stats.delta_records,
+            stats.shadow_records,
+            current_map.tree().count,
+            base_map.tree().count,
+        );
+        if !reasons.is_empty() {
+            return Ok(AsyncCompositeBuildOutcome::FullRebuildRequired { reasons, stats });
+        }
+
+        let delta_tree = delta_builder.build().await?;
+        let shadow_tree = shadow_builder.build().await?;
+        let roots = [delta_tree.root.as_ref(), shadow_tree.root.as_ref()]
+            .into_iter()
+            .flatten()
+            .cloned()
+            .map(|cid| TypedContentRoot::new(ContentObjectKind::OrderedNode, cid))
+            .collect::<Vec<_>>();
+        let (published_descendants, descendant_bytes) = if roots.is_empty() {
+            (0, 0)
+        } else {
+            let walk = walk_content_graph_async(&target, &roots, &graph_limits).await?;
+            (walk.objects.len(), walk.total_bytes)
+        };
+        stats.encoded_output_bytes = descendant_bytes;
+        enforce_composite(
+            "distance_evaluations",
+            limits.max_distance_evaluations,
+            stats.distance_evaluations,
+        )?;
+        let mut object = CompositeManifest {
+            current_source: current_map.tree().descriptor.clone(),
+            base_source: base_map.tree().descriptor.clone(),
+            dimensions: current_map.tree().config.dimensions,
+            metric: current_map.tree().config.metric,
+            current_count: current_map.tree().count,
+            base_count: base_map.tree().count,
+            base_kind: CompositeBaseKind::TurboQuantized,
+            base_manifest: base.manifest_cid().clone(),
+            base_fingerprint: turboquant_fingerprint(base.config()),
+            delta_root: delta_tree.root,
+            shadow_root: shadow_tree.root,
+            inserted_count: stats.inserted_records as u64,
+            updated_count: stats.vector_updated_records as u64,
+            deleted_count: stats.deleted_records as u64,
+            delta_count: stats.delta_records as u64,
+            shadow_count: stats.shadow_records as u64,
+            diff_entries: stats.diff_entries as u64,
+            value_only_count: stats.value_only_records as u64,
+            owned_bytes_peak: stats.owned_bytes_peak as u64,
+            encoded_output_bytes: stats.encoded_output_bytes as u64,
+            distance_evaluations: stats.distance_evaluations as u64,
+            config,
+        };
+        let manifest_bytes = loop {
+            let bytes = object.encode()?;
+            let total =
+                checked_add_composite(descendant_bytes, bytes.len(), "encoded_output_bytes")?;
+            if object.encoded_output_bytes == total as u64 {
+                break bytes;
+            }
+            object.encoded_output_bytes = total as u64;
+        };
+        stats.encoded_output_bytes = object.encoded_output_bytes as usize;
+        enforce_composite(
+            "encoded_output_bytes",
+            limits.max_encoded_output_bytes,
+            stats.encoded_output_bytes,
+        )?;
+        let manifest = Cid::from_bytes(&manifest_bytes);
+        match target
+            .get(manifest.as_bytes())
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?
+        {
+            Some(bytes) => {
+                let actual = Cid::from_bytes(&bytes);
+                if actual != manifest {
+                    return Err(Error::CidMismatch {
+                        expected: manifest,
+                        actual,
+                    });
+                }
+            }
+            None => {
+                let entries = [(manifest.as_bytes(), manifest_bytes.as_slice())];
+                target
+                    .publish_nodes(NodePublication::new(
+                        &entries,
+                        PublicationOrigin::Maintenance,
+                    ))
+                    .await
+                    .map_err(|error| Error::Store(Box::new(error)))?;
+            }
+        }
+        let loaded = Self::load(&target, manifest).await?;
+        Ok(AsyncCompositeBuildOutcome::Composite {
+            accelerator: Box::new(loaded),
+            stats,
+            objects_published: checked_add_composite(
+                published_descendants,
+                1,
+                "published_objects",
+            )?,
+            bytes_published: object.encoded_output_bytes as usize,
+        })
     }
 
     pub async fn load<S>(store: &S, manifest: Cid) -> Result<Self, Error>
