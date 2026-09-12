@@ -20,6 +20,31 @@ pub(crate) struct QuantizedRanked {
     pub(crate) key: Vec<u8>,
 }
 
+pub(crate) trait IntoQuantizedKey {
+    fn as_bytes(&self) -> &[u8];
+    fn into_owned(self) -> Vec<u8>;
+}
+
+impl IntoQuantizedKey for Vec<u8> {
+    fn as_bytes(&self) -> &[u8] {
+        self
+    }
+
+    fn into_owned(self) -> Vec<u8> {
+        self
+    }
+}
+
+impl IntoQuantizedKey for &[u8] {
+    fn as_bytes(&self) -> &[u8] {
+        self
+    }
+
+    fn into_owned(self) -> Vec<u8> {
+        self.to_vec()
+    }
+}
+
 impl PartialEq for QuantizedRanked {
     fn eq(&self, other: &Self) -> bool {
         self.distance.to_bits() == other.distance.to_bits() && self.key == other.key
@@ -42,8 +67,8 @@ impl Ord for QuantizedRanked {
     }
 }
 
-pub(crate) fn admit_quantized<F>(
-    key: Vec<u8>,
+pub(crate) fn admit_quantized<K, F>(
+    key: K,
     code: &[u8],
     target: usize,
     request: &SearchRequest<'_>,
@@ -52,6 +77,7 @@ pub(crate) fn admit_quantized<F>(
     score: F,
 ) -> Result<bool, Error>
 where
+    K: IntoQuantizedKey,
     F: FnOnce(&[u8]) -> Result<f64, Error>,
 {
     if request
@@ -76,13 +102,25 @@ where
     stats.bytes_read = stats.bytes_read.saturating_add(code.len());
     stats.committed_bytes = stats.committed_bytes.saturating_add(code.len());
     stats.quantized_distance_evaluations += 1;
-    let candidate = QuantizedRanked { distance, key };
     if approximate.len() < target {
-        approximate.push(candidate);
-    } else if target != 0 && approximate.peek().is_some_and(|worst| candidate < *worst) {
+        approximate.push(QuantizedRanked {
+            distance,
+            key: key.into_owned(),
+        });
+    } else if target != 0
+        && approximate.peek().is_some_and(|worst| {
+            distance
+                .total_cmp(&worst.distance)
+                .then_with(|| key.as_bytes().cmp(worst.key.as_slice()))
+                .is_lt()
+        })
+    {
         *approximate
             .peek_mut()
-            .expect("non-empty quantized candidate heap") = candidate;
+            .expect("non-empty quantized candidate heap") = QuantizedRanked {
+            distance,
+            key: key.into_owned(),
+        };
     }
     stats.frontier_peak = stats.frontier_peak.max(approximate.len());
     Ok(true)
@@ -212,5 +250,31 @@ mod tests {
         assert!(empty.is_empty());
         assert_eq!(empty_stats.frontier_peak, 0);
         assert_eq!(empty_stats.quantized_distance_evaluations, 1);
+
+        struct RejectedBorrowedKey;
+        impl IntoQuantizedKey for RejectedBorrowedKey {
+            fn as_bytes(&self) -> &[u8] {
+                b"rejected"
+            }
+
+            fn into_owned(self) -> Vec<u8> {
+                panic!("a rejected borrowed key must not be materialized")
+            }
+        }
+        let mut full = BinaryHeap::from([QuantizedRanked {
+            distance: 1.0,
+            key: b"retained".to_vec(),
+        }]);
+        assert!(admit_quantized(
+            RejectedBorrowedKey,
+            &[0],
+            1,
+            &request,
+            &mut ProximitySearchStats::default(),
+            &mut full,
+            |_| Ok(2.0),
+        )
+        .unwrap());
+        assert_eq!(full.peek().unwrap().key, b"retained");
     }
 }

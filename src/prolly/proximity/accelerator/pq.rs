@@ -545,7 +545,7 @@ where
                     continue;
                 };
                 if !admit_quantized(
-                    key.clone(),
+                    key.as_slice(),
                     &code,
                     *rerank_target,
                     &request,
