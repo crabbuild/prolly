@@ -1634,12 +1634,41 @@ pub(crate) fn score_code_value(
     };
     let distance = match metric {
         DistanceMetric::L2Squared => {
-            (prepared_query.norm_squared + norm * norm - 2.0 * dot).max(0.0)
+            let reconstructed_norm_squared =
+                reconstructed_unit_norm_squared(packed, dimensions, bit_width);
+            (prepared_query.norm_squared + norm * norm * reconstructed_norm_squared - 2.0 * dot)
+                .max(0.0)
         }
         DistanceMetric::Cosine => 1.0 - dot.clamp(-1.0, 1.0),
         DistanceMetric::InnerProduct => -dot,
     };
     Ok(if distance == 0.0 { 0.0 } else { distance })
+}
+
+#[inline]
+fn reconstructed_unit_norm_squared(packed: &[u8], dimensions: usize, bit_width: u8) -> f64 {
+    let codebook = codebook(bit_width);
+    let inverse_sqrt_dimensions = 1.0 / sqrt_down(dimensions as f64);
+    const CENTROID_SLOTS: usize = 64;
+    let mut centroids = [0.0f64; CENTROID_SLOTS];
+    let mut squared = 0.0;
+    let mut start = 0usize;
+    while start < dimensions {
+        let end = start.saturating_add(CENTROID_SLOTS).min(dimensions);
+        fill_centroids(
+            packed,
+            start,
+            bit_width,
+            codebook,
+            &mut centroids[..end - start],
+        );
+        for &centroid in &centroids[..end - start] {
+            let reconstructed = centroid * inverse_sqrt_dimensions;
+            squared += reconstructed * reconstructed;
+        }
+        start = end;
+    }
+    squared
 }
 
 #[inline]
@@ -2581,6 +2610,42 @@ mod tests {
         )
         .unwrap();
         assert_eq!(score.to_bits(), 0.0f64.to_bits());
+    }
+
+    #[test]
+    fn l2_approximate_score_uses_the_quantized_reconstruction_norm() {
+        let dimensions = 8;
+        let bit_width = 4;
+        let norm = 2.0f64;
+        let prepared = TurboQuantPreparedQuery::new(
+            vec![0.0; dimensions],
+            0.0,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        );
+        let codes = vec![15; dimensions];
+        let packed = pack_codes(&codes, bit_width).unwrap();
+        let mut encoded = norm.to_le_bytes().to_vec();
+        encoded.extend_from_slice(&packed);
+
+        let score = score_code_value(
+            &encoded,
+            &prepared,
+            DistanceMetric::L2Squared,
+            dimensions,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        )
+        .unwrap();
+        let inverse_sqrt_dimensions = 1.0 / sqrt_down(dimensions as f64);
+        let reconstructed = codebook(bit_width).centroid(15) * inverse_sqrt_dimensions;
+        let mut reconstructed_norm_squared = 0.0;
+        for _ in 0..dimensions {
+            reconstructed_norm_squared += reconstructed * reconstructed;
+        }
+        let expected = norm * norm * reconstructed_norm_squared;
+        assert_eq!(score.to_bits(), expected.to_bits());
+        assert_ne!(score.to_bits(), (norm * norm).to_bits());
     }
 
     #[test]

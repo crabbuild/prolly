@@ -530,10 +530,19 @@ SIMD strategy.
 Metric scores are:
 
 ```text
-L2Squared   = query_norm_squared + stored_norm^2 - 2 * approx_dot
+reconstructed_unit_norm_squared =
+    sum_i((reconstructed_centroid[code_i] / sqrt(dimensions))^2)
+L2Squared   = query_norm_squared
+              + stored_norm^2 * reconstructed_unit_norm_squared
+              - 2 * approx_dot
 Cosine      = 1 - clamp(approx_dot, -1, 1)
 InnerProduct = -approx_dot
 ```
+
+The L2 reconstruction norm is derived deterministically from the packed codes.
+It cannot be replaced by one: a particular Lloyd–Max reconstruction is not
+exactly unit length, and that substitution would no longer rank by squared
+distance to the reconstructed source vector.
 
 Small negative L2 estimates caused by approximation or rounding are clamped to
 positive zero for candidate ordering. This clamp affects routing only.
