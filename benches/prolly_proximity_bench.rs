@@ -1,5 +1,5 @@
 use prolly::{
-    copy_content_graph, plan_content_gc, AcceleratorSet, AdaptiveQuality, BuildParallelism,
+    copy_content_graph, plan_content_gc, AcceleratorSet, AdaptiveQuality, BuildParallelism, Cid,
     CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits,
     CompositeBuildOutcome, ContentGraphLimits, ContentObjectKind, DistanceMetric, HnswConfig,
     HnswIndex, MemStore, ProductQuantizationConfig, ProductQuantizer, ProximityConfig,
@@ -140,6 +140,22 @@ fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
     let store = Arc::new(MemStore::new());
     let map =
         ProximityMap::build(store.clone(), config(dimensions, metric), records.clone()).unwrap();
+    let source_walk = prolly::walk_content_graph(
+        &store,
+        &[TypedContentRoot::proximity_descriptor(
+            map.tree().descriptor.clone(),
+        )],
+        &ContentGraphLimits::default(),
+    )
+    .unwrap();
+    row(
+        "source_closure_bytes",
+        dimensions,
+        0,
+        Duration::ZERO,
+        source_walk.total_bytes,
+        source_walk.objects.len(),
+    );
     let query = make_vector(count / 3, dimensions);
     let eligible_count = count
         .saturating_mul(eligibility_ppm)
@@ -375,15 +391,14 @@ fn bench_accelerators<S>(
             stats.peak_temporary_bytes,
             stats.butterfly_operations,
         );
-        let sidecar = prolly::walk_content_graph(
+        let sidecar = derived_closure_size(
             &store,
-            &[TypedContentRoot::new(
+            map.tree().descriptor.clone(),
+            TypedContentRoot::new(
                 ContentObjectKind::TurboQuantization,
                 turboquant.manifest_cid().clone(),
-            )],
-            &ContentGraphLimits::default(),
-        )
-        .unwrap();
+            ),
+        );
         row(
             "turboquant_sidecar_bytes",
             dimensions,
@@ -391,6 +406,14 @@ fn bench_accelerators<S>(
             Duration::ZERO,
             sidecar.total_bytes,
             stats.encoded_output_bytes,
+        );
+        row(
+            "turboquant_manifest_code_bytes",
+            dimensions,
+            0,
+            Duration::ZERO,
+            sidecar.manifest_bytes,
+            sidecar.code_tree_bytes,
         );
         for (name, kernel) in [
             ("turboquant_search_scalar", QueryKernel::ScalarDeterministic),
@@ -483,15 +506,14 @@ fn bench_accelerators<S>(
         stats.training_distance_evaluations,
         stats.encoded_vectors,
     );
-    let sidecar = prolly::walk_content_graph(
+    let sidecar = derived_closure_size(
         &store,
-        &[TypedContentRoot::new(
+        map.tree().descriptor.clone(),
+        TypedContentRoot::new(
             ContentObjectKind::ProductQuantization,
             pq.manifest_cid().clone(),
-        )],
-        &ContentGraphLimits::default(),
-    )
-    .unwrap();
+        ),
+    );
     row(
         "pq_sidecar_bytes",
         dimensions,
@@ -499,6 +521,14 @@ fn bench_accelerators<S>(
         Duration::ZERO,
         sidecar.total_bytes,
         stats.encoded_vectors,
+    );
+    row(
+        "pq_manifest_code_bytes",
+        dimensions,
+        0,
+        Duration::ZERO,
+        sidecar.manifest_bytes,
+        sidecar.code_tree_bytes,
     );
     let mut request = SearchRequest::exact(query, k);
     request.policy = SearchPolicy::FixedBudget;
@@ -709,6 +739,56 @@ impl LatencySummary {
             p95: nearest_rank(&samples, 95),
             p99: nearest_rank(&samples, 99),
         }
+    }
+}
+
+struct DerivedClosureSize {
+    total_bytes: usize,
+    manifest_bytes: usize,
+    code_tree_bytes: usize,
+}
+
+fn derived_closure_size<S>(
+    store: &S,
+    source_descriptor: Cid,
+    root: TypedContentRoot,
+) -> DerivedClosureSize
+where
+    S: prolly::Store,
+{
+    let limits = ContentGraphLimits::default();
+    let source = prolly::walk_content_graph(
+        store,
+        &[TypedContentRoot::proximity_descriptor(source_descriptor)],
+        &limits,
+    )
+    .unwrap();
+    let source_cids: HashSet<_> = source
+        .objects
+        .into_iter()
+        .map(|object| object.root.cid)
+        .collect();
+    let manifest_cid = root.cid.clone();
+    let closure = prolly::walk_content_graph(store, &[root], &limits).unwrap();
+    let mut total_bytes = 0usize;
+    let mut manifest_bytes = 0usize;
+    for object in closure.objects {
+        if source_cids.contains(&object.root.cid) {
+            continue;
+        }
+        total_bytes = total_bytes.saturating_add(object.bytes.len());
+        if object.root.cid == manifest_cid {
+            manifest_bytes = object.bytes.len();
+        }
+    }
+    assert!(
+        manifest_bytes > 0,
+        "derived manifest must be in its closure"
+    );
+    DerivedClosureSize {
+        total_bytes,
+        manifest_bytes,
+        code_tree_bytes: total_bytes.saturating_sub(manifest_bytes),
     }
 }
 

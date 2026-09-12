@@ -64,10 +64,14 @@ completion discriminator (`0` exact, `1` approximate-policy-satisfied, `2`
 budget-exhausted, `3` cancelled, `4` deadline-exceeded).
 `turboquant_build_resources` reports peak owned scratch bytes and butterfly
 operations, while
-`turboquant_sidecar_bytes` and `pq_sidecar_bytes` report complete typed-closure
-bytes beside encoded payload counts. The harness emits the git revision,
-compiler, target architecture/OS, store, seed, cache mode, and repetition
-count before the CSV rows.
+`source_closure_bytes` reports the authoritative map closure and
+`turboquant_sidecar_bytes` and `pq_sidecar_bytes` report only derived
+accelerator bytes beside encoded payload counts. Referenced source objects are
+excluded from the sidecar totals even though they are part of each typed
+closure. The corresponding `*_manifest_code_bytes` rows split manifest bytes
+from code-tree bytes. The harness emits the git revision, compiler, target
+architecture/OS, store, seed, cache mode, and repetition count before the CSV
+rows.
 
 Production qualification must retain raw outputs under
 `performance-results/proximity-turboquant/` and cover the full matrix in the
