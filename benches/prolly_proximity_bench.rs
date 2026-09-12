@@ -21,29 +21,62 @@ use std::time::{Duration, Instant};
 
 fn main() {
     let records = env_usize("PROLLY_PROXIMITY_BENCH_RECORDS").unwrap_or(1_000);
+    assert!(records > 0, "benchmark record count must be positive");
     let dimensions =
         env_list("PROLLY_PROXIMITY_BENCH_DIMENSIONS").unwrap_or_else(|| vec![8, 128, 768, 1_536]);
+    assert!(
+        dimensions.iter().all(|dimension| *dimension > 0),
+        "benchmark dimensions must be positive"
+    );
     let threads = env_list("PROLLY_PROXIMITY_BENCH_THREADS").unwrap_or_else(|| vec![1, 2, 4]);
     let scale_only = env_bool("PROLLY_PROXIMITY_BENCH_SCALE_ONLY");
-    let search_repeats = env_usize("PROLLY_PROXIMITY_BENCH_SEARCH_REPEATS")
-        .unwrap_or(1)
-        .max(1);
+    let quantizers_only = env_bool("PROLLY_PROXIMITY_BENCH_QUANTIZERS_ONLY");
+    assert!(
+        !(scale_only && quantizers_only),
+        "scale-only and quantizers-only benchmark profiles are mutually exclusive"
+    );
+    assert_unique_positive_workers(&threads);
+    let search_repeats = env_usize("PROLLY_PROXIMITY_BENCH_SEARCH_REPEATS").unwrap_or(1);
+    assert!(
+        search_repeats > 0,
+        "benchmark search repetitions must be positive"
+    );
     let reset_search_cache = env_bool("PROLLY_PROXIMITY_BENCH_RESET_SEARCH_CACHE");
     let simd_first = env_bool("PROLLY_PROXIMITY_BENCH_SIMD_FIRST");
     let metric = env_metric("PROLLY_PROXIMITY_BENCH_METRIC").unwrap_or(DistanceMetric::L2Squared);
-    let k = env_usize("PROLLY_PROXIMITY_BENCH_K").unwrap_or(10).max(1);
-    let eligibility_ppm = env_usize("PROLLY_PROXIMITY_BENCH_ELIGIBILITY_PPM")
-        .unwrap_or(1_000_000)
-        .clamp(1, 1_000_000);
+    let k = env_usize("PROLLY_PROXIMITY_BENCH_K").unwrap_or(10);
+    assert!(k > 0, "benchmark k must be positive");
+    let eligibility_ppm = env_usize("PROLLY_PROXIMITY_BENCH_ELIGIBILITY_PPM").unwrap_or(1_000_000);
+    assert!(
+        (1..=1_000_000).contains(&eligibility_ppm),
+        "benchmark eligibility PPM must be between 1 and 1000000"
+    );
     let turboquant_config = TurboQuantizationConfig {
         bit_width: env_usize("PROLLY_PROXIMITY_BENCH_TURBOQUANT_BITS")
-            .and_then(|value| u8::try_from(value).ok())
+            .map(|value| {
+                u8::try_from(value).expect("TurboQuant benchmark bit width must fit in u8")
+            })
             .unwrap_or(4),
         rerank_multiplier: env_usize("PROLLY_PROXIMITY_BENCH_RERANK_MULTIPLIER")
-            .and_then(|value| u32::try_from(value).ok())
+            .map(|value| {
+                u32::try_from(value)
+                    .expect("TurboQuant benchmark rerank multiplier must fit in u32")
+            })
             .unwrap_or(8),
         seed: 0,
     };
+    if quantizers_only {
+        assert!(
+            records >= 16,
+            "quantizers-only benchmark requires at least 16 records"
+        );
+        assert!(
+            dimensions
+                .iter()
+                .all(|dimension| *dimension >= 8 && dimension.is_multiple_of(8)),
+            "quantizers-only benchmark requires supported TurboQuant dimensions"
+        );
+    }
     println!("prolly proximity benchmark");
     println!("revision={}", command_output("git", &["rev-parse", "HEAD"]));
     println!(
@@ -54,7 +87,16 @@ fn main() {
     println!("target_os={}", std::env::consts::OS);
     println!("store=memory");
     println!("records={records}");
-    println!("profile={}", if scale_only { "scale" } else { "complete" });
+    println!(
+        "profile={}",
+        if quantizers_only {
+            "quantizers"
+        } else if scale_only {
+            "scale"
+        } else {
+            "complete"
+        }
+    );
     println!("search_repeats={search_repeats}");
     println!("metric={metric:?}");
     println!("k={k}");
@@ -77,6 +119,7 @@ fn main() {
     let settings = BenchSettings {
         threads: &threads,
         scale_only,
+        quantizers_only,
         search_repeats,
         reset_search_cache,
         simd_first,
@@ -94,6 +137,7 @@ fn main() {
 struct BenchSettings<'a> {
     threads: &'a [usize],
     scale_only: bool,
+    quantizers_only: bool,
     search_repeats: usize,
     reset_search_cache: bool,
     simd_first: bool,
@@ -107,6 +151,7 @@ fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
     let BenchSettings {
         threads,
         scale_only,
+        quantizers_only,
         search_repeats,
         reset_search_cache,
         simd_first,
@@ -116,30 +161,36 @@ fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
         turboquant_config,
     } = *settings;
     let records = make_records(count, dimensions);
-    for &workers in threads {
-        let store = Arc::new(MemStore::new());
-        let config = config(dimensions, metric);
-        let started = Instant::now();
-        let (_, stats) = ProximityMap::build_with_parallelism(
-            store,
-            config,
-            black_box(records.clone()),
-            BuildParallelism::new(workers).unwrap(),
-        )
-        .unwrap();
-        row(
-            "build",
-            dimensions,
-            workers,
-            started.elapsed(),
-            stats.distance_evaluations,
-            stats.proximity_objects_written,
-        );
+    if !quantizers_only {
+        for &workers in threads {
+            let store = Arc::new(MemStore::new());
+            let config = config(dimensions, metric);
+            let started = Instant::now();
+            let (_, stats) = ProximityMap::build_with_parallelism(
+                store,
+                config,
+                black_box(records.clone()),
+                BuildParallelism::new(workers).unwrap(),
+            )
+            .unwrap();
+            row(
+                "build",
+                dimensions,
+                workers,
+                started.elapsed(),
+                stats.distance_evaluations,
+                stats.proximity_objects_written,
+            );
+        }
     }
 
     let store = Arc::new(MemStore::new());
+    let started = Instant::now();
     let map =
         ProximityMap::build(store.clone(), config(dimensions, metric), records.clone()).unwrap();
+    if quantizers_only {
+        row("source_build", dimensions, 0, started.elapsed(), count, 0);
+    }
     let source_walk = prolly::walk_content_graph(
         &store,
         &[TypedContentRoot::proximity_descriptor(
@@ -168,6 +219,30 @@ fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
         .map(|record| record.key.clone())
         .collect();
     let k = requested_k.min(eligible_count);
+
+    if quantizers_only {
+        bench_accelerators(
+            &map,
+            store,
+            AcceleratorBenchCase {
+                records: &records,
+                query: &query,
+                k,
+                dimensions,
+                workers: threads,
+                turboquant_config,
+            },
+            SearchBenchOptions {
+                repeats: search_repeats,
+                reset_cache: reset_search_cache,
+                eligible_keys: &eligible_keys,
+                eligibility_ppm,
+                eligible_count,
+            },
+            false,
+        );
+        return;
+    }
 
     let search_specs = if simd_first {
         [
@@ -318,6 +393,7 @@ fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
                 query: &query,
                 k,
                 dimensions,
+                workers: threads,
                 turboquant_config,
             },
             SearchBenchOptions {
@@ -327,6 +403,7 @@ fn bench_case(count: usize, dimensions: usize, settings: &BenchSettings<'_>) {
                 eligibility_ppm,
                 eligible_count,
             },
+            true,
         );
     }
     #[cfg(feature = "async-store")]
@@ -339,6 +416,7 @@ struct AcceleratorBenchCase<'a> {
     query: &'a [f32],
     k: usize,
     dimensions: usize,
+    workers: &'a [usize],
     turboquant_config: &'a TurboQuantizationConfig,
 }
 
@@ -356,6 +434,7 @@ fn bench_accelerators<S>(
     store: S,
     case: AcceleratorBenchCase<'_>,
     options: SearchBenchOptions<'_>,
+    include_non_quantized: bool,
 ) where
     S: prolly::Store + Clone + Send + Sync,
     S::Error: Send + Sync,
@@ -365,32 +444,54 @@ fn bench_accelerators<S>(
         query,
         k,
         dimensions,
+        workers,
         turboquant_config,
     } = case;
     if dimensions >= 8 && dimensions.is_multiple_of(8) {
-        let started = Instant::now();
-        let (turboquant, stats) = TurboQuantizer::build(
-            map,
-            turboquant_config.clone(),
-            BuildParallelism::new(2).unwrap(),
-        )
-        .unwrap();
-        row(
-            "turboquant_build",
-            dimensions,
-            2,
-            started.elapsed(),
-            stats.transformed_components,
-            stats.encoded_output_bytes,
-        );
-        row(
-            "turboquant_build_resources",
-            dimensions,
-            2,
-            Duration::ZERO,
-            stats.peak_temporary_bytes,
-            stats.butterfly_operations,
-        );
+        let mut selected = None;
+        let mut canonical = None;
+        for &worker_count in workers {
+            let started = Instant::now();
+            let (candidate, stats) = TurboQuantizer::build(
+                map,
+                turboquant_config.clone(),
+                BuildParallelism::new(worker_count).unwrap(),
+            )
+            .unwrap();
+            row(
+                "turboquant_build",
+                dimensions,
+                worker_count,
+                started.elapsed(),
+                stats.transformed_components,
+                stats.encoded_output_bytes,
+            );
+            row(
+                "turboquant_build_resources",
+                dimensions,
+                worker_count,
+                Duration::ZERO,
+                stats.peak_temporary_bytes,
+                stats.butterfly_operations,
+            );
+            if let Some((manifest, canonical_stats)) = &canonical {
+                assert_eq!(
+                    candidate.manifest_cid(),
+                    manifest,
+                    "TurboQuant manifest changed with worker count"
+                );
+                assert_eq!(
+                    &stats, canonical_stats,
+                    "TurboQuant logical build statistics changed with worker count"
+                );
+            } else {
+                canonical = Some((candidate.manifest_cid().clone(), stats.clone()));
+                selected = Some(candidate);
+            }
+        }
+        let (turboquant, stats) = selected
+            .zip(canonical.map(|(_, stats)| stats))
+            .expect("validated worker list is non-empty");
         let sidecar = derived_closure_size(
             &store,
             map.tree().descriptor.clone(),
@@ -485,28 +586,50 @@ fn bench_accelerators<S>(
         }
     }
 
-    let started = Instant::now();
-    let (pq, stats) = ProductQuantizer::build(
-        map,
-        ProductQuantizationConfig {
-            subquantizers: (dimensions as u32).min(8),
-            centroids_per_subquantizer: 16,
-            training_iterations: 4,
-            rerank_multiplier: turboquant_config.rerank_multiplier,
-            seed: 17,
-            max_training_vectors: 65_536,
-        },
-        BuildParallelism::new(2).unwrap(),
-    )
-    .unwrap();
-    row(
-        "pq_build",
-        dimensions,
-        2,
-        started.elapsed(),
-        stats.training_distance_evaluations,
-        stats.encoded_vectors,
-    );
+    let pq_config = ProductQuantizationConfig {
+        subquantizers: (dimensions as u32).min(8),
+        centroids_per_subquantizer: 16,
+        training_iterations: 4,
+        rerank_multiplier: turboquant_config.rerank_multiplier,
+        seed: 17,
+        max_training_vectors: 65_536,
+    };
+    let mut selected = None;
+    let mut canonical = None;
+    for &worker_count in workers {
+        let started = Instant::now();
+        let (candidate, stats) = ProductQuantizer::build(
+            map,
+            pq_config.clone(),
+            BuildParallelism::new(worker_count).unwrap(),
+        )
+        .unwrap();
+        row(
+            "pq_build",
+            dimensions,
+            worker_count,
+            started.elapsed(),
+            stats.training_distance_evaluations,
+            stats.encoded_vectors,
+        );
+        if let Some((manifest, canonical_stats)) = &canonical {
+            assert_eq!(
+                candidate.manifest_cid(),
+                manifest,
+                "PQ manifest changed with worker count"
+            );
+            assert_eq!(
+                &stats, canonical_stats,
+                "PQ logical build statistics changed with worker count"
+            );
+        } else {
+            canonical = Some((candidate.manifest_cid().clone(), stats.clone()));
+            selected = Some(candidate);
+        }
+    }
+    let (pq, stats) = selected
+        .zip(canonical.map(|(_, stats)| stats))
+        .expect("validated worker list is non-empty");
     let sidecar = derived_closure_size(
         &store,
         map.tree().descriptor.clone(),
@@ -589,6 +712,10 @@ fn bench_accelerators<S>(
             map.tree().config.metric,
         ),
     );
+
+    if !include_non_quantized {
+        return;
+    }
 
     let started = Instant::now();
     let (hnsw, stats) = HnswIndex::build(map, HnswConfig::default()).unwrap();
@@ -930,21 +1057,22 @@ fn benchmark_filter<'a>(keys: &'a [Vec<u8>], eligibility_ppm: usize) -> Proximit
 }
 
 fn env_metric(name: &str) -> Option<DistanceMetric> {
-    match std::env::var(name)
-        .ok()?
-        .trim()
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "l2" | "l2_squared" => Some(DistanceMetric::L2Squared),
-        "cosine" => Some(DistanceMetric::Cosine),
-        "inner_product" | "ip" => Some(DistanceMetric::InnerProduct),
-        _ => None,
-    }
+    let value = std::env::var(name).ok()?;
+    Some(match value.trim().to_ascii_lowercase().as_str() {
+        "l2" | "l2_squared" => DistanceMetric::L2Squared,
+        "cosine" => DistanceMetric::Cosine,
+        "inner_product" | "ip" => DistanceMetric::InnerProduct,
+        _ => panic!("{name} has an unsupported metric value"),
+    })
 }
 
 fn env_usize(name: &str) -> Option<usize> {
-    std::env::var(name).ok()?.parse().ok()
+    let value = std::env::var(name).ok()?;
+    Some(
+        value
+            .parse()
+            .unwrap_or_else(|_| panic!("{name} must be an unsigned integer")),
+    )
 }
 
 fn env_bool(name: &str) -> bool {
@@ -958,9 +1086,29 @@ fn env_bool(name: &str) -> bool {
 
 fn env_list(name: &str) -> Option<Vec<usize>> {
     let value = std::env::var(name).ok()?;
-    let values: Vec<_> = value
-        .split(',')
-        .filter_map(|item| item.trim().parse().ok())
-        .collect();
-    (!values.is_empty()).then_some(values)
+    Some(
+        value
+            .split(',')
+            .map(|item| {
+                item.trim()
+                    .parse()
+                    .unwrap_or_else(|_| panic!("{name} must be a comma-separated integer list"))
+            })
+            .collect(),
+    )
+}
+
+fn assert_unique_positive_workers(workers: &[usize]) {
+    assert!(
+        !workers.is_empty(),
+        "benchmark worker list must not be empty"
+    );
+    let mut unique = HashSet::with_capacity(workers.len());
+    for worker in workers {
+        assert!(*worker > 0, "benchmark worker counts must be positive");
+        assert!(
+            unique.insert(*worker),
+            "benchmark worker counts must be unique"
+        );
+    }
 }

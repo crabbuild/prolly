@@ -510,6 +510,21 @@ PROLLY_PROXIMITY_BENCH_SCALE_ONLY=1 \
 cargo bench --all-features --bench prolly_proximity_bench
 ```
 
+For TurboQuant/PQ qualification cells, use
+`PROLLY_PROXIMITY_BENCH_QUANTIZERS_ONLY=1`. This builds the authoritative map
+once, skips unrelated accelerator and lifecycle rows, and applies
+`PROLLY_PROXIMITY_BENCH_THREADS` to both quantizer builders. The harness
+asserts byte-identical manifests and identical logical build statistics across
+the requested worker counts. This mode cannot be combined with scale-only.
+
+```sh
+PROLLY_PROXIMITY_BENCH_RECORDS=100000 \
+PROLLY_PROXIMITY_BENCH_DIMENSIONS=768,1536 \
+PROLLY_PROXIMITY_BENCH_THREADS=1,2,4 \
+PROLLY_PROXIMITY_BENCH_QUANTIZERS_ONLY=1 \
+cargo bench --all-features --bench prolly_proximity_bench
+```
+
 Benchmark rows are machine-specific evidence, not performance guarantees. See
 [`proximity-map-completion-audit.md`](proximity-map-completion-audit.md)
 for the release evidence matrix.

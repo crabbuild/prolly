@@ -57,6 +57,30 @@ PROLLY_PROXIMITY_BENCH_SEARCH_REPEATS=30 \
 cargo bench --all-features --bench prolly_proximity_bench
 ```
 
+For the large qualification matrix, set
+`PROLLY_PROXIMITY_BENCH_QUANTIZERS_ONLY=1`. This profile builds the
+authoritative source once, then runs only TurboQuant and the equal-shortlist
+PQ baseline. It omits exact/adaptive source searches, mutation, proof,
+copy/GC, HNSW, composite, and generic async rows so those unrelated costs do
+not make every matrix cell repeat them. `PROLLY_PROXIMITY_BENCH_THREADS`
+applies to both quantizer builds in this profile and in the complete profile.
+Each requested worker count emits a build row. The harness also asserts that
+all requested worker counts produce the same manifest CID and logical build
+statistics before it emits search evidence.
+
+```sh
+PROLLY_PROXIMITY_BENCH_RECORDS=100000 \
+PROLLY_PROXIMITY_BENCH_DIMENSIONS=768,1536 \
+PROLLY_PROXIMITY_BENCH_THREADS=1,2,4 \
+PROLLY_PROXIMITY_BENCH_SEARCH_REPEATS=30 \
+PROLLY_PROXIMITY_BENCH_QUANTIZERS_ONLY=1 \
+cargo bench --all-features --bench prolly_proximity_bench
+```
+
+The scale-only and quantizers-only profiles are mutually exclusive. Worker
+counts must be positive and unique; invalid lists fail before data generation
+so retained CSVs cannot contain ambiguous duplicate cells.
+
 Search rows report the sample median; `_p95` and `_p99` companion rows report
 nearest-rank tail latency. Their counters retain logical/physical bytes read
 and candidate handle/byte peaks. `_work` rows retain frontier peak and the
@@ -89,8 +113,8 @@ One harness invocation selects a single matrix configuration with
 `PROLLY_PROXIMITY_BENCH_TURBOQUANT_BITS`, and
 `PROLLY_PROXIMITY_BENCH_RERANK_MULTIPLIER`. Set
 `PROLLY_PROXIMITY_BENCH_RESET_SEARCH_CACHE=1` for cold-cache rows. Invalid
-metric text falls back to L2, while unsupported TurboQuant numeric
-configurations fail during the benchmark build instead of being silently
+metric text, malformed numeric values, duplicate/non-positive worker counts,
+and unsupported TurboQuant configurations fail instead of being silently
 normalized.
 
 ## Release gates
