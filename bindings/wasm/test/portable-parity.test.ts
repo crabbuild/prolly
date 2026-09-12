@@ -280,6 +280,53 @@ test("WASM TurboQuant lifecycle is portable, verified, and cancellable", { skip:
   }
 });
 
+test("WASM TurboQuant build matches the checked-in Rust wire fixture", { skip: !generatedPresent }, async () => {
+  const fixture = JSON.parse(readFileSync(
+    resolve(import.meta.dirname, "../../../conformance/proximity-fixtures.json"),
+    "utf8",
+  )).turboquant.wire_fixture;
+  const descriptorCid = fixture.objects.find(
+    (object: { kind: string }) => object.kind === "ProximityDescriptor",
+  ).cid;
+  const engine = api.Engine.memory(wasm);
+  try {
+    const proximity = await engine.buildProximity(8, [
+      { key: bytes("a"), vector: new Float32Array(8), value: bytes("zero") },
+      {
+        key: bytes("b"),
+        vector: new Float32Array([1, 0, -1, 0.5, 2, -2, 0.25, -0.25]),
+        value: bytes("one"),
+      },
+      {
+        key: bytes("c"),
+        vector: new Float32Array([0.25, 0.5, 0.75, 1, -0.25, -0.5, -0.75, -1]),
+        value: bytes("two"),
+      },
+    ]);
+    try {
+      assert.equal(Buffer.from(proximity.descriptor()).toString("hex"), descriptorCid);
+      const built = await proximity.buildTurboQuant({
+        config: { bitWidth: 3, rerankMultiplier: 8, seed: 0x5eedn },
+        workerThreads: 1n,
+      });
+      try {
+        assert.equal(
+          Buffer.from(built.index.manifest()).toString("hex"),
+          fixture.manifest_cid,
+        );
+        assert.equal(built.stats.encodedVectors, 3n);
+        assert.equal(built.stats.zeroVectors, 1n);
+      } finally {
+        built.index.close();
+      }
+    } finally {
+      proximity.close();
+    }
+  } finally {
+    engine.close();
+  }
+});
+
 test("WASM composite and catalog lifecycle is portable and bounded", { skip: !generatedPresent }, async () => {
   const engine = api.Engine.memory(wasm);
   try {
