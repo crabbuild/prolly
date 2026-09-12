@@ -340,6 +340,42 @@ fn turboquant_is_canonical_bounded_verified_and_exhaustively_reranked() {
 }
 
 #[test]
+fn turboquant_repeated_equal_errors_persist_valid_quality() {
+    let store = Arc::new(MemStore::new());
+    let mut map_config = ProximityConfig::new(32);
+    map_config.metric = DistanceMetric::InnerProduct;
+    let vector = std::iter::once(18.375)
+        .chain(std::iter::repeat_n(2.375, 31))
+        .collect::<Vec<_>>();
+    let source = (0u64..7)
+        .map(|record| ProximityRecord {
+            key: record.to_be_bytes().to_vec(),
+            vector: vector.clone(),
+            value: vec![38],
+        })
+        .collect::<Vec<_>>();
+    let map = ProximityMap::build(store.clone(), map_config, source).unwrap();
+    let (index, _) = TurboQuantizer::build(
+        &map,
+        TurboQuantizationConfig {
+            bit_width: 4,
+            rerank_multiplier: 7,
+            seed: u64::from_le_bytes([38; 8]),
+        },
+        BuildParallelism::serial(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        index.quality().mean_squared_error.to_bits(),
+        index.quality().maximum_squared_error.to_bits(),
+    );
+    assert_eq!(index.verify(&map).unwrap().quality, index.quality());
+    let reopened = TurboQuantizer::load(store, index.manifest_cid().clone()).unwrap();
+    assert_eq!(reopened.quality(), index.quality());
+}
+
+#[test]
 fn turboquant_every_build_limit_fails_typed_before_manifest_publication() {
     let count = 33usize;
     let dimensions = 128usize;

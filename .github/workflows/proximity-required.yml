@@ -1,0 +1,60 @@
+name: Proximity required
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/prolly/proximity/**"
+      - "tests/proximity*"
+      - "benches/prolly_proximity_bench.rs"
+      - "conformance/proximity-fixtures.json"
+      - "fuzz/**"
+      - "scripts/*turboquant*"
+      - "docs/proximity*"
+      - ".github/workflows/proximity-required.yml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test --all-features --test proximity_api --test proximity_metrics
+      - run: >-
+          cargo test --all-features
+          --test proximity_wire
+          --test proximity_search
+          --test proximity_async
+          --test proximity_composite
+          --test proximity_content_graph
+          --test proximity_proofs
+          --test proximity_turboquant
+
+  turboquant-fuzz-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cargo-fuzz --version 0.13.2 --locked
+      - run: cargo fmt --manifest-path fuzz/Cargo.toml -- --check
+      - run: >-
+          cargo fuzz run proximity_turboquant_decode --
+          -runs=2048 -max_len=4096 -timeout=5
+      - run: >-
+          cargo fuzz run proximity_turboquant_lifecycle --
+          -runs=256 -max_len=1024 -timeout=5

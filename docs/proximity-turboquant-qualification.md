@@ -42,7 +42,7 @@ not replace the production-scale recall and performance matrix below.
 | Cross-target fixture execution on x86_64, aarch64, and browser WASM | [`proximity-turboquant-cross-target.md`](proximity-turboquant-cross-target.md), Linux CI, local aarch64 suite, browser-WASM canonical CID test | Implemented |
 | Dense paper-reference distortion and recall comparison | [`proximity-turboquant-dense-reference.md`](proximity-turboquant-dense-reference.md), retained raw JSON, reproducible generator | Implemented |
 | Complete adversarial fault injection and tamper rejection | [`proximity-turboquant-fault-injection.md`](proximity-turboquant-fault-injection.md), ordinal cold-read/publication tests, and explicit source CID, dimensions, metric, count, seed, transform ID, codebook ID, bit width, quality, zero-count, code-root, and fingerprint mutation coverage | Implemented |
-| Bounded fuzz smoke | TurboQuant unit and proof tests cover manifest decoding, packed-bit validation/unpacking, transform derivation through the maximum supported dimension, all-metric code scoring, and randomized proof-transcript replay mutations | Implemented |
+| Bounded fuzz smoke | `fuzz/fuzz_targets/proximity_turboquant_decode.rs` and `proximity_turboquant_lifecycle.rs` exercise arbitrary manifest bytes plus bounded build/load/verify/search/corruption lifecycles across every metric, bit width, and query kernel; unit and proof tests additionally cover packed-bit validation/unpacking, maximum-dimension transform derivation, all-metric scoring, and randomized proof-transcript replay mutations | Implemented |
 
 ## Benchmark protocol
 
@@ -297,6 +297,7 @@ The local release-command audit on 2026-09-12 records each gate separately:
 | Rust 1.89 all-target/all-feature check | Passed; repository-wide unfulfilled-lint-expectation warnings remain non-fatal under that compiler |
 | all-feature tests | Passed: 546 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
 | scalar scorer safety and strict-provenance Miri checks | The TurboQuant algorithm module has `#![forbid(unsafe_code)]`; Miri passed the every-code signed-zero/extreme-weight symmetry oracle and scalar/SIMD bit-identity test |
+| bounded coverage-guided fuzz smoke | Passed: 2,048 arbitrary-decode executions and 256 bounded lifecycle executions under `cargo-fuzz` 0.13.2; the lifecycle target found a repeated-equal-error quality rounding defect, whose minimized input now has an exact build/verify/reopen regression test |
 | all-feature doctests | Passed: 74/74 |
 | all-feature benchmark compilation | Passed |
 | browser-WASM build, typecheck, and package tests | Passed: 37/37, including canonical TurboQuant wire parity |

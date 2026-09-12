@@ -21,6 +21,7 @@ use super::turboquant::config_fingerprint as turboquant_fingerprint;
 use super::turboquant::{
     codebook as turboquant_codebook, encode_vector_reusing, enforce_resource,
     invalid_object as invalid_turboquant_object, packed_len as turboquant_packed_len,
+    quality_from_totals as turboquant_quality_from_totals,
     resource_limit as turboquant_resource_limit,
     temporary_peak_bytes as turboquant_temporary_peak_bytes, turboquant_code_tree_config,
     validate_code_tree_root as validate_turboquant_code_tree_root, EncodingScratch,
@@ -1289,10 +1290,11 @@ impl AsyncTurboQuantizer {
         let code_root = code_tree.root.clone().ok_or_else(|| {
             invalid_turboquant_object("TurboQuant requires a non-empty code tree")
         })?;
-        let quality = TurboQuantizationQuality {
-            mean_squared_error: state.quality_sum / state.encoded_vectors as f64,
-            maximum_squared_error: state.quality_maximum,
-        };
+        let quality = turboquant_quality_from_totals(
+            state.quality_sum,
+            state.quality_maximum,
+            state.encoded_vectors as u64,
+        )?;
         let manifest_object = TurboQuantManifest {
             source: map.tree().descriptor.clone(),
             dimensions,
@@ -1447,10 +1449,7 @@ impl AsyncTurboQuantizer {
                 "TurboQuant verified counts disagree with manifest",
             ));
         }
-        let quality = TurboQuantizationQuality {
-            mean_squared_error: quality_sum / count as f64,
-            maximum_squared_error: quality_maximum,
-        };
+        let quality = turboquant_quality_from_totals(quality_sum, quality_maximum, count)?;
         if quality.mean_squared_error.to_bits() != self.quality.mean_squared_error.to_bits()
             || quality.maximum_squared_error.to_bits()
                 != self.quality.maximum_squared_error.to_bits()

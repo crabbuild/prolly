@@ -21,7 +21,7 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 | 11 | Typed traversal, sync, manifests, GC, proofs | `content_graph/`, `proximity/proof/` | `tests/proximity_content_graph.rs`, `tests/proximity_proofs.rs` | `content_graph_copy`, `content_graph_gc_plan`, `search_proof_*` |
 | 12 | Overflow hierarchies and external vectors | `proximity/storage/{overflow,vector}.rs` | `tests/proximity_overflow.rs` | all rows use bounded overflow and externalize vectors above 4 KiB |
 | 13 | Validated source-bound HNSW | `proximity/accelerator/hnsw/` | `tests/proximity_hnsw.rs`, `tests/proximity_proofs.rs` | `hnsw_build`, `hnsw_search` |
-| 14 | Native source-bound TurboQuant-MSE routing | `proximity/accelerator/{turboquant,quantized,async}.rs`, `proximity/distance/simd.rs`, `proximity/search/runtime.rs`; the TurboQuant algorithm module statically forbids unsafe code | `tests/proximity_turboquant.rs`, including bounded native async direct/composite construction and cancellation at every full-scan/direct-lookup/rerank store-read boundary, runtime tests proving that only cache-authenticated reads bypass duplicate CID hashing and corrupt fallbacks remain unverified, every-code signed-zero/extreme-weight product-table identity and scalar/SIMD identity under strict-provenance Miri, `tests/proximity_wire.rs`, async/proof/content/composite suites | `turboquant_build`, `turboquant_search_scalar`, `turboquant_search_simd`, `turboquant_recall` |
+| 14 | Native source-bound TurboQuant-MSE routing | `proximity/accelerator/{turboquant,quantized,async}.rs`, `proximity/distance/simd.rs`, `proximity/search/runtime.rs`; the TurboQuant algorithm module statically forbids unsafe code | `tests/proximity_turboquant.rs`, including bounded native async direct/composite construction, canonical repeated-equal-error quality persistence, and cancellation at every full-scan/direct-lookup/rerank store-read boundary; `fuzz/fuzz_targets/` contains arbitrary-decode and bounded lifecycle/corruption targets; runtime tests prove that only cache-authenticated reads bypass duplicate CID hashing and corrupt fallbacks remain unverified; every-code signed-zero/extreme-weight product-table identity and scalar/SIMD identity pass strict-provenance Miri; `tests/proximity_wire.rs` and async/proof/content/composite suites complete the focused coverage | `turboquant_build`, `turboquant_search_scalar`, `turboquant_search_simd`, `turboquant_recall` |
 
 The TurboQuant binding deliverable is also mapped directly: Python, Go,
 Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM each expose and
@@ -137,6 +137,8 @@ cargo +1.89.0 check --all-targets --all-features
 cargo test --all-features --no-fail-fast
 cargo test --doc --all-features
 cargo bench --all-features --no-run
+cargo +nightly fuzz run proximity_turboquant_decode -- -runs=2048 -max_len=4096 -timeout=5
+cargo +nightly fuzz run proximity_turboquant_lifecycle -- -runs=256 -max_len=1024 -timeout=5
 git diff --check
 ```
 

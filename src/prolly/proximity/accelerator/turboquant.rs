@@ -147,6 +147,25 @@ pub struct TurboQuantizationQuality {
     pub maximum_squared_error: f64,
 }
 
+/// Derive the canonical persisted quality values from streaming totals.
+///
+/// Repeated equal errors can make `sum / count` round infinitesimally above
+/// the observed maximum. Clamp that representation artifact so producers do
+/// not emit a manifest that the decoder correctly rejects as impossible.
+pub(crate) fn quality_from_totals(
+    sum: f64,
+    maximum: f64,
+    count: u64,
+) -> Result<TurboQuantizationQuality, Error> {
+    if count == 0 || !sum.is_finite() || !maximum.is_finite() || sum < 0.0 || maximum < 0.0 {
+        return Err(invalid_object("invalid TurboQuant quality totals"));
+    }
+    Ok(TurboQuantizationQuality {
+        mean_squared_error: (sum / count as f64).min(maximum),
+        maximum_squared_error: maximum,
+    })
+}
+
 /// Result of a full source/code-tree verification.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TurboQuantizationVerification {
@@ -566,10 +585,7 @@ where
             .root
             .clone()
             .ok_or_else(|| invalid_object("TurboQuant requires a non-empty code tree"))?;
-        let quality = TurboQuantizationQuality {
-            mean_squared_error: quality_sum / encoded_vectors as f64,
-            maximum_squared_error: quality_maximum,
-        };
+        let quality = quality_from_totals(quality_sum, quality_maximum, encoded_vectors as u64)?;
         let manifest_object = Manifest {
             source: map.tree().descriptor.clone(),
             dimensions,
@@ -749,10 +765,7 @@ where
                 "TurboQuant verified counts disagree with manifest",
             ));
         }
-        let quality = TurboQuantizationQuality {
-            mean_squared_error: quality_sum / count as f64,
-            maximum_squared_error: quality_maximum,
-        };
+        let quality = quality_from_totals(quality_sum, quality_maximum, count)?;
         if quality.mean_squared_error.to_bits() != self.quality.mean_squared_error.to_bits()
             || quality.maximum_squared_error.to_bits()
                 != self.quality.maximum_squared_error.to_bits()
