@@ -8,7 +8,7 @@ matrix and does not qualify `Auto` selection.
 ## Environment and inputs
 
 - Date: 2026-09-12
-- Benchmark revision: `d73477244539e21139003d4ca38a5c1f64528f9c`
+- Benchmark revision: `60dfaa72e78ef743714dd14fa9c7d665c3429a9f`
 - Compiler: Rust 1.97.0, LLVM 22.1.6
 - Target: `aarch64-apple-darwin`
 - Store/cache: in-memory, warm search cache
@@ -38,11 +38,11 @@ three metrics.
 
 | Dimensions | TurboQuant sidecar bytes | PQ sidecar bytes | TQ/PQ median search ratio | TQ recall range | PQ recall range |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 128 | 76,699 | 20,914 | 2.52–2.57× | 1.0–1.0 | 1.0–1.0 |
-| 200 | 112,699 | 25,522 | 2.94–3.16× | 1.0–1.0 | 1.0–1.0 |
-| 768 | 397,699 | 61,874 | 6.78–7.01× | 1.0–1.0 | 1.0–1.0 |
-| 1536 | 781,699 | 111,034 | 8.78–9.25× | 1.0–1.0 | 1.0–1.0 |
-| 3072 | 1,549,699 | 209,338 | 9.53–11.78× | 1.0–1.0 | 1.0–1.0 |
+| 128 | 76,699 | 20,914 | 1.88–1.92× | 1.0–1.0 | 1.0–1.0 |
+| 200 | 112,699 | 25,522 | 2.33–2.35× | 1.0–1.0 | 1.0–1.0 |
+| 768 | 397,699 | 61,874 | 4.33–4.80× | 1.0–1.0 | 1.0–1.0 |
+| 1536 | 781,699 | 111,034 | 5.44–5.63× | 1.0–1.0 | 1.0–1.0 |
+| 3072 | 1,549,699 | 209,338 | 6.53–6.68× | 1.0–1.0 | 1.0–1.0 |
 
 The exact rerank path explains the perfect result on this small deterministic
 fixture: TurboQuant admits and reranks 80 candidates for each search. This is
