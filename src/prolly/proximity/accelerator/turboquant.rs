@@ -91,7 +91,7 @@ pub struct TurboQuantizationBuildLimits {
 }
 
 impl TurboQuantizationBuildLimits {
-    fn validate(&self) -> Result<(), Error> {
+    pub(crate) fn validate(&self) -> Result<(), Error> {
         for (name, value) in [
             ("max_records", self.max_records),
             ("max_input_bytes", self.max_input_bytes),
@@ -867,6 +867,10 @@ impl StructuredRotation {
         current
     }
 
+    pub(crate) fn dimensions(&self) -> usize {
+        self.dimensions
+    }
+
     fn apply_with_buffers(&self, input: &[f64], current: &mut Vec<f64>, work: &mut Vec<f64>) {
         debug_assert_eq!(input.len(), self.dimensions);
         current.clear();
@@ -905,11 +909,11 @@ impl StructuredRotation {
         }
     }
 
-    fn butterfly_operations_per_vector(&self) -> usize {
+    pub(crate) fn butterfly_operations_per_vector(&self) -> usize {
         ROTATION_ROUNDS * self.dimensions * self.block_width.ilog2() as usize
     }
 
-    fn operations_per_vector(&self) -> usize {
+    pub(crate) fn operations_per_vector(&self) -> usize {
         self.dimensions * (ROTATION_ROUNDS * (3 + self.block_width.ilog2() as usize) + 1)
     }
 
@@ -944,7 +948,7 @@ fn multiply_high(left: u64, right: u64) -> u64 {
 }
 
 #[derive(Clone, Copy)]
-struct Codebook {
+pub(crate) struct Codebook {
     thresholds: &'static [u64],
     centroids: &'static [u64],
 }
@@ -1017,7 +1021,7 @@ const CENTROIDS_4: &[u64] = &[
     0x4005_dc57_ebc6_84e8,
 ];
 
-fn codebook(bit_width: u8) -> Codebook {
+pub(crate) fn codebook(bit_width: u8) -> Codebook {
     match bit_width {
         2 => Codebook {
             thresholds: THRESHOLDS_2,
@@ -1046,13 +1050,13 @@ impl Codebook {
     }
 }
 
-struct EncodedVector {
-    bytes: Vec<u8>,
-    error: f64,
-    zero: bool,
+pub(crate) struct EncodedVector {
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) error: f64,
+    pub(crate) zero: bool,
 }
 
-struct EncodingScratch {
+pub(crate) struct EncodingScratch {
     unit: Vec<f64>,
     current: Vec<f64>,
     work: Vec<f64>,
@@ -1061,7 +1065,7 @@ struct EncodingScratch {
 }
 
 impl EncodingScratch {
-    fn new(dimensions: usize, packed_len: usize) -> Self {
+    pub(crate) fn new(dimensions: usize, packed_len: usize) -> Self {
         Self {
             unit: Vec::with_capacity(dimensions),
             current: Vec::with_capacity(dimensions),
@@ -1072,7 +1076,7 @@ impl EncodingScratch {
     }
 }
 
-fn encode_vector_reusing(
+pub(crate) fn encode_vector_reusing(
     vector: &[f32],
     plan: &StructuredRotation,
     codebook: Codebook,
@@ -1128,7 +1132,7 @@ fn encode_vector_reusing(
     })
 }
 
-fn packed_len(dimensions: usize, bit_width: u8) -> Result<usize, Error> {
+pub(crate) fn packed_len(dimensions: usize, bit_width: u8) -> Result<usize, Error> {
     dimensions
         .checked_mul(bit_width as usize)
         .map(|bits| bits.div_ceil(8))
@@ -1500,7 +1504,7 @@ fn require_version(found: u8) -> Result<(), Error> {
     }
 }
 
-fn enforce_resource(
+pub(crate) fn enforce_resource(
     resource: &'static str,
     limit: Option<usize>,
     actual: usize,
@@ -1515,7 +1519,7 @@ fn enforce_resource(
     Ok(())
 }
 
-fn resource_limit(resource: &'static str, limit: usize, actual: usize) -> Error {
+pub(crate) fn resource_limit(resource: &'static str, limit: usize, actual: usize) -> Error {
     Error::ProximityResourceLimitExceeded {
         resource,
         limit,
@@ -1544,7 +1548,7 @@ fn invalid_config(reason: impl Into<String>) -> Error {
     }
 }
 
-fn invalid_object(reason: impl Into<String>) -> Error {
+pub(crate) fn invalid_object(reason: impl Into<String>) -> Error {
     Error::InvalidProximityObject {
         kind: "TurboQuant",
         reason: reason.into(),

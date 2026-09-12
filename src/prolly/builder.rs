@@ -106,6 +106,7 @@ pub struct AsyncBatchBuilder<S: AsyncStore> {
 pub struct AsyncSortedBatchBuilder<S: AsyncStore> {
     engine: ProllyEngine<S>,
     origin: PublicationOrigin,
+    publication_batch_items: usize,
     pending_entry: Option<(Vec<u8>, Vec<u8>)>,
     pending_nodes: Vec<DeferredNode>,
     hierarchy: HierarchicalEmitter,
@@ -153,11 +154,25 @@ where
     }
 
     pub(crate) fn new_with_origin(store: S, config: Config, origin: PublicationOrigin) -> Self {
+        Self::new_with_origin_and_batch_size(store, config, origin, SORTED_BUILDER_NODE_BATCH)
+    }
+
+    pub(crate) fn new_with_origin_and_batch_size(
+        store: S,
+        config: Config,
+        origin: PublicationOrigin,
+        publication_batch_items: usize,
+    ) -> Self {
+        assert!(
+            publication_batch_items > 0,
+            "async sorted builder publication batch size must be positive"
+        );
         let hierarchy = HierarchicalEmitter::new(config.clone())
             .expect("configuration contains a registered persisted tree format");
         Self {
             engine: ProllyEngine::new(store, config),
             origin,
+            publication_batch_items,
             pending_entry: None,
             pending_nodes: Vec::new(),
             hierarchy,
@@ -196,14 +211,15 @@ where
     }
 
     async fn collect_emitted(&mut self, emitted: Vec<EmittedNode>) -> Result<(), Error> {
-        self.pending_nodes
-            .extend(emitted.into_iter().map(|emitted| DeferredNode {
+        for emitted in emitted {
+            self.pending_nodes.push(DeferredNode {
                 cid: emitted.summary.cid,
                 bytes: emitted.bytes,
                 node: emitted.node,
-            }));
-        if self.pending_nodes.len() >= SORTED_BUILDER_NODE_BATCH {
-            self.flush_pending_nodes().await?;
+            });
+            if self.pending_nodes.len() == self.publication_batch_items {
+                self.flush_pending_nodes().await?;
+            }
         }
         Ok(())
     }

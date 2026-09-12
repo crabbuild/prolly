@@ -143,10 +143,15 @@ normalized.
 Set `PROLLY_PROXIMITY_BENCH_ASYNC_QUANTIZERS=1` with the `async-store` feature
 to add async build, publication, search, percentile/work, and
 environment-specific recall rows for TurboQuant and PQ. The async builders
-stage the source, construct canonical sidecars, publish their complete catalog
-closures in bounded batches, and assert that each accelerator manifest and its
-logical statistics match the synchronous build for every requested worker
-count. `*_build_async_publication` rows record published object and byte counts.
+construct canonical sidecars, publish their complete catalog closures in
+bounded batches, and assert that each accelerator manifest and its logical
+statistics match the synchronous build for every requested worker count.
+TurboQuant reads the immutable async directory in key order, encodes at most
+128 source vectors at a time, and feeds a memory-bounded async sorted builder;
+it does not materialize or restage the corpus. Async verification likewise
+streams the source and code trees in lockstep. PQ retains its established
+staging path. `*_build_async_publication` rows record published object and byte
+counts.
 Searches execute the native async/batched engine through `SyncStoreAsAsync`,
 preserving the selected memory or file store. Warm samples share one
 authenticated `SearchIo` runtime after an untimed warmup. Cold samples create a

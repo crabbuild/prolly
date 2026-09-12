@@ -9,6 +9,53 @@ use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+#[cfg(feature = "async-store")]
+#[derive(Clone)]
+struct PublicationBoundAsyncStore {
+    inner: Arc<MemStore>,
+    publications: Arc<AtomicUsize>,
+    maximum_batch: Arc<AtomicUsize>,
+}
+
+#[cfg(feature = "async-store")]
+impl PublicationBoundAsyncStore {
+    fn new(inner: Arc<MemStore>) -> Self {
+        Self {
+            inner,
+            publications: Arc::new(AtomicUsize::new(0)),
+            maximum_batch: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+#[cfg(feature = "async-store")]
+impl prolly::AsyncStore for PublicationBoundAsyncStore {
+    type Error = prolly::MemStoreError;
+
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        Store::get(&self.inner, key)
+    }
+
+    async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        Store::put(&self.inner, key, value)
+    }
+
+    async fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        Store::delete(&self.inner, key)
+    }
+
+    async fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        Store::batch(&self.inner, ops)
+    }
+
+    async fn publish_nodes(&self, publication: NodePublication<'_>) -> Result<(), Self::Error> {
+        self.publications.fetch_add(1, Ordering::SeqCst);
+        self.maximum_batch
+            .fetch_max(publication.entries().len(), Ordering::SeqCst);
+        Store::publish_nodes(&self.inner, publication)
+    }
+}
+
 const NO_FAULT: usize = usize::MAX;
 
 #[derive(Default)]
@@ -1208,5 +1255,108 @@ fn turboquant_async_build_load_search_verify_and_cancel_match_sync() {
             .unwrap();
         assert_eq!(cancelled.completion, SearchCompletion::Cancelled);
         assert!(cancelled.neighbors.is_empty());
+    });
+}
+
+#[cfg(feature = "async-store")]
+#[test]
+fn turboquant_async_build_streams_canonical_codes_in_bounded_publications() {
+    use prolly::{
+        AsyncAcceleratorBuildOptions, AsyncAcceleratorCatalog, AsyncProximityMap,
+        AsyncTurboQuantizer, AsyncTurboQuantizerBuild, CatalogAcceleratorKind, SyncStoreAsAsync,
+    };
+    use std::future::Future;
+    use std::task::{Context, Poll};
+
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let waker = futures_util::task::noop_waker();
+        let mut context = Context::from_waker(&waker);
+        let mut future = Box::pin(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(value) => return value,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    let source = records(1_025, 128);
+    let config = TurboQuantizationConfig {
+        bit_width: 3,
+        rerank_multiplier: 16,
+        seed: 73,
+    };
+    let sync_store = Arc::new(MemStore::new());
+    let sync_map =
+        ProximityMap::build(sync_store, ProximityConfig::new(128), source.clone()).unwrap();
+    let (sync_index, sync_stats) =
+        TurboQuantizer::build(&sync_map, config.clone(), BuildParallelism::new(3).unwrap())
+            .unwrap();
+
+    block_on(async {
+        let backing = Arc::new(MemStore::new());
+        let initial = AsyncProximityMap::build(
+            SyncStoreAsAsync::new(backing.clone()),
+            ProximityConfig::new(128),
+            source,
+        )
+        .await
+        .unwrap();
+        assert_eq!(initial.tree().descriptor, sync_map.tree().descriptor);
+
+        let bounded = PublicationBoundAsyncStore::new(backing);
+        let map = AsyncProximityMap::load(bounded.clone(), initial.tree().descriptor.clone())
+            .await
+            .unwrap();
+        let (async_index, async_stats) = AsyncTurboQuantizer::build_with_limits(
+            &map,
+            config,
+            BuildParallelism::new(3).unwrap(),
+            TurboQuantizationBuildLimits::default(),
+            1,
+            &ContentGraphLimits::default(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(async_index.manifest_cid(), sync_index.manifest_cid());
+        assert_eq!(async_stats, sync_stats);
+        assert!(bounded.publications.load(Ordering::SeqCst) > 1);
+        assert_eq!(bounded.maximum_batch.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            async_index
+                .verify(&map, &ContentGraphLimits::default())
+                .await
+                .unwrap(),
+            sync_index.verify(&sync_map).unwrap()
+        );
+
+        bounded.publications.store(0, Ordering::SeqCst);
+        bounded.maximum_batch.store(0, Ordering::SeqCst);
+        let (catalog, catalog_stats) = AsyncAcceleratorCatalog::build(
+            &map,
+            AsyncAcceleratorBuildOptions {
+                turboquant: Some(AsyncTurboQuantizerBuild {
+                    config: sync_index.config().clone(),
+                    parallelism: BuildParallelism::new(3).unwrap(),
+                    limits: TurboQuantizationBuildLimits::default(),
+                }),
+                publication_batch_items: 2,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(catalog.entries().len(), 1);
+        assert_eq!(
+            catalog.entries()[0].kind,
+            CatalogAcceleratorKind::TurboQuantized
+        );
+        assert_eq!(catalog.entries()[0].manifest, *sync_index.manifest_cid());
+        assert_eq!(catalog_stats.turboquant, Some(sync_stats));
+        assert!(catalog_stats.objects_published > 1);
+        assert!(catalog_stats.bytes_published > 0);
+        assert!(bounded.publications.load(Ordering::SeqCst) > 1);
+        assert!(bounded.maximum_batch.load(Ordering::SeqCst) <= 2);
     });
 }

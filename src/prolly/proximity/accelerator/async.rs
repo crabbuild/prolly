@@ -17,23 +17,30 @@ use super::pq::{
 };
 use super::turboquant::config_fingerprint as turboquant_fingerprint;
 use super::turboquant::{
-    turboquant_code_tree_config, Manifest as TurboQuantManifest, TurboQuantizationBuildLimits,
+    codebook as turboquant_codebook, encode_vector_reusing, enforce_resource,
+    invalid_object as invalid_turboquant_object, packed_len as turboquant_packed_len,
+    resource_limit as turboquant_resource_limit, turboquant_code_tree_config, EncodingScratch,
+    Manifest as TurboQuantManifest, StructuredRotation, TurboQuantizationBuildLimits,
     TurboQuantizationBuildStats, TurboQuantizationConfig, TurboQuantizer,
 };
 use super::validate_binding;
+use crate::prolly::builder::AsyncSortedBatchBuilder;
 use crate::prolly::cid::Cid;
 use crate::prolly::content_graph::{
-    walk_content_graph, ContentGraphLimits, ContentObjectKind, TypedContentRoot,
+    walk_content_graph, walk_content_graph_async, ContentGraphLimits, ContentObjectKind,
+    TypedContentRoot,
 };
 use crate::prolly::error::Error;
+use crate::prolly::proximity::distance::canonical::sqrt_down;
+use crate::prolly::proximity::storage::StoredRecord;
 use crate::prolly::proximity::{
-    AcceleratorCatalog, AcceleratorSet, BuildParallelism, DistanceMetric,
-    ProductQuantizationQuality, ProximityMap, ProximityTree, TurboQuantizationQuality,
-    TurboQuantizationVerification,
+    BuildParallelism, DistanceMetric, ProductQuantizationQuality, ProximityMap, ProximityTree,
+    TurboQuantizationQuality, TurboQuantizationVerification,
 };
 use crate::prolly::store::{AsyncStore, MemStore, NodePublication, PublicationOrigin};
 use crate::prolly::tree::Tree;
 use crate::prolly::AsyncProlly;
+use rayon::prelude::*;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -517,6 +524,161 @@ impl AsyncProductQuantizer {
     }
 }
 
+#[derive(Default)]
+struct AsyncTurboQuantBuildState {
+    encoded_vectors: usize,
+    zero_vectors: usize,
+    transformed_components: usize,
+    butterfly_operations: usize,
+    transform_operations: usize,
+    quality_sum: f64,
+    quality_maximum: f64,
+    peak_temporary_bytes: usize,
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn append_turboquant_batch<S>(
+    builder: &mut AsyncSortedBatchBuilder<S>,
+    batch: Vec<(Vec<u8>, Vec<f32>)>,
+    plan: &StructuredRotation,
+    config: &TurboQuantizationConfig,
+    worker_threads: usize,
+    per_worker_buffers: usize,
+    packed_len: usize,
+    pool: Option<&rayon::ThreadPool>,
+    limits: &TurboQuantizationBuildLimits,
+    state: &mut AsyncTurboQuantBuildState,
+) -> Result<(), Error>
+where
+    S: AsyncStore,
+    S::Error: Send + Sync,
+{
+    if batch.is_empty() {
+        return Ok(());
+    }
+    let batch_input_bytes = batch.iter().try_fold(0usize, |total, (key, vector)| {
+        total
+            .checked_add(key.len())
+            .and_then(|value| value.checked_add(vector.len().checked_mul(4)?))
+            .ok_or_else(|| {
+                turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+            })
+    })?;
+    let batch_output_bytes = batch.len().checked_mul(8 + packed_len).ok_or_else(|| {
+        turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+    })?;
+    let physical_peak = plan
+        .owned_bytes()
+        .checked_add(batch_input_bytes)
+        .and_then(|value| value.checked_add(batch_output_bytes))
+        .and_then(|value| value.checked_add(per_worker_buffers.checked_mul(worker_threads)?))
+        .ok_or_else(|| {
+            turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+        })?;
+    enforce_resource(
+        "TurboQuant temporary bytes",
+        limits.max_temporary_bytes,
+        physical_peak,
+    )?;
+    let logical_peak = plan
+        .owned_bytes()
+        .checked_add(batch_input_bytes)
+        .and_then(|value| value.checked_add(batch_output_bytes))
+        .and_then(|value| value.checked_add(per_worker_buffers))
+        .ok_or_else(|| {
+            turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+        })?;
+    state.peak_temporary_bytes = state.peak_temporary_bytes.max(logical_peak);
+
+    let dimensions = plan.dimensions();
+    let sqrt_dimensions = sqrt_down(dimensions as f64);
+    let codebook = turboquant_codebook(config.bit_width);
+    let encoded = if let Some(pool) = pool {
+        pool.install(|| {
+            batch
+                .into_par_iter()
+                .map_init(
+                    || EncodingScratch::new(dimensions, packed_len),
+                    |scratch, (key, vector)| {
+                        let encoded = encode_vector_reusing(
+                            &vector,
+                            plan,
+                            codebook,
+                            config.bit_width,
+                            sqrt_dimensions,
+                            scratch,
+                        );
+                        (key, encoded)
+                    },
+                )
+                .collect::<Vec<_>>()
+        })
+    } else {
+        let mut scratch = EncodingScratch::new(dimensions, packed_len);
+        batch
+            .into_iter()
+            .map(|(key, vector)| {
+                let encoded = encode_vector_reusing(
+                    &vector,
+                    plan,
+                    codebook,
+                    config.bit_width,
+                    sqrt_dimensions,
+                    &mut scratch,
+                );
+                (key, encoded)
+            })
+            .collect()
+    };
+    for (key, encoded) in encoded {
+        let encoded = encoded?;
+        if encoded.zero {
+            state.zero_vectors = state.zero_vectors.saturating_add(1);
+        } else {
+            state.transformed_components = state
+                .transformed_components
+                .checked_add(dimensions)
+                .ok_or_else(|| {
+                    turboquant_resource_limit(
+                        "TurboQuant transform operations",
+                        usize::MAX,
+                        usize::MAX,
+                    )
+                })?;
+            state.butterfly_operations = state
+                .butterfly_operations
+                .checked_add(plan.butterfly_operations_per_vector())
+                .ok_or_else(|| {
+                    turboquant_resource_limit(
+                        "TurboQuant transform operations",
+                        usize::MAX,
+                        usize::MAX,
+                    )
+                })?;
+            state.transform_operations = state
+                .transform_operations
+                .checked_add(plan.operations_per_vector())
+                .ok_or_else(|| {
+                    turboquant_resource_limit(
+                        "TurboQuant transform operations",
+                        usize::MAX,
+                        usize::MAX,
+                    )
+                })?;
+            enforce_resource(
+                "TurboQuant transform operations",
+                limits.max_transform_operations,
+                state.transform_operations,
+            )?;
+        }
+        state.quality_sum += encoded.error;
+        state.quality_maximum = state.quality_maximum.max(encoded.error);
+        builder.add(key, encoded.bytes).await?;
+        state.encoded_vectors += 1;
+    }
+    Ok(())
+}
+
 impl AsyncTurboQuantizer {
     pub async fn load<S>(store: &S, manifest: Cid) -> Result<Self, Error>
     where
@@ -580,38 +742,212 @@ impl AsyncTurboQuantizer {
                 reason: "TurboQuant publication batch size must be positive".to_owned(),
             });
         }
-        let records = map.collect_records().await?;
-        let staging = Arc::new(MemStore::new());
-        let staged_map = ProximityMap::build(
-            staging.clone(),
-            map.tree().config.clone(),
-            records.into_values(),
+        limits.validate()?;
+        let dimensions = map.tree().config.dimensions;
+        config.validate(dimensions)?;
+        let records = usize::try_from(map.tree().count)
+            .map_err(|_| turboquant_resource_limit("TurboQuant records", usize::MAX, usize::MAX))?;
+        if records == 0 {
+            return Err(Error::InvalidProximityConfig {
+                reason: "TurboQuant requires a non-empty source map".to_owned(),
+            });
+        }
+        enforce_resource("TurboQuant records", limits.max_records, records)?;
+        enforce_resource(
+            "TurboQuant worker threads",
+            limits.max_worker_threads,
+            parallelism.threads(),
         )?;
-        if staged_map.tree() != map.tree() {
-            return Err(invalid(
-                "async TurboQuant staging did not reproduce the source descriptor",
+
+        let dimensions_usize = dimensions as usize;
+        let input_bytes = records
+            .checked_mul(dimensions_usize)
+            .and_then(|value| value.checked_mul(4))
+            .ok_or_else(|| {
+                turboquant_resource_limit("TurboQuant input bytes", usize::MAX, usize::MAX)
+            })?;
+        enforce_resource(
+            "TurboQuant input bytes",
+            limits.max_input_bytes,
+            input_bytes,
+        )?;
+        let packed_len = turboquant_packed_len(dimensions_usize, config.bit_width)?;
+        let encoded_output_bytes = records
+            .checked_mul(8usize.checked_add(packed_len).ok_or_else(|| {
+                turboquant_resource_limit("TurboQuant encoded output bytes", usize::MAX, usize::MAX)
+            })?)
+            .ok_or_else(|| {
+                turboquant_resource_limit("TurboQuant encoded output bytes", usize::MAX, usize::MAX)
+            })?;
+        enforce_resource(
+            "TurboQuant encoded output bytes",
+            limits.max_encoded_output_bytes,
+            encoded_output_bytes,
+        )?;
+
+        let plan = StructuredRotation::derive(dimensions_usize, config.seed)?;
+        let per_worker_buffers = dimensions_usize
+            .checked_mul(25)
+            .and_then(|value| value.checked_add(packed_len))
+            .ok_or_else(|| {
+                turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+            })?;
+        let required_temporary_bytes = plan
+            .owned_bytes()
+            .checked_add(
+                per_worker_buffers
+                    .checked_mul(parallelism.threads())
+                    .ok_or_else(|| {
+                        turboquant_resource_limit(
+                            "TurboQuant temporary bytes",
+                            usize::MAX,
+                            usize::MAX,
+                        )
+                    })?,
+            )
+            .and_then(|value| value.checked_add(8 + packed_len))
+            .ok_or_else(|| {
+                turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+            })?;
+        enforce_resource(
+            "TurboQuant temporary bytes",
+            limits.max_temporary_bytes,
+            required_temporary_bytes,
+        )?;
+
+        let target = map.store_clone();
+        let code_config = turboquant_code_tree_config();
+        let mut builder = AsyncSortedBatchBuilder::new_with_origin_and_batch_size(
+            target.clone(),
+            code_config.clone(),
+            PublicationOrigin::Maintenance,
+            publication_batch_items,
+        );
+        let pool = (parallelism.threads() > 1)
+            .then(|| {
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(parallelism.threads())
+                    .build()
+            })
+            .transpose()
+            .map_err(|_| Error::InvalidProximityConfig {
+                reason: "cannot create TurboQuant worker pool".to_owned(),
+            })?;
+        let mut state = AsyncTurboQuantBuildState {
+            peak_temporary_bytes: plan
+                .owned_bytes()
+                .checked_add(per_worker_buffers)
+                .and_then(|value| value.checked_add(8 + packed_len))
+                .ok_or_else(|| {
+                    turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+                })?,
+            ..Default::default()
+        };
+        const ENCODE_BATCH_RECORDS: usize = 128;
+        let mut batch = Vec::with_capacity(ENCODE_BATCH_RECORDS);
+        let mut source = map
+            .directory
+            .range(&map.tree().directory, &[], None)
+            .await?;
+        while let Some(entry) = source.next().await {
+            let (key, bytes) = entry?;
+            let stored = StoredRecord::decode(&bytes, dimensions)?;
+            batch.push((key, stored.vector));
+            if batch.len() == ENCODE_BATCH_RECORDS {
+                append_turboquant_batch(
+                    &mut builder,
+                    std::mem::take(&mut batch),
+                    &plan,
+                    &config,
+                    parallelism.threads(),
+                    per_worker_buffers,
+                    packed_len,
+                    pool.as_ref(),
+                    &limits,
+                    &mut state,
+                )
+                .await?;
+            }
+        }
+        append_turboquant_batch(
+            &mut builder,
+            batch,
+            &plan,
+            &config,
+            parallelism.threads(),
+            per_worker_buffers,
+            packed_len,
+            pool.as_ref(),
+            &limits,
+            &mut state,
+        )
+        .await?;
+        if state.encoded_vectors != records {
+            return Err(invalid_turboquant_object(
+                "TurboQuant source count changed during async build",
             ));
         }
-        let (index, stats) =
-            TurboQuantizer::build_with_limits(&staged_map, config, parallelism, limits)?;
-        let manifest = index.manifest_cid().clone();
-        let root = TypedContentRoot::new(ContentObjectKind::TurboQuantization, manifest.clone());
-        let walk = walk_content_graph(&staging, &[root], graph_limits)?;
-        let target = map.store_clone();
-        for chunk in walk.objects.chunks(publication_batch_items) {
-            let entries = chunk
-                .iter()
-                .map(|object| (object.root.cid.as_bytes(), object.bytes.as_slice()))
-                .collect::<Vec<_>>();
-            target
-                .publish_nodes(NodePublication::new(
-                    &entries,
-                    PublicationOrigin::Maintenance,
-                ))
-                .await
-                .map_err(|error| Error::Store(Box::new(error)))?;
+        let code_tree = builder.build().await?;
+        let code_root = code_tree.root.clone().ok_or_else(|| {
+            invalid_turboquant_object("TurboQuant requires a non-empty code tree")
+        })?;
+        let quality = TurboQuantizationQuality {
+            mean_squared_error: state.quality_sum / state.encoded_vectors as f64,
+            maximum_squared_error: state.quality_maximum,
+        };
+        let manifest_object = TurboQuantManifest {
+            source: map.tree().descriptor.clone(),
+            dimensions,
+            metric: map.tree().config.metric,
+            count: map.tree().count,
+            config: config.clone(),
+            transform_id: super::turboquant::STRUCTURED_ROTATION_ID,
+            codebook_id: super::turboquant::NORMAL_LLOYD_MAX_CODEBOOK_ID,
+            code_root,
+            quality,
+            zero_vectors: state.zero_vectors as u64,
+        };
+        let manifest_bytes = manifest_object.encode()?;
+        let manifest = Cid::from_bytes(&manifest_bytes);
+        match target
+            .get(manifest.as_bytes())
+            .await
+            .map_err(|error| Error::Store(Box::new(error)))?
+        {
+            Some(bytes) => {
+                let actual = Cid::from_bytes(&bytes);
+                if actual != manifest {
+                    return Err(Error::CidMismatch {
+                        expected: manifest,
+                        actual,
+                    });
+                }
+            }
+            None => {
+                let entries = [(manifest.as_bytes(), manifest_bytes.as_slice())];
+                target
+                    .publish_nodes(NodePublication::new(
+                        &entries,
+                        PublicationOrigin::Maintenance,
+                    ))
+                    .await
+                    .map_err(|error| Error::Store(Box::new(error)))?;
+            }
         }
-        Ok((Self::load(&target, manifest).await?, stats))
+        let root = TypedContentRoot::new(ContentObjectKind::TurboQuantization, manifest.clone());
+        walk_content_graph_async(&target, &[root], graph_limits).await?;
+        Ok((
+            Self::load(&target, manifest).await?,
+            TurboQuantizationBuildStats {
+                encoded_vectors: state.encoded_vectors,
+                zero_vectors: state.zero_vectors,
+                transformed_components: state.transformed_components,
+                butterfly_operations: state.butterfly_operations,
+                input_bytes,
+                encoded_output_bytes,
+                peak_temporary_bytes: state.peak_temporary_bytes,
+            },
+        ))
     }
 
     pub async fn search<S>(
@@ -661,19 +997,79 @@ impl AsyncTurboQuantizer {
             limits,
         )
         .await?;
-        let records = map.collect_records().await?;
-        let staging = Arc::new(MemStore::new());
-        let staged_map = ProximityMap::build(
-            staging.clone(),
-            map.tree().config.clone(),
-            records.into_values(),
-        )?;
-        let (rebuilt, _) =
-            TurboQuantizer::build(&staged_map, self.config.clone(), BuildParallelism::serial())?;
-        if rebuilt.manifest_cid() != &self.manifest {
-            return Err(invalid("async TurboQuant content is not canonical"));
+        let store = map.store_clone();
+        let codes = AsyncProlly::new(store, self.code_tree.config.clone());
+        let mut source = map
+            .directory
+            .range(&map.tree().directory, &[], None)
+            .await?;
+        let mut encoded = codes.range(&self.code_tree, &[], None).await?;
+        let plan = StructuredRotation::derive(self.dimensions as usize, self.config.seed)?;
+        let packed_len = turboquant_packed_len(self.dimensions as usize, self.config.bit_width)?;
+        let mut scratch = EncodingScratch::new(self.dimensions as usize, packed_len);
+        let mut count = 0u64;
+        let mut zeros = 0u64;
+        let mut quality_sum = 0.0;
+        let mut quality_maximum = 0.0f64;
+        loop {
+            match (source.next().await, encoded.next().await) {
+                (None, None) => break,
+                (Some(source), Some(code)) => {
+                    let (source_key, source_bytes) = source?;
+                    let (code_key, actual) = code?;
+                    if source_key != code_key {
+                        return Err(invalid_turboquant_object(
+                            "TurboQuant source and code keys do not match",
+                        ));
+                    }
+                    let stored = StoredRecord::decode(&source_bytes, self.dimensions)?;
+                    let expected = encode_vector_reusing(
+                        &stored.vector,
+                        &plan,
+                        turboquant_codebook(self.config.bit_width),
+                        self.config.bit_width,
+                        sqrt_down(f64::from(self.dimensions)),
+                        &mut scratch,
+                    )?;
+                    if actual != expected.bytes {
+                        return Err(invalid_turboquant_object(
+                            "TurboQuant code disagrees with authoritative source vector",
+                        ));
+                    }
+                    count += 1;
+                    zeros += u64::from(expected.zero);
+                    quality_sum += expected.error;
+                    quality_maximum = quality_maximum.max(expected.error);
+                }
+                _ => {
+                    return Err(invalid_turboquant_object(
+                        "TurboQuant source and code counts do not match",
+                    ));
+                }
+            }
         }
-        rebuilt.verify(&staged_map)
+        if count != self.count || zeros != self.zero_vectors {
+            return Err(invalid_turboquant_object(
+                "TurboQuant verified counts disagree with manifest",
+            ));
+        }
+        let quality = TurboQuantizationQuality {
+            mean_squared_error: quality_sum / count as f64,
+            maximum_squared_error: quality_maximum,
+        };
+        if quality.mean_squared_error.to_bits() != self.quality.mean_squared_error.to_bits()
+            || quality.maximum_squared_error.to_bits()
+                != self.quality.maximum_squared_error.to_bits()
+        {
+            return Err(invalid_turboquant_object(
+                "TurboQuant quality measurements disagree with manifest",
+            ));
+        }
+        Ok(TurboQuantizationVerification {
+            encoded_vectors: count,
+            zero_vectors: zeros,
+            quality,
+        })
     }
 
     pub fn manifest_cid(&self) -> &Cid {
@@ -872,8 +1268,8 @@ impl AsyncAcceleratorCatalog {
         Self::load(store, manifest, source).await
     }
 
-    /// Construct canonical HNSW/PQ sidecars from an async-only source and
-    /// publish their complete catalog closure in bounded provider batches.
+    /// Construct canonical sidecars from an async-only source and publish
+    /// their complete catalog closure in bounded provider batches.
     pub async fn build<S>(
         map: &crate::prolly::proximity::AsyncProximityMap<S>,
         options: AsyncAcceleratorBuildOptions,
@@ -882,82 +1278,115 @@ impl AsyncAcceleratorCatalog {
         S: AsyncStore + Clone,
         S::Error: Send + Sync,
     {
-        if options.publication_batch_items == 0 {
+        let AsyncAcceleratorBuildOptions {
+            hnsw,
+            product_quantizer,
+            turboquant,
+            publication_batch_items,
+            graph_limits,
+        } = options;
+        if publication_batch_items == 0 {
             return Err(Error::InvalidProximityConfig {
                 reason: "accelerator publication batch size must be greater than zero".to_owned(),
             });
         }
-        if options.hnsw.is_none()
-            && options.product_quantizer.is_none()
-            && options.turboquant.is_none()
-        {
+        if hnsw.is_none() && product_quantizer.is_none() && turboquant.is_none() {
             return Err(invalid("async accelerator build plan is empty"));
         }
 
-        // CPU builders remain runtime-neutral and deterministic. Staging in a
-        // memory Store lets async-only applications use those canonical
-        // builders without requiring a synchronous remote adapter.
-        let records = map.collect_records().await?;
-        let staging = Arc::new(MemStore::new());
-        let staged_map = ProximityMap::build(
-            staging.clone(),
-            map.tree().config.clone(),
-            records.into_values(),
-        )?;
-        if staged_map.tree() != map.tree() {
-            return Err(invalid(
-                "async accelerator staging did not reproduce the source descriptor",
-            ));
+        let store = map.store_clone();
+        let mut stats = AsyncAcceleratorBuildStats::default();
+        let mut accelerators = AsyncAcceleratorSet::empty();
+
+        // HNSW and PQ retain their established canonical staging path. Do not
+        // make TurboQuant pay that unbounded corpus-copy cost: its async
+        // builder streams directly from the immutable source directory.
+        if hnsw.is_some() || product_quantizer.is_some() {
+            let records = map.collect_records().await?;
+            let staging = Arc::new(MemStore::new());
+            let staged_map = ProximityMap::build(
+                staging.clone(),
+                map.tree().config.clone(),
+                records.into_values(),
+            )?;
+            if staged_map.tree() != map.tree() {
+                return Err(invalid(
+                    "async accelerator staging did not reproduce the source descriptor",
+                ));
+            }
+            let mut roots = Vec::new();
+            let mut hnsw_manifest = None;
+            let mut pq_manifest = None;
+            if let Some(build) = hnsw {
+                let (index, built) =
+                    HnswIndex::build_with_limits(&staged_map, build.config, build.limits)?;
+                let manifest = index.manifest_cid().clone();
+                roots.push(TypedContentRoot::new(
+                    ContentObjectKind::HnswManifest,
+                    manifest.clone(),
+                ));
+                hnsw_manifest = Some(manifest);
+                stats.hnsw = Some(built);
+            }
+            if let Some(build) = product_quantizer {
+                let (index, built) = ProductQuantizer::build_with_limits(
+                    &staged_map,
+                    build.config,
+                    build.parallelism,
+                    build.limits,
+                )?;
+                let manifest = index.manifest_cid().clone();
+                roots.push(TypedContentRoot::new(
+                    ContentObjectKind::ProductQuantization,
+                    manifest.clone(),
+                ));
+                pq_manifest = Some(manifest);
+                stats.product_quantizer = Some(built);
+            }
+            let walk = walk_content_graph(&staging, &roots, &graph_limits)?;
+            for chunk in walk.objects.chunks(publication_batch_items) {
+                let entries = chunk
+                    .iter()
+                    .map(|object| (object.root.cid.as_bytes(), object.bytes.as_slice()))
+                    .collect::<Vec<_>>();
+                store
+                    .publish_nodes(NodePublication::new(
+                        &entries,
+                        PublicationOrigin::Maintenance,
+                    ))
+                    .await
+                    .map_err(|error| Error::Store(Box::new(error)))?;
+            }
+            if let Some(manifest) = hnsw_manifest {
+                accelerators = accelerators
+                    .with_hnsw(map.tree(), AsyncHnswIndex::load(&store, manifest).await?)?;
+            }
+            if let Some(manifest) = pq_manifest {
+                accelerators = accelerators.with_pq(
+                    map.tree(),
+                    AsyncProductQuantizer::load(&store, manifest).await?,
+                )?;
+            }
         }
 
-        let mut stats = AsyncAcceleratorBuildStats::default();
-        let mut set = AcceleratorSet::empty();
-        if let Some(build) = options.hnsw {
-            let (index, built) =
-                HnswIndex::build_with_limits(&staged_map, build.config, build.limits)?;
-            stats.hnsw = Some(built);
-            set = set.with_hnsw(staged_map.tree(), index)?;
-        }
-        if let Some(build) = options.product_quantizer {
-            let (index, built) = ProductQuantizer::build_with_limits(
-                &staged_map,
+        if let Some(build) = turboquant {
+            let (index, built) = AsyncTurboQuantizer::build_with_limits(
+                map,
                 build.config,
                 build.parallelism,
                 build.limits,
-            )?;
-            stats.product_quantizer = Some(built);
-            set = set.with_pq(staged_map.tree(), index)?;
-        }
-        if let Some(build) = options.turboquant {
-            let (index, built) = TurboQuantizer::build_with_limits(
-                &staged_map,
-                build.config,
-                build.parallelism,
-                build.limits,
-            )?;
+                publication_batch_items,
+                &graph_limits,
+            )
+            .await?;
             stats.turboquant = Some(built);
-            set = set.with_turboquant(staged_map.tree(), index)?;
+            accelerators = accelerators.with_turboquant(map.tree(), index)?;
         }
-        let catalog = AcceleratorCatalog::build(staging.clone(), staged_map.tree(), set)?;
-        let manifest = catalog.manifest_cid().clone();
-        let walk = walk_content_graph(&staging, &[catalog.typed_root()], &options.graph_limits)?;
+
+        let catalog = Self::publish(&store, map.tree(), accelerators).await?;
+        let walk = walk_content_graph_async(&store, &[catalog.typed_root()], &graph_limits).await?;
         stats.objects_published = walk.objects.len();
         stats.bytes_published = walk.total_bytes;
-        let store = map.store_clone();
-        for chunk in walk.objects.chunks(options.publication_batch_items) {
-            let entries = chunk
-                .iter()
-                .map(|object| (object.root.cid.as_bytes(), object.bytes.as_slice()))
-                .collect::<Vec<_>>();
-            store
-                .publish_nodes(NodePublication::new(
-                    &entries,
-                    PublicationOrigin::Maintenance,
-                ))
-                .await
-                .map_err(|error| Error::Store(Box::new(error)))?;
-        }
-        let catalog = Self::load(&store, manifest, map.tree()).await?;
         Ok((catalog, stats))
     }
 
