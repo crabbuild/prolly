@@ -1631,6 +1631,31 @@ fn turboquant_async_composite_streams_the_structural_delta_canonically() {
         assert_eq!(async_base.tree(), sync_base.tree());
         assert_eq!(async_current.tree(), sync_current.tree());
 
+        let publications_before_validation = store.publications.load(Ordering::SeqCst);
+        let invalid_limits = AsyncCompositeAccelerator::build_from_turboquant(
+            &async_base,
+            &async_current,
+            &async_quantizer,
+            AsyncCompositeBuildOptions {
+                turboquant_limits: TurboQuantizationBuildLimits {
+                    max_records: Some(0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )
+        .await;
+        match invalid_limits {
+            Err(prolly::Error::InvalidProximityConfig { reason }) => {
+                assert!(reason.contains("TurboQuant max_records"));
+            }
+            _ => panic!("invalid co-resident TurboQuant limits must fail before publication"),
+        }
+        assert_eq!(
+            store.publications.load(Ordering::SeqCst),
+            publications_before_validation
+        );
+
         store.publications.store(0, Ordering::SeqCst);
         store.maximum_batch.store(0, Ordering::SeqCst);
         let outcome = AsyncCompositeAccelerator::build_from_turboquant(

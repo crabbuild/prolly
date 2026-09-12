@@ -342,6 +342,11 @@ impl AsyncCompositeAccelerator {
     {
         options.config.validate()?;
         options.limits.validate()?;
+        // Validate every caller-provided TurboQuant option before consulting
+        // store residency. Otherwise the same logical composite request could
+        // accept malformed limits on the native co-resident path but reject
+        // them on the compatibility staging path.
+        options.turboquant_limits.validate()?;
         if options.publication_batch_items == 0 {
             return Err(Error::InvalidProximityConfig {
                 reason: "composite publication batch size must be greater than zero".to_owned(),
