@@ -88,8 +88,9 @@ The first ten corrected schema-v3 cells are retained in
 [`proximity-turboquant-v3-qualification.md`](proximity-turboquant-v3-qualification.md).
 They cover 10K and 100K × 768 at the default four-bit, 8× setting for all
 three metrics, plus matching 16× cosine and inner-product diagnostics.
-Squared-L2 recall is 1.00 after correcting reconstructed-vector norm scoring;
-the product-oriented rows still fail the recall floor at 16×. This partial
+Squared-L2 recall is 1.00 after correcting reconstructed-vector norm scoring.
+Correct cosine reconstruction normalization raises 10K recall to 0.40 but
+still fails the floor, as do the 16× product-oriented rows. This partial
 evidence leaves 45,350 matrix cells and all final release gates open.
 
 Smoke command:
