@@ -118,3 +118,10 @@ The implementation PR records a development-machine 64-record × 8-dimension
 smoke run. It demonstrates executable benchmark coverage and exact reranking,
 not production capacity or `Auto` qualification. Production evidence must not
 replace or average away a failing dataset/metric row.
+
+The retained
+[`proximity-turboquant-1k-qualification.md`](proximity-turboquant-1k-qualification.md)
+report covers the next bounded tier across every supported dimension and
+metric. Its default-path recall rows pass, but its comparative timing and size
+results reinforce the decision to keep `Auto` disabled. The report explicitly
+does not close the remaining production-matrix gates.
