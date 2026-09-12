@@ -2665,6 +2665,64 @@ mod tests {
     }
 
     #[test]
+    fn fused_l2_score_matches_the_ordered_two_pass_reference() {
+        for dimensions in [8usize, 24, 128, 200, 768] {
+            for bit_width in [2, 3, 4] {
+                let weighted = (0..dimensions)
+                    .map(|index| ((index as f64 + 0.75) * 0.015625).cos())
+                    .collect::<Vec<_>>();
+                let query_norm_squared = 23.5;
+                let prepared = TurboQuantPreparedQuery::new(
+                    weighted.clone(),
+                    query_norm_squared,
+                    bit_width,
+                    QueryKernel::ScalarDeterministic,
+                );
+                let maximum = 1u8 << bit_width;
+                let codes = (0..dimensions)
+                    .map(|index| ((index * 11 + 5) as u8) % maximum)
+                    .collect::<Vec<_>>();
+                let packed = pack_codes(&codes, bit_width).unwrap();
+                let norm = 3.25f64;
+                let mut encoded = norm.to_le_bytes().to_vec();
+                encoded.extend_from_slice(&packed);
+
+                let actual = score_code_value(
+                    &encoded,
+                    &prepared,
+                    DistanceMetric::L2Squared,
+                    dimensions,
+                    bit_width,
+                    QueryKernel::ScalarDeterministic,
+                )
+                .unwrap();
+
+                let codebook = codebook(bit_width);
+                let inverse_sqrt_dimensions = 1.0 / sqrt_down(dimensions as f64);
+                let mut dot = 0.0;
+                for (weight, code) in weighted.iter().zip(&codes) {
+                    dot += weight * codebook.centroid(*code);
+                }
+                let mut reconstructed_norm_squared = 0.0;
+                for code in &codes {
+                    let reconstructed = codebook.centroid(*code) * inverse_sqrt_dimensions;
+                    reconstructed_norm_squared += reconstructed * reconstructed;
+                }
+                let expected = (query_norm_squared + norm * norm * reconstructed_norm_squared
+                    - 2.0 * norm * dot)
+                    .max(0.0);
+                let expected = if expected == 0.0 { 0.0 } else { expected };
+
+                assert_eq!(
+                    actual.to_bits(),
+                    expected.to_bits(),
+                    "dimension={dimensions}, bits={bit_width}",
+                );
+            }
+        }
+    }
+
+    #[test]
     fn cosine_approximate_score_is_source_scale_invariant() {
         let dimensions = 8;
         let bit_width = 4;
