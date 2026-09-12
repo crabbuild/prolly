@@ -33,12 +33,16 @@ pub use accelerator::pq::{
     ProductQuantizationBuildLimits, ProductQuantizationBuildStats, ProductQuantizationConfig,
     ProductQuantizationQuality, ProductQuantizer,
 };
+pub use accelerator::turboquant::{
+    TurboQuantizationBuildLimits, TurboQuantizationBuildStats, TurboQuantizationConfig,
+    TurboQuantizationQuality, TurboQuantizationVerification, TurboQuantizer,
+};
 pub use accelerator::AcceleratorSet;
 pub use accelerator::{
     AsyncAcceleratorBuildOptions, AsyncAcceleratorBuildStats, AsyncAcceleratorCatalog,
     AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncCompositeBuildOptions,
     AsyncCompositeBuildOutcome, AsyncHnswBuild, AsyncHnswIndex, AsyncProductQuantizer,
-    AsyncProductQuantizerBuild,
+    AsyncProductQuantizerBuild, AsyncTurboQuantizer, AsyncTurboQuantizerBuild,
 };
 pub use async_map::{AsyncProximityBuildOptions, AsyncProximityReadSession};
 pub use build::{BuildParallelism, ProximityBuildStats};
@@ -52,7 +56,7 @@ pub use proof::{
 pub use search::{
     ApproximatePreference, HnswSearchOptions, PlannerPolicy, PqSearchOptions, ProximityFilter,
     SearchIo, SearchOptions, SearchPlan, SearchPlanSummary, SearchRequest, SearchRuntime,
-    SearchRuntimePolicy, StoreCacheNamespace, SEARCH_PLAN_FORMAT_VERSION,
+    SearchRuntimePolicy, StoreCacheNamespace, TurboQuantSearchOptions, SEARCH_PLAN_FORMAT_VERSION,
 };
 pub use search::{AsyncIoConfig, AsyncProximityMap, AsyncSearchControl, CancellationToken};
 
@@ -254,6 +258,7 @@ pub enum SearchBackend {
     Hnsw,
     Composite,
     Auto,
+    TurboQuantized,
 }
 
 /// Runtime-only deterministic query distance implementation.

@@ -4,10 +4,12 @@ pub mod composite;
 pub mod hnsw;
 pub mod pq;
 pub(crate) mod sq8;
+pub mod turboquant;
 
 use self::composite::CompositeAccelerator;
 use self::hnsw::HnswIndex;
 use self::pq::ProductQuantizer;
+use self::turboquant::TurboQuantizer;
 use super::ProximityTree;
 use crate::prolly::error::Error;
 use crate::prolly::store::Store;
@@ -16,13 +18,14 @@ pub use r#async::{
     AsyncAcceleratorBuildOptions, AsyncAcceleratorBuildStats, AsyncAcceleratorCatalog,
     AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncCompositeBuildOptions,
     AsyncCompositeBuildOutcome, AsyncHnswBuild, AsyncHnswIndex, AsyncProductQuantizer,
-    AsyncProductQuantizerBuild,
+    AsyncProductQuantizerBuild, AsyncTurboQuantizer, AsyncTurboQuantizerBuild,
 };
 
 /// Validated source-bound derived accelerators available to one search.
 pub struct AcceleratorSet<S: Store> {
     hnsw: Option<HnswIndex<S>>,
     pq: Option<ProductQuantizer<S>>,
+    turboquant: Option<TurboQuantizer<S>>,
     composite: Option<CompositeAccelerator<S>>,
 }
 
@@ -31,6 +34,7 @@ impl<S: Store> Default for AcceleratorSet<S> {
         Self {
             hnsw: None,
             pq: None,
+            turboquant: None,
             composite: None,
         }
     }
@@ -65,6 +69,7 @@ impl<S: Store> AcceleratorSet<S> {
         Ok(Self {
             hnsw,
             pq,
+            turboquant: None,
             composite: None,
         })
     }
@@ -109,6 +114,26 @@ impl<S: Store> AcceleratorSet<S> {
         Ok(self)
     }
 
+    pub fn with_turboquant(
+        mut self,
+        source: &ProximityTree,
+        index: TurboQuantizer<S>,
+    ) -> Result<Self, Error> {
+        if self.turboquant.is_some() {
+            return Err(invalid("duplicate TurboQuant accelerator"));
+        }
+        validate_binding(
+            source,
+            &index.source,
+            index.dimensions,
+            index.metric,
+            index.count,
+            "TurboQuant",
+        )?;
+        self.turboquant = Some(index);
+        Ok(self)
+    }
+
     pub fn with_composite(
         mut self,
         source: &ProximityTree,
@@ -136,6 +161,10 @@ impl<S: Store> AcceleratorSet<S> {
 
     pub(crate) fn pq(&self) -> Option<&ProductQuantizer<S>> {
         self.pq.as_ref()
+    }
+
+    pub(crate) fn turboquant(&self) -> Option<&TurboQuantizer<S>> {
+        self.turboquant.as_ref()
     }
 
     pub(crate) fn composite(&self) -> Option<&CompositeAccelerator<S>> {

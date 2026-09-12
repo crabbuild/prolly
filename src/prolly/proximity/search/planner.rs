@@ -2,11 +2,11 @@ use super::{ApproximatePreference, EligibilityCardinality, PreparedFilter, Searc
 use crate::prolly::error::Error;
 use crate::prolly::proximity::accelerator::AcceleratorSet;
 use crate::prolly::proximity::{CompositeAcceleratorConfig, CompositeBaseKind};
-use crate::prolly::proximity::{HnswConfig, ProductQuantizationConfig};
+use crate::prolly::proximity::{HnswConfig, ProductQuantizationConfig, TurboQuantizationConfig};
 use crate::prolly::proximity::{ProximityTree, SearchBackend, SearchPolicy};
 use crate::prolly::store::Store;
 
-pub const SEARCH_PLAN_FORMAT_VERSION: u8 = 3;
+pub const SEARCH_PLAN_FORMAT_VERSION: u8 = 4;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SearchPlan {
@@ -16,6 +16,10 @@ pub enum SearchPlan {
         source_bound: bool,
     },
     ProductQuantized {
+        rerank_target: usize,
+        direct_lookup: bool,
+    },
+    TurboQuantized {
         rerank_target: usize,
         direct_lookup: bool,
     },
@@ -75,6 +79,14 @@ impl SearchPlan {
                 summary.rerank_target = Some(*rerank_target);
                 summary.direct_lookup = *direct_lookup;
             }
+            Self::TurboQuantized {
+                rerank_target,
+                direct_lookup,
+            } => {
+                summary.backend = SearchBackend::TurboQuantized;
+                summary.rerank_target = Some(*rerank_target);
+                summary.direct_lookup = *direct_lookup;
+            }
             Self::Hnsw {
                 ef_search,
                 expansion_target,
@@ -107,6 +119,7 @@ pub(crate) struct CompositePlanInput<'a> {
     pub base_kind: CompositeBaseKind,
     pub hnsw: Option<&'a HnswConfig>,
     pub pq: Option<&'a ProductQuantizationConfig>,
+    pub turboquant: Option<&'a TurboQuantizationConfig>,
     pub base_count: u64,
     pub delta_count: u64,
     pub shadow_count: u64,
@@ -127,12 +140,14 @@ where
         tree,
         accelerators.hnsw().map(|index| index.config()),
         accelerators.pq().map(|index| index.config()),
+        accelerators.turboquant().map(|index| index.config()),
         accelerators
             .composite()
             .map(|composite| CompositePlanInput {
                 base_kind: composite.base_kind(),
                 hnsw: composite.base.hnsw().map(|index| index.config()),
                 pq: composite.base.pq().map(|index| index.config()),
+                turboquant: composite.base.turboquant().map(|index| index.config()),
                 base_count: composite.base_count,
                 delta_count: composite.delta_count,
                 shadow_count: composite.shadow_count,
@@ -147,6 +162,7 @@ pub(crate) fn plan_search_capabilities(
     tree: &ProximityTree,
     hnsw: Option<&HnswConfig>,
     pq: Option<&ProductQuantizationConfig>,
+    turboquant: Option<&TurboQuantizationConfig>,
     composite: Option<CompositePlanInput<'_>>,
     request: &SearchRequest<'_>,
     eligibility: &PreparedFilter<'_>,
@@ -164,6 +180,12 @@ pub(crate) fn plan_search_capabilities(
             let config =
                 pq.ok_or_else(|| invalid("forced product-quantized backend is unavailable"))?;
             return pq_plan(tree, config, request, eligibility, cardinality);
+        }
+        SearchBackend::TurboQuantized => {
+            ensure_approximate(request, "TurboQuant")?;
+            let config =
+                turboquant.ok_or_else(|| invalid("forced TurboQuant backend is unavailable"))?;
+            return turboquant_plan(tree, config, request, eligibility, cardinality);
         }
         SearchBackend::Composite => {
             ensure_approximate(request, "composite")?;
@@ -191,10 +213,21 @@ pub(crate) fn plan_search_capabilities(
     }
 
     let preferences = match request.options.planner.approximate_preference {
-        ApproximatePreference::HnswFirst => [SearchBackend::Hnsw, SearchBackend::ProductQuantized],
-        ApproximatePreference::ProductQuantizedFirst => {
-            [SearchBackend::ProductQuantized, SearchBackend::Hnsw]
-        }
+        ApproximatePreference::HnswFirst => [
+            SearchBackend::Hnsw,
+            SearchBackend::TurboQuantized,
+            SearchBackend::ProductQuantized,
+        ],
+        ApproximatePreference::ProductQuantizedFirst => [
+            SearchBackend::ProductQuantized,
+            SearchBackend::TurboQuantized,
+            SearchBackend::Hnsw,
+        ],
+        ApproximatePreference::TurboQuantizedFirst => [
+            SearchBackend::TurboQuantized,
+            SearchBackend::Hnsw,
+            SearchBackend::ProductQuantized,
+        ],
     };
     for backend in preferences {
         let plan = match backend {
@@ -204,6 +237,9 @@ pub(crate) fn plan_search_capabilities(
             SearchBackend::ProductQuantized => pq
                 .map(|config| pq_plan(tree, config, request, eligibility, cardinality))
                 .transpose()?,
+            // Auto admission is deliberately gated on checked-in benchmark
+            // qualification; forced TurboQuant planning is fully available.
+            SearchBackend::TurboQuantized => None,
             SearchBackend::Native | SearchBackend::Composite | SearchBackend::Auto => None,
         };
         if plan
@@ -243,6 +279,15 @@ fn composite_plan(
             input
                 .pq
                 .ok_or_else(|| invalid("composite PQ configuration is absent"))?,
+            request,
+            eligibility,
+            cardinality,
+        )?,
+        CompositeBaseKind::TurboQuantized => turboquant_plan_for_count(
+            input.base_count,
+            input
+                .turboquant
+                .ok_or_else(|| invalid("composite TurboQuant configuration is absent"))?,
             request,
             eligibility,
             cardinality,
@@ -288,6 +333,13 @@ fn inflate_composite_base(
             *rerank_target = inflate(*rerank_target)?;
         }
         SearchPlan::ProductQuantized {
+            rerank_target,
+            direct_lookup,
+        } => {
+            *rerank_target = inflate(*rerank_target)?;
+            *direct_lookup = false;
+        }
+        SearchPlan::TurboQuantized {
             rerank_target,
             direct_lookup,
         } => {
@@ -436,6 +488,48 @@ fn pq_plan_for_count(
     })
 }
 
+fn turboquant_plan(
+    tree: &ProximityTree,
+    config: &TurboQuantizationConfig,
+    request: &SearchRequest<'_>,
+    eligibility: &PreparedFilter<'_>,
+    cardinality: EligibilityCardinality,
+) -> Result<SearchPlan, Error> {
+    turboquant_plan_for_count(tree.count, config, request, eligibility, cardinality)
+}
+
+fn turboquant_plan_for_count(
+    total_count: u64,
+    config: &TurboQuantizationConfig,
+    request: &SearchRequest<'_>,
+    eligibility: &PreparedFilter<'_>,
+    cardinality: EligibilityCardinality,
+) -> Result<SearchPlan, Error> {
+    let multiplier = request
+        .options
+        .turboquant
+        .rerank_multiplier
+        .map(usize::from)
+        .unwrap_or(config.rerank_multiplier as usize);
+    let known_limit = match cardinality {
+        EligibilityCardinality::Known(count) => count,
+        EligibilityCardinality::Unknown => total_count,
+    };
+    let rerank_target = request
+        .k
+        .checked_mul(multiplier)
+        .ok_or_else(|| invalid("TurboQuant rerank target overflow"))?
+        .max(request.k)
+        .min(known_limit as usize)
+        .min(total_count as usize);
+    let direct_lookup = eligibility.sorted_keys().is_some()
+        && known_limit <= request.options.planner.eligible_exact_max_records as u64;
+    Ok(SearchPlan::TurboQuantized {
+        rerank_target,
+        direct_lookup,
+    })
+}
+
 fn budget_admissible(plan: &SearchPlan, request: &SearchRequest<'_>) -> bool {
     match plan {
         SearchPlan::Hnsw {
@@ -456,7 +550,8 @@ fn budget_admissible(plan: &SearchPlan, request: &SearchRequest<'_>) -> bool {
                     .max_frontier_entries
                     .is_none_or(|limit| request.k <= limit)
         }
-        SearchPlan::ProductQuantized { rerank_target, .. } => request
+        SearchPlan::ProductQuantized { rerank_target, .. }
+        | SearchPlan::TurboQuantized { rerank_target, .. } => request
             .budget
             .max_distance_evaluations
             .is_none_or(|limit| *rerank_target <= limit),
@@ -491,7 +586,8 @@ fn estimated_node_work(plan: &SearchPlan) -> usize {
             rerank_target,
             ..
         } => expansion_target.saturating_add(*rerank_target),
-        SearchPlan::ProductQuantized { rerank_target, .. } => *rerank_target,
+        SearchPlan::ProductQuantized { rerank_target, .. }
+        | SearchPlan::TurboQuantized { rerank_target, .. } => *rerank_target,
         SearchPlan::Composite {
             base,
             delta_records,
@@ -511,7 +607,8 @@ fn estimated_distance_work(plan: &SearchPlan) -> usize {
             rerank_target,
             ..
         } => expansion_target.saturating_add(*rerank_target),
-        SearchPlan::ProductQuantized { rerank_target, .. } => *rerank_target,
+        SearchPlan::ProductQuantized { rerank_target, .. }
+        | SearchPlan::TurboQuantized { rerank_target, .. } => *rerank_target,
         SearchPlan::Composite {
             base,
             delta_records,

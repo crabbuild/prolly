@@ -8,6 +8,7 @@ use crate::prolly::proximity::accelerator::catalog::{
 use crate::prolly::proximity::accelerator::composite::Manifest as CompositeManifest;
 use crate::prolly::proximity::accelerator::hnsw::storage::{GraphNode, Manifest as HnswManifest};
 use crate::prolly::proximity::accelerator::pq::Manifest as PqManifest;
+use crate::prolly::proximity::accelerator::turboquant::Manifest as TurboQuantManifest;
 use crate::prolly::proximity::storage::quantized::ScalarQuantized;
 use crate::prolly::proximity::storage::vector::ExternalVector;
 use crate::prolly::proximity::storage::{Descriptor, PhysicalNodeKind, ProximityNode, VectorRef};
@@ -456,6 +457,16 @@ fn references(
             ));
             ContentObjectKind::ProductQuantization
         }
+        ContentObjectKind::TurboQuantization => {
+            let manifest = TurboQuantManifest::decode(bytes)?;
+            manifest.config.validate(manifest.dimensions)?;
+            output.push(TypedContentRoot::proximity_descriptor(manifest.source));
+            output.push(TypedContentRoot::new(
+                ContentObjectKind::OrderedNode,
+                manifest.code_root,
+            ));
+            ContentObjectKind::TurboQuantization
+        }
         ContentObjectKind::HnswManifest => {
             let manifest = HnswManifest::decode(bytes)?;
             manifest.config.validate()?;
@@ -484,6 +495,9 @@ fn references(
                     crate::prolly::proximity::CompositeBaseKind::ProductQuantized => {
                         ContentObjectKind::ProductQuantization
                     }
+                    crate::prolly::proximity::CompositeBaseKind::TurboQuantized => {
+                        ContentObjectKind::TurboQuantization
+                    }
                 },
                 manifest.base_manifest,
             ));
@@ -507,6 +521,9 @@ fn references(
                         }
                         CatalogAcceleratorKind::Composite => {
                             ContentObjectKind::CompositeAccelerator
+                        }
+                        CatalogAcceleratorKind::TurboQuantized => {
+                            ContentObjectKind::TurboQuantization
                         }
                     },
                     entry.manifest,

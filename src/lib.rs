@@ -351,7 +351,9 @@ pub use prolly::proximity::{
     ProximityStructuralVerification, ProximityTree, ProximityVectorRef, ProximityVerification,
     QueryKernel, ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchIo,
     SearchOptions, SearchPlan, SearchPlanSummary, SearchPolicy, SearchRequest, SearchResult,
-    SearchRuntime, SearchRuntimePolicy, StoreCacheNamespace, VectorStorageConfig,
+    SearchRuntime, SearchRuntimePolicy, StoreCacheNamespace, TurboQuantSearchOptions,
+    TurboQuantizationBuildLimits, TurboQuantizationBuildStats, TurboQuantizationConfig,
+    TurboQuantizationQuality, TurboQuantizationVerification, TurboQuantizer, VectorStorageConfig,
     SEARCH_PLAN_FORMAT_VERSION,
 };
 pub use prolly::proximity::{
@@ -360,7 +362,8 @@ pub use prolly::proximity::{
     AsyncCompositeBuildOutcome, AsyncHnswBuild, AsyncHnswIndex, AsyncIoConfig,
     AsyncProductQuantizer, AsyncProductQuantizerBuild, AsyncProximityBuildOptions,
     AsyncProximityHead, AsyncProximityHeadCommit, AsyncProximityMap, AsyncProximityReadSession,
-    AsyncProximitySnapshot, AsyncSearchControl, CancellationToken,
+    AsyncProximitySnapshot, AsyncSearchControl, AsyncTurboQuantizer, AsyncTurboQuantizerBuild,
+    CancellationToken,
 };
 pub use prolly::range::{AsyncRangeIter, AsyncRangePage, AsyncReversePage};
 pub use prolly::range::{

@@ -4,6 +4,7 @@ use crate::prolly::error::Error;
 use crate::prolly::node::Node;
 use crate::prolly::proximity::accelerator::hnsw::storage::Manifest as HnswManifest;
 use crate::prolly::proximity::accelerator::pq::Manifest as PqManifest;
+use crate::prolly::proximity::accelerator::turboquant::Manifest as TurboQuantManifest;
 use crate::prolly::proximity::accelerator::{
     catalog::Manifest as CatalogManifest, composite::Manifest as CompositeManifest,
 };
@@ -29,6 +30,7 @@ pub struct SearchRuntimePolicy {
     pub authoritative_max_bytes: usize,
     pub hnsw_max_bytes: usize,
     pub pq_max_bytes: usize,
+    pub turboquant_max_bytes: usize,
 }
 
 impl Default for SearchRuntimePolicy {
@@ -39,6 +41,7 @@ impl Default for SearchRuntimePolicy {
             authoritative_max_bytes: 128 * 1024 * 1024,
             hnsw_max_bytes: 96 * 1024 * 1024,
             pq_max_bytes: 32 * 1024 * 1024,
+            turboquant_max_bytes: 32 * 1024 * 1024,
         }
     }
 }
@@ -54,6 +57,7 @@ impl SearchRuntimePolicy {
             .authoritative_max_bytes
             .saturating_add(self.hnsw_max_bytes)
             .saturating_add(self.pq_max_bytes);
+        let partitions = partitions.saturating_add(self.turboquant_max_bytes);
         if partitions < self.max_bytes {
             return Err(Error::InvalidProximityConfig {
                 reason: "search runtime partition byte limits must cover the total limit"
@@ -418,6 +422,7 @@ enum Partition {
     Authoritative,
     Hnsw,
     Pq,
+    TurboQuant,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -444,6 +449,7 @@ struct RuntimeState {
     authoritative_bytes: usize,
     hnsw_bytes: usize,
     pq_bytes: usize,
+    turboquant_bytes: usize,
     async_waiters: HashMap<CacheKey, Vec<Waker>>,
 }
 
@@ -942,6 +948,7 @@ impl SearchRuntime {
             Partition::Authoritative => self.policy.authoritative_max_bytes,
             Partition::Hnsw => self.policy.hnsw_max_bytes,
             Partition::Pq => self.policy.pq_max_bytes,
+            Partition::TurboQuant => self.policy.turboquant_max_bytes,
         }
     }
 }
@@ -1011,6 +1018,7 @@ fn partition(kind: ContentObjectKind) -> Partition {
         | ContentObjectKind::HnswPage
         | ContentObjectKind::CompositeAccelerator => Partition::Hnsw,
         ContentObjectKind::ProductQuantization => Partition::Pq,
+        ContentObjectKind::TurboQuantization => Partition::TurboQuant,
         _ => Partition::Authoritative,
     }
 }
@@ -1020,6 +1028,7 @@ fn partition_bytes(state: &RuntimeState, partition: Partition) -> usize {
         Partition::Authoritative => state.authoritative_bytes,
         Partition::Hnsw => state.hnsw_bytes,
         Partition::Pq => state.pq_bytes,
+        Partition::TurboQuant => state.turboquant_bytes,
     }
 }
 
@@ -1028,6 +1037,7 @@ fn partition_bytes_mut(state: &mut RuntimeState, partition: Partition) -> &mut u
         Partition::Authoritative => &mut state.authoritative_bytes,
         Partition::Hnsw => &mut state.hnsw_bytes,
         Partition::Pq => &mut state.pq_bytes,
+        Partition::TurboQuant => &mut state.turboquant_bytes,
     }
 }
 
@@ -1067,6 +1077,7 @@ fn validate_cached_object(bytes: &[u8], dimensions: Option<u32>) -> Result<(), E
         b"PQS8" => ScalarQuantized::decode(bytes).map(|_| ()),
         b"HNSW" => HnswManifest::decode(bytes).map(|_| ()),
         b"PQPQ" => PqManifest::decode(bytes).map(|_| ()),
+        b"TQTQ" => TurboQuantManifest::decode(bytes).map(|_| ()),
         b"PCOM" => CompositeManifest::decode(bytes).map(|_| ()),
         b"PACL" => CatalogManifest::decode(bytes).map(|_| ()),
         _ => Err(Error::InvalidProximityObject {
@@ -1097,6 +1108,7 @@ mod tests {
             authoritative_max_bytes: 16,
             hnsw_max_bytes: 16,
             pq_max_bytes: 16,
+            turboquant_max_bytes: 16,
         })
         .unwrap();
         let first_key = key(b"first", ContentObjectKind::OrderedNode);

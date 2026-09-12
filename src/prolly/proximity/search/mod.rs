@@ -58,6 +58,7 @@ pub struct SearchRequest<'a> {
 pub enum ApproximatePreference {
     HnswFirst,
     ProductQuantizedFirst,
+    TurboQuantizedFirst,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -89,12 +90,18 @@ pub struct PqSearchOptions {
     pub rerank_multiplier: Option<u16>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TurboQuantSearchOptions {
+    pub rerank_multiplier: Option<u16>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SearchOptions {
     pub backend: SearchBackend,
     pub planner: PlannerPolicy,
     pub hnsw: HnswSearchOptions,
     pub pq: PqSearchOptions,
+    pub turboquant: TurboQuantSearchOptions,
 }
 
 impl Default for SearchOptions {
@@ -104,6 +111,7 @@ impl Default for SearchOptions {
             planner: PlannerPolicy::default(),
             hnsw: HnswSearchOptions::default(),
             pq: PqSearchOptions::default(),
+            turboquant: TurboQuantSearchOptions::default(),
         }
     }
 }
@@ -133,9 +141,12 @@ impl<'a> SearchRequest<'a> {
                 reason: "eligible_exact_ratio_ppm must not exceed 1,000,000".to_owned(),
             });
         }
-        if self.options.hnsw.ef_search == Some(0) || self.options.pq.rerank_multiplier == Some(0) {
+        if self.options.hnsw.ef_search == Some(0)
+            || self.options.pq.rerank_multiplier == Some(0)
+            || self.options.turboquant.rerank_multiplier == Some(0)
+        {
             return Err(Error::InvalidProximitySearch {
-                reason: "HNSW ef_search and PQ rerank_multiplier overrides must be positive"
+                reason: "HNSW ef_search and quantized rerank_multiplier overrides must be positive"
                     .to_owned(),
             });
         }

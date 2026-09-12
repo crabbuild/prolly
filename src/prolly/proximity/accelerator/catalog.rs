@@ -1,7 +1,8 @@
 use super::composite::{config_fingerprint as composite_fingerprint, CompositeAccelerator};
 use super::hnsw::storage::config_fingerprint as hnsw_fingerprint;
 use super::pq::config_fingerprint as pq_fingerprint;
-use super::{AcceleratorSet, HnswIndex, ProductQuantizer};
+use super::turboquant::config_fingerprint as turboquant_fingerprint;
+use super::{AcceleratorSet, HnswIndex, ProductQuantizer, TurboQuantizer};
 use crate::prolly::cid::Cid;
 use crate::prolly::content_graph::{ContentObjectKind, TypedContentRoot};
 use crate::prolly::error::Error;
@@ -17,6 +18,7 @@ pub enum CatalogAcceleratorKind {
     Hnsw,
     ProductQuantized,
     Composite,
+    TurboQuantized,
 }
 
 impl CatalogAcceleratorKind {
@@ -25,6 +27,7 @@ impl CatalogAcceleratorKind {
             Self::Hnsw => 1,
             Self::ProductQuantized => 2,
             Self::Composite => 3,
+            Self::TurboQuantized => 4,
         }
     }
 
@@ -33,6 +36,7 @@ impl CatalogAcceleratorKind {
             1 => Ok(Self::Hnsw),
             2 => Ok(Self::ProductQuantized),
             3 => Ok(Self::Composite),
+            4 => Ok(Self::TurboQuantized),
             _ => Err(invalid("unknown catalog accelerator kind")),
         }
     }
@@ -111,6 +115,13 @@ where
                     }
                     accelerators.with_composite(source, index)?
                 }
+                CatalogAcceleratorKind::TurboQuantized => {
+                    let index = TurboQuantizer::load(store.clone(), entry.manifest.clone())?;
+                    if turboquant_fingerprint(index.config()) != entry.configuration_fingerprint {
+                        return Err(invalid("catalog TurboQuant fingerprint mismatch"));
+                    }
+                    accelerators.with_turboquant(source, index)?
+                }
             };
         }
         Ok(Self {
@@ -158,6 +169,13 @@ where
         entries.push(AcceleratorCatalogEntry {
             kind: CatalogAcceleratorKind::ProductQuantized,
             configuration_fingerprint: pq_fingerprint(index.config()),
+            manifest: index.manifest_cid().clone(),
+        });
+    }
+    if let Some(index) = set.turboquant() {
+        entries.push(AcceleratorCatalogEntry {
+            kind: CatalogAcceleratorKind::TurboQuantized,
+            configuration_fingerprint: turboquant_fingerprint(index.config()),
             manifest: index.manifest_cid().clone(),
         });
     }

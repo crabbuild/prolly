@@ -566,6 +566,18 @@ where
                     |bytes| super::accelerator::pq::Manifest::decode(bytes).map(|_| ()),
                 )?;
             }
+            SearchPlan::TurboQuantized { .. } => {
+                let index = accelerators
+                    .turboquant()
+                    .expect("planner validated TurboQuant");
+                search_io.runtime().load(
+                    search_io,
+                    super::super::content_graph::ContentObjectKind::TurboQuantization,
+                    index.manifest_cid(),
+                    2,
+                    |bytes| super::accelerator::turboquant::Manifest::decode(bytes).map(|_| ()),
+                )?;
+            }
             SearchPlan::Composite { .. } => {
                 let accelerator = accelerators
                     .composite()
@@ -623,6 +635,19 @@ where
                 let index =
                     index.rebind(search_io.for_kind(
                         super::super::content_graph::ContentObjectKind::ProductQuantization,
+                    ));
+                index.search_planned(&bound_map, request, &plan)
+            }
+            SearchPlan::TurboQuantized { .. } => {
+                let index =
+                    accelerators
+                        .turboquant()
+                        .ok_or_else(|| Error::InvalidProximitySearch {
+                            reason: "planned TurboQuant accelerator is unavailable".to_owned(),
+                        })?;
+                let index =
+                    index.rebind(search_io.for_kind(
+                        super::super::content_graph::ContentObjectKind::TurboQuantization,
                     ));
                 index.search_planned(&bound_map, request, &plan)
             }
@@ -743,6 +768,19 @@ where
                 let index =
                     index.rebind(search_io.for_kind(
                         super::super::content_graph::ContentObjectKind::ProductQuantization,
+                    ));
+                index.search_planned_with_exclusion(
+                    current,
+                    &composite.base_source,
+                    base_request,
+                    base,
+                    |key| Ok(shadow.contains(key)),
+                )
+            }
+            super::accelerator::composite::CompositeBase::TurboQuantized(index) => {
+                let index =
+                    index.rebind(search_io.for_kind(
+                        super::super::content_graph::ContentObjectKind::TurboQuantization,
                     ));
                 index.search_planned_with_exclusion(
                     current,

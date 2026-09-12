@@ -15,6 +15,11 @@ use super::pq::{
     code_tree_config, Manifest as PqManifest, ProductQuantizationBuildLimits,
     ProductQuantizationBuildStats, ProductQuantizationConfig, ProductQuantizer,
 };
+use super::turboquant::config_fingerprint as turboquant_fingerprint;
+use super::turboquant::{
+    turboquant_code_tree_config, Manifest as TurboQuantManifest, TurboQuantizationBuildLimits,
+    TurboQuantizationBuildStats, TurboQuantizationConfig, TurboQuantizer,
+};
 use super::validate_binding;
 use crate::prolly::cid::Cid;
 use crate::prolly::content_graph::{
@@ -23,7 +28,8 @@ use crate::prolly::content_graph::{
 use crate::prolly::error::Error;
 use crate::prolly::proximity::{
     AcceleratorCatalog, AcceleratorSet, BuildParallelism, DistanceMetric,
-    ProductQuantizationQuality, ProximityMap, ProximityTree,
+    ProductQuantizationQuality, ProximityMap, ProximityTree, TurboQuantizationQuality,
+    TurboQuantizationVerification,
 };
 use crate::prolly::store::{AsyncStore, MemStore, NodePublication, PublicationOrigin};
 use crate::prolly::tree::Tree;
@@ -43,11 +49,19 @@ pub struct AsyncProductQuantizerBuild {
     pub limits: ProductQuantizationBuildLimits,
 }
 
+#[derive(Clone, Debug)]
+pub struct AsyncTurboQuantizerBuild {
+    pub config: TurboQuantizationConfig,
+    pub parallelism: BuildParallelism,
+    pub limits: TurboQuantizationBuildLimits,
+}
+
 /// Async-store publication plan for canonical accelerator sidecars.
 #[derive(Clone, Debug)]
 pub struct AsyncAcceleratorBuildOptions {
     pub hnsw: Option<AsyncHnswBuild>,
     pub product_quantizer: Option<AsyncProductQuantizerBuild>,
+    pub turboquant: Option<AsyncTurboQuantizerBuild>,
     pub publication_batch_items: usize,
     pub graph_limits: ContentGraphLimits,
 }
@@ -57,6 +71,7 @@ impl Default for AsyncAcceleratorBuildOptions {
         Self {
             hnsw: None,
             product_quantizer: None,
+            turboquant: None,
             publication_batch_items: 1_024,
             graph_limits: ContentGraphLimits::default(),
         }
@@ -67,6 +82,7 @@ impl Default for AsyncAcceleratorBuildOptions {
 pub struct AsyncAcceleratorBuildStats {
     pub hnsw: Option<HnswBuildStats>,
     pub product_quantizer: Option<ProductQuantizationBuildStats>,
+    pub turboquant: Option<TurboQuantizationBuildStats>,
     pub objects_published: usize,
     pub bytes_published: usize,
 }
@@ -78,6 +94,8 @@ pub struct AsyncCompositeBuildOptions {
     pub hnsw_limits: HnswBuildLimits,
     pub pq_parallelism: BuildParallelism,
     pub pq_limits: ProductQuantizationBuildLimits,
+    pub turboquant_parallelism: BuildParallelism,
+    pub turboquant_limits: TurboQuantizationBuildLimits,
     pub publication_batch_items: usize,
     pub graph_limits: ContentGraphLimits,
 }
@@ -90,6 +108,8 @@ impl Default for AsyncCompositeBuildOptions {
             hnsw_limits: HnswBuildLimits::default(),
             pq_parallelism: BuildParallelism::serial(),
             pq_limits: ProductQuantizationBuildLimits::default(),
+            turboquant_parallelism: BuildParallelism::serial(),
+            turboquant_limits: TurboQuantizationBuildLimits::default(),
             publication_batch_items: 1_024,
             graph_limits: ContentGraphLimits::default(),
         }
@@ -188,10 +208,25 @@ pub struct AsyncProductQuantizer {
     pub(crate) quality: ProductQuantizationQuality,
 }
 
+/// Validated TurboQuant metadata for an async-only store.
+#[derive(Clone)]
+pub struct AsyncTurboQuantizer {
+    pub(crate) manifest: Cid,
+    pub(crate) source: Cid,
+    pub(crate) dimensions: u32,
+    pub(crate) metric: DistanceMetric,
+    pub(crate) count: u64,
+    pub(crate) config: TurboQuantizationConfig,
+    pub(crate) code_tree: Tree,
+    pub(crate) quality: TurboQuantizationQuality,
+    pub(crate) zero_vectors: u64,
+}
+
 #[derive(Clone)]
 pub(crate) enum AsyncCompositeBase {
     Hnsw(AsyncHnswIndex),
     ProductQuantized(AsyncProductQuantizer),
+    TurboQuantized(AsyncTurboQuantizer),
 }
 
 /// Validated composite metadata and base sidecar for an async-only store.
@@ -286,6 +321,45 @@ impl AsyncCompositeAccelerator {
         .await
     }
 
+    pub async fn build_from_turboquant<S>(
+        base_map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        current_map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        base: &AsyncTurboQuantizer,
+        options: AsyncCompositeBuildOptions,
+    ) -> Result<AsyncCompositeBuildOutcome, Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        let (staging, staged_base, staged_current) =
+            stage_source_pair(base_map, current_map).await?;
+        let (rebuilt, _) = TurboQuantizer::build_with_limits(
+            &staged_base,
+            base.config.clone(),
+            options.turboquant_parallelism,
+            options.turboquant_limits.clone(),
+        )?;
+        if rebuilt.manifest_cid() != base.manifest_cid() {
+            return Err(invalid(
+                "staged TurboQuant base is not canonical with async base",
+            ));
+        }
+        publish_composite_outcome(
+            current_map,
+            staging,
+            CompositeAccelerator::build(
+                &staged_base,
+                &staged_current,
+                CompositeBase::TurboQuantized(rebuilt),
+                options.config,
+                options.limits,
+            )?,
+            options.publication_batch_items,
+            &options.graph_limits,
+        )
+        .await
+    }
+
     pub async fn load<S>(store: &S, manifest: Cid) -> Result<Self, Error>
     where
         S: AsyncStore + Clone,
@@ -317,6 +391,15 @@ impl AsyncCompositeAccelerator {
                     return Err(invalid("async composite PQ base binding mismatch"));
                 }
                 AsyncCompositeBase::ProductQuantized(index)
+            }
+            CompositeBaseKind::TurboQuantized => {
+                let index = AsyncTurboQuantizer::load(store, object.base_manifest.clone()).await?;
+                if index.source != object.base_source
+                    || turboquant_fingerprint(&index.config) != object.base_fingerprint
+                {
+                    return Err(invalid("async composite TurboQuant base binding mismatch"));
+                }
+                AsyncCompositeBase::TurboQuantized(index)
             }
         };
         let tree_config = composite_tree_config();
@@ -366,18 +449,27 @@ impl AsyncCompositeAccelerator {
         match self.base {
             AsyncCompositeBase::Hnsw(_) => CompositeBaseKind::Hnsw,
             AsyncCompositeBase::ProductQuantized(_) => CompositeBaseKind::ProductQuantized,
+            AsyncCompositeBase::TurboQuantized(_) => CompositeBaseKind::TurboQuantized,
         }
     }
     pub(crate) fn hnsw(&self) -> Option<&AsyncHnswIndex> {
         match &self.base {
             AsyncCompositeBase::Hnsw(index) => Some(index),
             AsyncCompositeBase::ProductQuantized(_) => None,
+            AsyncCompositeBase::TurboQuantized(_) => None,
         }
     }
     pub(crate) fn pq(&self) -> Option<&AsyncProductQuantizer> {
         match &self.base {
             AsyncCompositeBase::ProductQuantized(index) => Some(index),
             AsyncCompositeBase::Hnsw(_) => None,
+            AsyncCompositeBase::TurboQuantized(_) => None,
+        }
+    }
+    pub(crate) fn turboquant(&self) -> Option<&AsyncTurboQuantizer> {
+        match &self.base {
+            AsyncCompositeBase::TurboQuantized(index) => Some(index),
+            AsyncCompositeBase::Hnsw(_) | AsyncCompositeBase::ProductQuantized(_) => None,
         }
     }
 }
@@ -425,11 +517,188 @@ impl AsyncProductQuantizer {
     }
 }
 
+impl AsyncTurboQuantizer {
+    pub async fn load<S>(store: &S, manifest: Cid) -> Result<Self, Error>
+    where
+        S: AsyncStore,
+        S::Error: Send + Sync,
+    {
+        let bytes = load_content(store, &manifest).await?;
+        let object = TurboQuantManifest::decode(&bytes)?;
+        object.config.validate(object.dimensions)?;
+        load_content(store, &object.code_root).await?;
+        Ok(Self {
+            manifest,
+            source: object.source,
+            dimensions: object.dimensions,
+            metric: object.metric,
+            count: object.count,
+            config: object.config,
+            code_tree: Tree {
+                root: Some(object.code_root),
+                config: turboquant_code_tree_config(),
+            },
+            quality: object.quality,
+            zero_vectors: object.zero_vectors,
+        })
+    }
+
+    pub async fn build<S>(
+        map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        config: TurboQuantizationConfig,
+        parallelism: BuildParallelism,
+    ) -> Result<(Self, TurboQuantizationBuildStats), Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        Self::build_with_limits(
+            map,
+            config,
+            parallelism,
+            TurboQuantizationBuildLimits::default(),
+            1_024,
+            &ContentGraphLimits::default(),
+        )
+        .await
+    }
+
+    pub async fn build_with_limits<S>(
+        map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        config: TurboQuantizationConfig,
+        parallelism: BuildParallelism,
+        limits: TurboQuantizationBuildLimits,
+        publication_batch_items: usize,
+        graph_limits: &ContentGraphLimits,
+    ) -> Result<(Self, TurboQuantizationBuildStats), Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        if publication_batch_items == 0 {
+            return Err(Error::InvalidProximityConfig {
+                reason: "TurboQuant publication batch size must be positive".to_owned(),
+            });
+        }
+        let records = map.collect_records().await?;
+        let staging = Arc::new(MemStore::new());
+        let staged_map = ProximityMap::build(
+            staging.clone(),
+            map.tree().config.clone(),
+            records.into_values(),
+        )?;
+        if staged_map.tree() != map.tree() {
+            return Err(invalid(
+                "async TurboQuant staging did not reproduce the source descriptor",
+            ));
+        }
+        let (index, stats) =
+            TurboQuantizer::build_with_limits(&staged_map, config, parallelism, limits)?;
+        let manifest = index.manifest_cid().clone();
+        let root = TypedContentRoot::new(ContentObjectKind::TurboQuantization, manifest.clone());
+        let walk = walk_content_graph(&staging, &[root], graph_limits)?;
+        let target = map.store_clone();
+        for chunk in walk.objects.chunks(publication_batch_items) {
+            let entries = chunk
+                .iter()
+                .map(|object| (object.root.cid.as_bytes(), object.bytes.as_slice()))
+                .collect::<Vec<_>>();
+            target
+                .publish_nodes(NodePublication::new(
+                    &entries,
+                    PublicationOrigin::Maintenance,
+                ))
+                .await
+                .map_err(|error| Error::Store(Box::new(error)))?;
+        }
+        Ok((Self::load(&target, manifest).await?, stats))
+    }
+
+    pub async fn search<S>(
+        &self,
+        map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        request: crate::prolly::proximity::SearchRequest<'_>,
+        control: crate::prolly::proximity::AsyncSearchControl,
+    ) -> Result<crate::prolly::proximity::SearchResult, Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        let runtime_map = crate::prolly::proximity::AsyncProximityMap::load_with_runtime(
+            map.store_clone(),
+            map.tree().descriptor.clone(),
+            Arc::new(crate::prolly::proximity::SearchRuntime::default()),
+        )
+        .await?;
+        let set = AsyncAcceleratorSet::empty().with_turboquant(runtime_map.tree(), self.clone())?;
+        runtime_map
+            .search_with_accelerators(&set, request, control)
+            .await
+    }
+
+    pub async fn verify<S>(
+        &self,
+        map: &crate::prolly::proximity::AsyncProximityMap<S>,
+        limits: &ContentGraphLimits,
+    ) -> Result<TurboQuantizationVerification, Error>
+    where
+        S: AsyncStore + Clone,
+        S::Error: Send + Sync,
+    {
+        if self.source != map.tree().descriptor
+            || self.dimensions != map.tree().config.dimensions
+            || self.metric != map.tree().config.metric
+            || self.count != map.tree().count
+        {
+            return Err(invalid("async TurboQuant source binding mismatch"));
+        }
+        crate::prolly::content_graph::walk_content_graph_async(
+            &map.store_clone(),
+            &[TypedContentRoot::new(
+                ContentObjectKind::TurboQuantization,
+                self.manifest.clone(),
+            )],
+            limits,
+        )
+        .await?;
+        let records = map.collect_records().await?;
+        let staging = Arc::new(MemStore::new());
+        let staged_map = ProximityMap::build(
+            staging.clone(),
+            map.tree().config.clone(),
+            records.into_values(),
+        )?;
+        let (rebuilt, _) =
+            TurboQuantizer::build(&staged_map, self.config.clone(), BuildParallelism::serial())?;
+        if rebuilt.manifest_cid() != &self.manifest {
+            return Err(invalid("async TurboQuant content is not canonical"));
+        }
+        rebuilt.verify(&staged_map)
+    }
+
+    pub fn manifest_cid(&self) -> &Cid {
+        &self.manifest
+    }
+    pub fn source_descriptor(&self) -> &Cid {
+        &self.source
+    }
+    pub fn config(&self) -> &TurboQuantizationConfig {
+        &self.config
+    }
+    pub fn quality(&self) -> TurboQuantizationQuality {
+        self.quality
+    }
+    pub fn zero_vectors(&self) -> u64 {
+        self.zero_vectors
+    }
+}
+
 /// Source-bound async accelerator capabilities available to one logical search.
 #[derive(Clone, Default)]
 pub struct AsyncAcceleratorSet {
     hnsw: Option<AsyncHnswIndex>,
     pq: Option<AsyncProductQuantizer>,
+    turboquant: Option<AsyncTurboQuantizer>,
     composite: Option<AsyncCompositeAccelerator>,
 }
 
@@ -498,11 +767,34 @@ impl AsyncAcceleratorSet {
         Ok(self)
     }
 
+    pub fn with_turboquant(
+        mut self,
+        source: &ProximityTree,
+        index: AsyncTurboQuantizer,
+    ) -> Result<Self, Error> {
+        if self.turboquant.is_some() {
+            return Err(invalid("duplicate TurboQuant accelerator"));
+        }
+        validate_binding(
+            source,
+            &index.source,
+            index.dimensions,
+            index.metric,
+            index.count,
+            "TurboQuant",
+        )?;
+        self.turboquant = Some(index);
+        Ok(self)
+    }
+
     pub(crate) fn hnsw(&self) -> Option<&AsyncHnswIndex> {
         self.hnsw.as_ref()
     }
     pub(crate) fn pq(&self) -> Option<&AsyncProductQuantizer> {
         self.pq.as_ref()
+    }
+    pub(crate) fn turboquant(&self) -> Option<&AsyncTurboQuantizer> {
+        self.turboquant.as_ref()
     }
     pub(crate) fn composite(&self) -> Option<&AsyncCompositeAccelerator> {
         self.composite.as_ref()
@@ -542,6 +834,13 @@ impl AsyncAcceleratorCatalog {
             entries.push(AcceleratorCatalogEntry {
                 kind: CatalogAcceleratorKind::ProductQuantized,
                 configuration_fingerprint: pq_fingerprint(index.config()),
+                manifest: index.manifest_cid().clone(),
+            });
+        }
+        if let Some(index) = accelerators.turboquant() {
+            entries.push(AcceleratorCatalogEntry {
+                kind: CatalogAcceleratorKind::TurboQuantized,
+                configuration_fingerprint: turboquant_fingerprint(index.config()),
                 manifest: index.manifest_cid().clone(),
             });
         }
@@ -588,7 +887,10 @@ impl AsyncAcceleratorCatalog {
                 reason: "accelerator publication batch size must be greater than zero".to_owned(),
             });
         }
-        if options.hnsw.is_none() && options.product_quantizer.is_none() {
+        if options.hnsw.is_none()
+            && options.product_quantizer.is_none()
+            && options.turboquant.is_none()
+        {
             return Err(invalid("async accelerator build plan is empty"));
         }
 
@@ -625,6 +927,16 @@ impl AsyncAcceleratorCatalog {
             )?;
             stats.product_quantizer = Some(built);
             set = set.with_pq(staged_map.tree(), index)?;
+        }
+        if let Some(build) = options.turboquant {
+            let (index, built) = TurboQuantizer::build_with_limits(
+                &staged_map,
+                build.config,
+                build.parallelism,
+                build.limits,
+            )?;
+            stats.turboquant = Some(built);
+            set = set.with_turboquant(staged_map.tree(), index)?;
         }
         let catalog = AcceleratorCatalog::build(staging.clone(), staged_map.tree(), set)?;
         let manifest = catalog.manifest_cid().clone();
@@ -682,6 +994,13 @@ impl AsyncAcceleratorCatalog {
                         return Err(invalid("catalog composite fingerprint mismatch"));
                     }
                     accelerators.with_composite(source, index)?
+                }
+                CatalogAcceleratorKind::TurboQuantized => {
+                    let index = AsyncTurboQuantizer::load(store, entry.manifest.clone()).await?;
+                    if turboquant_fingerprint(index.config()) != entry.configuration_fingerprint {
+                        return Err(invalid("catalog TurboQuant fingerprint mismatch"));
+                    }
+                    accelerators.with_turboquant(source, index)?
                 }
             };
         }

@@ -10,7 +10,7 @@ use crate::prolly::proximity::{
     AcceleratorCatalog, AcceleratorSet, CompositeAccelerator, DistanceMetric, HnswIndex,
     ProductQuantizer, ProximityFilter, ProximityMap, QueryKernel, SearchBackend, SearchBudget,
     SearchCompletion, SearchIo, SearchOptions, SearchPlan, SearchPlanSummary, SearchPolicy,
-    SearchRequest, SearchResult, SearchRuntime, SEARCH_PLAN_FORMAT_VERSION,
+    SearchRequest, SearchResult, SearchRuntime, TurboQuantizer, SEARCH_PLAN_FORMAT_VERSION,
 };
 use crate::prolly::store::{MemStore, Store};
 use crate::prolly::tree::Tree;
@@ -223,6 +223,12 @@ impl ProximitySearchProof {
                 ProductQuantizer::load(store.clone(), root.cid.clone())?
                     .search_planned(&map, request, &self.plan)?
             }
+            (Some(root), SearchPlan::TurboQuantized { .. })
+                if root.kind == ContentObjectKind::TurboQuantization =>
+            {
+                TurboQuantizer::load(store.clone(), root.cid.clone())?
+                    .search_planned(&map, request, &self.plan)?
+            }
             (Some(root), SearchPlan::Hnsw { .. })
                 if root.kind == ContentObjectKind::HnswManifest =>
             {
@@ -308,7 +314,10 @@ where
     ) -> Result<ProximitySearchProof, Error> {
         if matches!(
             request.options.backend,
-            SearchBackend::ProductQuantized | SearchBackend::Hnsw | SearchBackend::Composite
+            SearchBackend::ProductQuantized
+                | SearchBackend::TurboQuantized
+                | SearchBackend::Hnsw
+                | SearchBackend::Composite
         ) {
             return Err(invalid(
                 "explicit accelerator search proofs must be produced by that sidecar",
@@ -364,6 +373,29 @@ where
     }
 }
 
+impl<S> TurboQuantizer<S>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    /// Prove source-bound TurboQuant execution and authoritative reranking.
+    pub fn prove_search(
+        &self,
+        map: &ProximityMap<S>,
+        request: SearchRequest<'_>,
+        limits: &ContentGraphLimits,
+    ) -> Result<ProximitySearchProof, Error> {
+        let result = self.search(map, request.clone())?;
+        let root = TypedContentRoot::new(
+            ContentObjectKind::TurboQuantization,
+            self.manifest_cid().clone(),
+        );
+        let objects =
+            walk_content_graph(&map.store_clone(), std::slice::from_ref(&root), limits)?.objects;
+        build_proof(map, request, result, Some(root), objects, None, limits)
+    }
+}
+
 impl<S> CompositeAccelerator<S>
 where
     S: Store + Clone + Send + Sync,
@@ -409,7 +441,10 @@ where
         let mut result = map.search_with(self.accelerators(), &search_io, request.clone())?;
         if !matches!(
             result.plan.backend,
-            SearchBackend::Hnsw | SearchBackend::ProductQuantized | SearchBackend::Composite
+            SearchBackend::Hnsw
+                | SearchBackend::ProductQuantized
+                | SearchBackend::TurboQuantized
+                | SearchBackend::Composite
         ) {
             return Err(invalid(
                 "catalog proof requires an accelerator-backed committed plan",
@@ -442,6 +477,10 @@ fn replay_catalog_plan(
         SearchPlan::ProductQuantized { .. } => accelerators
             .pq()
             .ok_or_else(|| invalid("catalog has no committed PQ accelerator"))?
+            .search_planned(map, request, plan),
+        SearchPlan::TurboQuantized { .. } => accelerators
+            .turboquant()
+            .ok_or_else(|| invalid("catalog has no committed TurboQuant accelerator"))?
             .search_planned(map, request, plan),
         SearchPlan::Composite { .. } => {
             let composite = accelerators
@@ -680,7 +719,7 @@ fn native_events(commitment: &Cid, trace: Vec<ProximitySearchEvent>) -> Vec<Prox
 }
 
 fn request_commitment(request: &ProximitySearchRequest, plan: &SearchPlan) -> Cid {
-    let mut bytes = b"PSRQ\x03".to_vec();
+    let mut bytes = b"PSRQ\x04".to_vec();
     put_len(request.query.len(), &mut bytes);
     for component in &request.query {
         bytes.extend_from_slice(&component.to_bits().to_le_bytes());
@@ -708,6 +747,7 @@ fn request_commitment(request: &ProximitySearchRequest, plan: &SearchPlan) -> Ci
         SearchBackend::Hnsw => 2,
         SearchBackend::Auto => 3,
         SearchBackend::Composite => 4,
+        SearchBackend::TurboQuantized => 5,
     });
     bytes.push(match request.kernel {
         QueryKernel::ScalarDeterministic => 0,
@@ -731,6 +771,7 @@ fn request_commitment(request: &ProximitySearchRequest, plan: &SearchPlan) -> Ci
     bytes.push(match request.options.planner.approximate_preference {
         crate::prolly::proximity::ApproximatePreference::HnswFirst => 0,
         crate::prolly::proximity::ApproximatePreference::ProductQuantizedFirst => 1,
+        crate::prolly::proximity::ApproximatePreference::TurboQuantizedFirst => 2,
     });
     put_optional_usize(
         request.options.hnsw.ef_search.map(|value| value as usize),
@@ -738,6 +779,14 @@ fn request_commitment(request: &ProximitySearchRequest, plan: &SearchPlan) -> Ci
     );
     put_optional_usize(
         request.options.pq.rerank_multiplier.map(usize::from),
+        &mut bytes,
+    );
+    put_optional_usize(
+        request
+            .options
+            .turboquant
+            .rerank_multiplier
+            .map(usize::from),
         &mut bytes,
     );
     encode_plan(plan, &mut bytes);
@@ -785,6 +834,14 @@ fn encode_plan(plan: &SearchPlan, bytes: &mut Vec<u8>) {
             put_usize(*shadow_records, bytes);
             put_usize(*merge_target, bytes);
         }
+        SearchPlan::TurboQuantized {
+            rerank_target,
+            direct_lookup,
+        } => {
+            bytes.push(5);
+            put_usize(*rerank_target, bytes);
+            bytes.push(u8::from(*direct_lookup));
+        }
     }
 }
 
@@ -819,6 +876,12 @@ fn plan_from_summary(
             rerank_target: summary
                 .rerank_target
                 .ok_or_else(|| invalid("HNSW plan summary has no rerank target"))?,
+        }),
+        SearchBackend::TurboQuantized => Ok(SearchPlan::TurboQuantized {
+            rerank_target: summary
+                .rerank_target
+                .ok_or_else(|| invalid("TurboQuant plan summary has no rerank target"))?,
+            direct_lookup: summary.direct_lookup,
         }),
         SearchBackend::Composite => Ok(SearchPlan::Composite {
             base: Box::new(plan_from_summary(

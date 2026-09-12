@@ -7,9 +7,13 @@ use crate::prolly::cid::Cid;
 use crate::prolly::error::Error;
 use crate::prolly::proximity::accelerator::hnsw::storage::GraphNode;
 use crate::prolly::proximity::accelerator::pq::{build_lookup, score_code, validate_code};
+use crate::prolly::proximity::accelerator::turboquant::{
+    prepare_query as prepare_turboquant_query, score_code_value as score_turboquant_code,
+    TurboQuantPreparedQuery,
+};
 use crate::prolly::proximity::accelerator::{
     AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncCompositeBase, AsyncHnswIndex,
-    AsyncProductQuantizer,
+    AsyncProductQuantizer, AsyncTurboQuantizer,
 };
 use crate::prolly::proximity::distance::{prepare_vector, query_score};
 use crate::prolly::proximity::storage::quantized::ScalarQuantized;
@@ -104,12 +108,14 @@ where
             &self.tree,
             accelerators.hnsw().map(AsyncHnswIndex::config),
             accelerators.pq().map(AsyncProductQuantizer::config),
+            accelerators.turboquant().map(AsyncTurboQuantizer::config),
             accelerators
                 .composite()
                 .map(|composite| super::planner::CompositePlanInput {
                     base_kind: composite.base_kind(),
                     hnsw: composite.hnsw().map(AsyncHnswIndex::config),
                     pq: composite.pq().map(AsyncProductQuantizer::config),
+                    turboquant: composite.turboquant().map(AsyncTurboQuantizer::config),
                     base_count: composite.base_count,
                     delta_count: composite.delta_count,
                     shadow_count: composite.shadow_count,
@@ -134,6 +140,22 @@ where
                     &self.directory,
                     &self.tree,
                     accelerators.pq().expect("planner validated PQ"),
+                    request,
+                    &eligibility,
+                    &plan,
+                    &control,
+                    None,
+                )
+                .await
+            }
+            super::SearchPlan::TurboQuantized { .. } => {
+                search_turboquant_async(
+                    &self.store,
+                    &self.directory,
+                    &self.tree,
+                    accelerators
+                        .turboquant()
+                        .expect("planner validated TurboQuant"),
                     request,
                     &eligibility,
                     &plan,
@@ -976,6 +998,208 @@ impl Ord for AsyncRanked {
 }
 
 #[allow(clippy::too_many_arguments)]
+async fn search_turboquant_async<S>(
+    store: &super::SearchIo<S>,
+    directory: &AsyncProlly<super::SearchIo<S>>,
+    tree: &ProximityTree,
+    index: &AsyncTurboQuantizer,
+    request: SearchRequest<'_>,
+    eligibility: &PreparedFilter<'_>,
+    plan: &super::SearchPlan,
+    control: &AsyncSearchControl,
+    excluded: Option<&BTreeSet<Vec<u8>>>,
+) -> Result<SearchResult, Error>
+where
+    S: AsyncStore + Clone,
+    S::Error: Send + Sync,
+{
+    let super::SearchPlan::TurboQuantized {
+        rerank_target,
+        direct_lookup,
+    } = plan
+    else {
+        return Err(invalid_search(
+            "TurboQuant executor requires a TurboQuant plan",
+        ));
+    };
+    let (query, prepared) = prepare_turboquant_query(
+        index.metric,
+        request.query,
+        index.dimensions,
+        index.config.seed,
+    )?;
+    let code_store =
+        store.for_kind(crate::prolly::content_graph::ContentObjectKind::TurboQuantization);
+    let codes = AsyncProlly::new(code_store, index.code_tree.config.clone());
+    let mut stats = ProximitySearchStats::default();
+    let mut approximate = BinaryHeap::<AsyncRanked>::new();
+    let mut completion = SearchCompletion::ApproximatePolicySatisfied;
+
+    if *direct_lookup {
+        let Some((keys, source_bound)) = eligibility.sorted_keys() else {
+            return Err(invalid_search(
+                "TurboQuant direct lookup requires sorted eligible keys",
+            ));
+        };
+        for key in keys {
+            if excluded.is_some_and(|excluded| excluded.contains(key)) {
+                continue;
+            }
+            if let Some(stopped) = stop_reason(control) {
+                completion = stopped;
+                break;
+            }
+            let Some(code) = codes.get(&index.code_tree, key).await? else {
+                if source_bound {
+                    return Err(Error::InvalidProximityObject {
+                        kind: "TurboQuant",
+                        reason: "source-bound key has no TurboQuant code".to_owned(),
+                    });
+                }
+                continue;
+            };
+            if !admit_async_turboquant_code(
+                key.clone(),
+                code,
+                &prepared,
+                index,
+                *rerank_target,
+                &request,
+                &mut stats,
+                &mut approximate,
+            )? {
+                completion = SearchCompletion::BudgetExhausted;
+                break;
+            }
+        }
+    } else {
+        let mut range = codes.range(&index.code_tree, &[], None).await?;
+        while let Some(entry) = range.next().await {
+            if let Some(stopped) = stop_reason(control) {
+                completion = stopped;
+                break;
+            }
+            let (key, code) = entry?;
+            if excluded.is_some_and(|excluded| excluded.contains(&key)) {
+                continue;
+            }
+            if eligibility.contains(&key)
+                && !admit_async_turboquant_code(
+                    key,
+                    code,
+                    &prepared,
+                    index,
+                    *rerank_target,
+                    &request,
+                    &mut stats,
+                    &mut approximate,
+                )?
+            {
+                completion = SearchCompletion::BudgetExhausted;
+                break;
+            }
+        }
+    }
+
+    let mut approximate = approximate.into_vec();
+    approximate.sort();
+    let mut reranked = Vec::<RerankCandidate>::with_capacity(approximate.len());
+    let mut directory_session = directory.read(&tree.directory).await?;
+    for candidate in approximate {
+        if let Some(stopped) = stop_reason(control) {
+            completion = stopped;
+            break;
+        }
+        if budget_stops_record(&request, &stats, 0) {
+            completion = SearchCompletion::BudgetExhausted;
+            break;
+        }
+        let Some(handle) = directory_session.get_handle(&candidate.key).await? else {
+            return Err(Error::InvalidProximityObject {
+                kind: "TurboQuant",
+                reason: "code key is absent from authoritative directory".to_owned(),
+            });
+        };
+        let bytes = handle.value()?.len();
+        if request
+            .budget
+            .max_committed_bytes
+            .is_some_and(|limit| stats.committed_bytes.saturating_add(bytes) > limit)
+        {
+            completion = SearchCompletion::BudgetExhausted;
+            break;
+        }
+        let record = crate::prolly::proximity::storage::StoredRecordRef::decode(
+            handle.value()?,
+            tree.config.dimensions,
+        )?;
+        let distance = record.vector.score(request.kernel, index.metric, &query);
+        stats.nodes_read += 1;
+        stats.bytes_read += bytes;
+        stats.committed_bytes += bytes;
+        stats.distance_evaluations += 1;
+        reranked.push(RerankCandidate::new(handle, &candidate.key, distance)?);
+    }
+    stats.reranked_candidates = reranked.len();
+    stats.candidate_handles_peak = reranked.len();
+    stats.candidate_retained_bytes_peak = retained_candidate_bytes(&reranked);
+    reranked.sort_by(|left, right| {
+        left.distance
+            .total_cmp(&right.distance)
+            .then_with(|| left.key().cmp(right.key()))
+    });
+    let neighbors = reranked
+        .into_iter()
+        .take(request.k)
+        .map(|candidate| candidate.into_neighbor(tree.config.dimensions))
+        .collect::<Result<Vec<_>, Error>>()?;
+    Ok(SearchResult {
+        neighbors,
+        stats,
+        completion,
+        plan: plan.summary(),
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn admit_async_turboquant_code(
+    key: Vec<u8>,
+    code: Vec<u8>,
+    prepared: &TurboQuantPreparedQuery,
+    index: &AsyncTurboQuantizer,
+    target: usize,
+    request: &SearchRequest<'_>,
+    stats: &mut ProximitySearchStats,
+    approximate: &mut BinaryHeap<AsyncRanked>,
+) -> Result<bool, Error> {
+    if budget_stops_record(request, stats, code.len())
+        || request
+            .budget
+            .max_frontier_entries
+            .is_some_and(|limit| approximate.len().saturating_add(1) > limit)
+    {
+        return Ok(false);
+    }
+    let distance = score_turboquant_code(
+        &code,
+        prepared,
+        index.metric,
+        index.dimensions as usize,
+        index.config.bit_width,
+    )?;
+    stats.nodes_read += 1;
+    stats.bytes_read += code.len();
+    stats.committed_bytes += code.len();
+    stats.quantized_distance_evaluations += 1;
+    approximate.push(AsyncRanked { distance, key });
+    if approximate.len() > target {
+        approximate.pop();
+    }
+    stats.frontier_peak = stats.frontier_peak.max(approximate.len());
+    Ok(true)
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn search_pq_async<S>(
     store: &super::SearchIo<S>,
     directory: &AsyncProlly<super::SearchIo<S>>,
@@ -1292,6 +1516,20 @@ where
         }
         AsyncCompositeBase::ProductQuantized(index) => {
             search_pq_async(
+                store,
+                directory,
+                tree,
+                index,
+                base_request,
+                eligibility,
+                base,
+                control,
+                Some(&shadow),
+            )
+            .await
+        }
+        AsyncCompositeBase::TurboQuantized(index) => {
+            search_turboquant_async(
                 store,
                 directory,
                 tree,
