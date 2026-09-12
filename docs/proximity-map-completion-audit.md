@@ -23,6 +23,14 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 | 13 | Validated source-bound HNSW | `proximity/accelerator/hnsw/` | `tests/proximity_hnsw.rs`, `tests/proximity_proofs.rs` | `hnsw_build`, `hnsw_search` |
 | 14 | Native source-bound TurboQuant-MSE routing | `proximity/accelerator/{turboquant,quantized,async}.rs`, `proximity/distance/simd.rs` | `tests/proximity_turboquant.rs`, including bounded native async direct/composite construction, `tests/proximity_wire.rs`, async/proof/content/composite suites | `turboquant_build`, `turboquant_search_scalar`, `turboquant_search_simd`, `turboquant_recall` |
 
+The TurboQuant binding deliverable is also mapped directly: Python, Go,
+Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM each expose and
+test build/load/verify/forced-search behavior, and each corresponding
+`bindings/*/COOKBOOK.md` now includes a deterministic RAG-sidecar lifecycle.
+The repository-wide inventory and production qualification gates remain
+tracked separately in
+[`proximity-turboquant-qualification.md`](proximity-turboquant-qualification.md).
+
 ## Wire and migration evidence
 
 - `conformance/proximity-fixtures.json` freezes exact bytes and CIDs.

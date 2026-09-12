@@ -30,6 +30,51 @@ Application-style classes include `BatchBuild`, `LocalFirstState`,
 `VectorSidecar`, `ProvenanceValues`, `MaterializedView`,
 `FilesystemSnapshot`, and `DurableSqlite`.
 
+## Build And Force A TurboQuant RAG Sidecar
+
+TurboQuant is a disposable routing sidecar. The proximity map remains
+authoritative and every shortlisted record is reranked from its full-precision
+vector. Keep selection explicit until qualification enables `Auto`.
+
+```java
+import build.crab.prolly.javaapi.*;
+import java.util.ArrayList;
+
+var records = new ArrayList<ProximityRecord>();
+for (int index = 0; index < 32; index++) {
+    records.add(new ProximityRecord(
+            String.format("chunk/%02d", index).getBytes(),
+            new float[] {index, index % 3, 0, 1, 2, 3, 4, 5},
+            String.format("document-%02d", index).getBytes()));
+}
+
+try (Engine engine = Engine.memory();
+     ProximityMap proximity = engine.buildProximity(8, records)) {
+    var built = proximity.buildTurboquant(TurboQuantizationConfig.defaults(), 2);
+    var request = SearchRequest.fixedBudget(
+            new float[] {0, 0, 0, 1, 2, 3, 4, 5},
+            3,
+            SearchRequest.SearchBudget.unlimited(),
+            SearchRequest.SearchFilter.all(),
+            SearchRequest.Kernel.AUTO_DETERMINISTIC,
+            SearchRequest.Backend.TURBO_QUANTIZED);
+
+    byte[] manifest;
+    try (var index = built.index()) {
+        if (index.verify(proximity).encodedVectors() != records.size()) {
+            throw new IllegalStateException("incomplete TurboQuant sidecar");
+        }
+        if (!index.search(proximity, request).backend().equals("turbo_quantized")) {
+            throw new IllegalStateException("unexpected backend");
+        }
+        manifest = index.manifest();
+    }
+    try (var reopened = proximity.loadTurboquant(manifest)) {
+        // The manifest CID is the stable handle for this immutable sidecar.
+    }
+}
+```
+
 ## Create A Durable Index
 
 ```java

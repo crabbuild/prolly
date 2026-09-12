@@ -27,6 +27,48 @@ Application-style files include `batch-build.ts`, `local-first-state.ts`,
 `vector-sidecar.ts`, `provenance-values.ts`, `materialized-view.ts`,
 `filesystem-snapshot.ts`, and `durable-sqlite.ts`.
 
+## Build And Force A TurboQuant RAG Sidecar
+
+TurboQuant is a disposable candidate-routing sidecar. Results below are still
+reranked from the authoritative full-precision vectors. Select it explicitly;
+`Auto` remains disabled until qualification passes.
+
+```ts
+import assert from "node:assert/strict";
+import { Engine, exactSearch } from "./src/index.ts";
+
+const bytes = (value: string): Buffer => Buffer.from(value);
+const engine = await Engine.memory();
+try {
+  const records = Array.from({ length: 32 }, (_, index) => ({
+    key: bytes(`chunk/${index.toString().padStart(2, "0")}`),
+    vector: new Float32Array([index, index % 3, 0, 1, 2, 3, 4, 5]),
+    value: bytes(`document-${index.toString().padStart(2, "0")}`),
+  }));
+  const proximity = await engine.buildProximity(8, records);
+  try {
+    const built = await proximity.buildTurboQuant({ workerThreads: 2n });
+    const request = {
+      ...exactSearch(new Float32Array([0, 0, 0, 1, 2, 3, 4, 5]), 3),
+      policy: "fixed_budget" as const,
+      backend: "turbo_quantized" as const,
+    };
+    const index = built.index;
+    const manifest = index.manifest();
+    assert.equal(index.verify(proximity).encodedVectors, 32n);
+    assert.equal((await index.search(proximity, request)).backend, "turbo_quantized");
+    index.close();
+
+    const reopened = proximity.loadTurboQuant(manifest);
+    reopened.close();
+  } finally {
+    proximity.close();
+  }
+} finally {
+  engine.close();
+}
+```
+
 ## Create A Durable Index
 
 ```ts

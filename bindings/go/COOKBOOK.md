@@ -25,6 +25,52 @@ Application-style directories include `batch_build`, `local_first_state`,
 `document_chunk_index`, `vector_sidecar`, `provenance_values`,
 `materialized_view`, `filesystem_snapshot`, and `durable_sqlite`.
 
+## Build And Force A TurboQuant RAG Sidecar
+
+TurboQuant is a disposable routing sidecar. The proximity map remains
+authoritative and every retained candidate is reranked from its full-precision
+vector. Keep the backend explicit until the checked qualification gates pass.
+
+```go
+records := make([]prolly.ProximityRecord, 32)
+for index := range records {
+	records[index] = prolly.ProximityRecord{
+		Key:    []byte(fmt.Sprintf("chunk/%02d", index)),
+		Vector: []float32{float32(index), float32(index % 3), 0, 1, 2, 3, 4, 5},
+		Value:  []byte(fmt.Sprintf("document-%02d", index)),
+	}
+}
+
+proximity, err := engine.BuildProximity(8, records)
+if err != nil { log.Fatal(err) }
+defer proximity.Close()
+
+config, err := prolly.DefaultTurboQuantConfig()
+if err != nil { log.Fatal(err) }
+limits, err := prolly.DefaultTurboQuantBuildLimits()
+if err != nil { log.Fatal(err) }
+built, err := proximity.BuildTurboQuant(config, 2, limits)
+if err != nil { log.Fatal(err) }
+defer built.Index.Close()
+verification, err := built.Index.Verify(proximity)
+if err != nil || verification.EncodedVectors != uint64(len(records)) {
+	log.Fatal("incomplete TurboQuant sidecar")
+}
+
+request := prolly.ExactSearch([]float32{0, 0, 0, 1, 2, 3, 4, 5}, 3)
+request.Policy = prolly.SearchPolicyFixedBudget
+request.Backend = prolly.SearchBackendTurboQuantized
+result, err := built.Index.Search(context.Background(), proximity, request)
+if err != nil { log.Fatal(err) }
+if result.Backend != "turbo-quantized" { log.Fatal("unexpected backend") }
+
+manifest, err := built.Index.Manifest()
+if err != nil { log.Fatal(err) }
+reopened, err := proximity.LoadTurboQuant(manifest)
+if err != nil { log.Fatal(err) }
+defer reopened.Close()
+```
+
 ## Create A Durable Index
 
 ```go
