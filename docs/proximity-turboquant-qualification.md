@@ -39,7 +39,7 @@ not replace the production-scale recall and performance matrix below.
 | Scalar/SIMD bit identity | `src/prolly/proximity/distance/simd.rs`, TurboQuant unit tests | Implemented |
 | Sync/async, catalog, composite, proof, content graph, and GC integration | focused proximity accelerator, async, proof, and content-graph tests | Implemented |
 | Maintained portable binding lifecycle | UniFFI plus Python, Go, Node, Kotlin, Java, Ruby, Swift, and WASM facades/tests | Implemented |
-| Cross-target fixture execution on x86_64, aarch64, and browser WASM | CI or retained target logs | Pending |
+| Cross-target fixture execution on x86_64, aarch64, and browser WASM | [`proximity-turboquant-cross-target.md`](proximity-turboquant-cross-target.md), Linux CI, local aarch64 suite, browser-WASM canonical CID test | Implemented |
 | Dense paper-reference distortion and recall comparison | [`proximity-turboquant-dense-reference.md`](proximity-turboquant-dense-reference.md), retained raw JSON, reproducible generator | Implemented |
 | Complete adversarial fault injection at every read/write boundary | [`proximity-turboquant-fault-injection.md`](proximity-turboquant-fault-injection.md), ordinal cold-read/publication tests | Implemented |
 
