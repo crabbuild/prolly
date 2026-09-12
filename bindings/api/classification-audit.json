@@ -5,14 +5,14 @@
     "async-store"
   ],
   "summary": {
-    "release_complete": 416,
+    "release_complete": 420,
     "reviewed_incomplete": 395,
     "unreviewed_runtime_candidate": 955,
     "unreviewed_data_model": 1630,
     "unreviewed_rust_abstraction": 18
   },
   "family_counts": {
-    "core": 1694,
+    "core": 1698,
     "indexed-map": 403,
     "maintenance": 334,
     "proof": 171,
@@ -37,12 +37,12 @@
     "prolly::Node": 25,
     "prolly::StatsDiff": 25,
     "prolly::StatsPercentageChange": 25,
+    "prolly::AsyncStore": 24,
     "prolly::ReadSession": 23,
     "prolly::AsyncReadSession": 22,
-    "prolly::AsyncStore": 22,
+    "prolly::Store": 22,
     "prolly::ProximityMap": 21,
     "prolly::IndexedSnapshotBundle": 20,
-    "prolly::Store": 20,
     "prolly::MergePolicyRegistry": 19,
     "prolly::BatchApplyStats": 18,
     "prolly::AsyncProllyTransaction": 17,
@@ -4341,6 +4341,16 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::AsyncStore::batch_get_validated_shared_ordered_unique",
+      "kind": "function",
+      "owner": "prolly::AsyncStore",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "bucket": "release_complete"
+    },
+    {
       "rust": "prolly::AsyncStore::batch_put",
       "kind": "function",
       "owner": "prolly::AsyncStore",
@@ -4392,6 +4402,16 @@
     },
     {
       "rust": "prolly::AsyncStore::get_shared",
+      "kind": "function",
+      "owner": "prolly::AsyncStore",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::AsyncStore::get_validated_shared",
       "kind": "function",
       "owner": "prolly::AsyncStore",
       "member_kind": "trait-item",
@@ -29531,6 +29551,16 @@
       "bucket": "release_complete"
     },
     {
+      "rust": "prolly::Store::batch_get_validated_shared_ordered_unique",
+      "kind": "function",
+      "owner": "prolly::Store",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "bucket": "release_complete"
+    },
+    {
       "rust": "prolly::Store::batch_put",
       "kind": "function",
       "owner": "prolly::Store",
@@ -29582,6 +29612,16 @@
     },
     {
       "rust": "prolly::Store::get_shared",
+      "kind": "function",
+      "owner": "prolly::Store",
+      "member_kind": "trait-item",
+      "family": "core",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "bucket": "release_complete"
+    },
+    {
+      "rust": "prolly::Store::get_validated_shared",
       "kind": "function",
       "owner": "prolly::Store",
       "member_kind": "trait-item",

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-09-12T09:20:06+00:00",
+  "generated_at": "2026-09-12T16:20:53+00:00",
   "rustdoc_format_version": 57,
   "rust_features": [
     "async-store"
@@ -5228,6 +5228,40 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::AsyncStore::batch_get_validated_shared_ordered_unique",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "HostStoreCallback/ForeignRemoteStore contract (prolly::AsyncStore::batch_get_validated_shared_ordered_unique)",
+        "go": "prolly.RemoteStore contract with Rust-owned defaults (prolly::AsyncStore::batch_get_validated_shared_ordered_unique)",
+        "node": "NativeHostStore/RemoteStore contract (prolly::AsyncStore::batch_get_validated_shared_ordered_unique)",
+        "kotlin": "HostStoreCallback/RemoteStore contract (prolly::AsyncStore::batch_get_validated_shared_ordered_unique)",
+        "java": "HostStoreAdapter/RemoteStore contract (prolly::AsyncStore::batch_get_validated_shared_ordered_unique)",
+        "ruby": "Prolly::HostStoreCallback/ForeignRemoteStore contract (prolly::AsyncStore::batch_get_validated_shared_ordered_unique)",
+        "swift": "HostStoreCallback/ForeignRemoteStore contract (prolly::AsyncStore::batch_get_validated_shared_ordered_unique)",
+        "wasm": "RemoteStore contract with Rust-owned defaults (prolly::AsyncStore::batch_get_validated_shared_ordered_unique)"
+      },
+      "exclusions": {},
+      "tests": [
+        "portable-parity::custom-store-callbacks"
+      ],
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::batch_get_validated_shared_ordered_unique is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true,
+      "audience": "rust-extension",
+      "audience_rationale": "prolly::AsyncStore::batch_get_validated_shared_ordered_unique supports the portable application API through the store-trait contract and is not a separately invoked application operation.",
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
       "rust": "prolly::AsyncStore::batch_put",
       "classification": "idiomatic",
       "status": "implemented",
@@ -5425,6 +5459,40 @@
       "reviewed": true,
       "audience": "rust-extension",
       "audience_rationale": "prolly::AsyncStore::get_shared supports the portable application API through the store-trait contract and is not a separately invoked application operation.",
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
+      "rust": "prolly::AsyncStore::get_validated_shared",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "HostStoreCallback/ForeignRemoteStore contract (prolly::AsyncStore::get_validated_shared)",
+        "go": "prolly.RemoteStore contract with Rust-owned defaults (prolly::AsyncStore::get_validated_shared)",
+        "node": "NativeHostStore/RemoteStore contract (prolly::AsyncStore::get_validated_shared)",
+        "kotlin": "HostStoreCallback/RemoteStore contract (prolly::AsyncStore::get_validated_shared)",
+        "java": "HostStoreAdapter/RemoteStore contract (prolly::AsyncStore::get_validated_shared)",
+        "ruby": "Prolly::HostStoreCallback/ForeignRemoteStore contract (prolly::AsyncStore::get_validated_shared)",
+        "swift": "HostStoreCallback/ForeignRemoteStore contract (prolly::AsyncStore::get_validated_shared)",
+        "wasm": "RemoteStore contract with Rust-owned defaults (prolly::AsyncStore::get_validated_shared)"
+      },
+      "exclusions": {},
+      "tests": [
+        "portable-parity::custom-store-callbacks"
+      ],
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::AsyncStore::get_validated_shared is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true,
+      "audience": "rust-extension",
+      "audience_rationale": "prolly::AsyncStore::get_validated_shared supports the portable application API through the store-trait contract and is not a separately invoked application operation.",
       "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
         "bindings/api/idiomatic-equivalents.json#store-trait"
@@ -39400,6 +39468,40 @@
       "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
     },
     {
+      "rust": "prolly::Store::batch_get_validated_shared_ordered_unique",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "HostStoreCallback/ForeignRemoteStore contract (prolly::Store::batch_get_validated_shared_ordered_unique)",
+        "go": "prolly.RemoteStore contract with Rust-owned defaults (prolly::Store::batch_get_validated_shared_ordered_unique)",
+        "node": "NativeHostStore/RemoteStore contract (prolly::Store::batch_get_validated_shared_ordered_unique)",
+        "kotlin": "HostStoreCallback/RemoteStore contract (prolly::Store::batch_get_validated_shared_ordered_unique)",
+        "java": "HostStoreAdapter/RemoteStore contract (prolly::Store::batch_get_validated_shared_ordered_unique)",
+        "ruby": "Prolly::HostStoreCallback/ForeignRemoteStore contract (prolly::Store::batch_get_validated_shared_ordered_unique)",
+        "swift": "HostStoreCallback/ForeignRemoteStore contract (prolly::Store::batch_get_validated_shared_ordered_unique)",
+        "wasm": "RemoteStore contract with Rust-owned defaults (prolly::Store::batch_get_validated_shared_ordered_unique)"
+      },
+      "exclusions": {},
+      "tests": [
+        "portable-parity::custom-store-callbacks"
+      ],
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::batch_get_validated_shared_ordered_unique is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true,
+      "audience": "rust-extension",
+      "audience_rationale": "prolly::Store::batch_get_validated_shared_ordered_unique supports the portable application API through the store-trait contract and is not a separately invoked application operation.",
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
       "rust": "prolly::Store::batch_put",
       "classification": "idiomatic",
       "status": "implemented",
@@ -39597,6 +39699,40 @@
       "reviewed": true,
       "audience": "rust-extension",
       "audience_rationale": "prolly::Store::get_shared supports the portable application API through the store-trait contract and is not a separately invoked application operation.",
+      "reconciliation": "bound-idiomatic",
+      "reconciliation_evidence": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "reconciliation_rationale": "The reviewed store-trait contract defines concrete host symbols, portable semantics, performance behavior, and shared conformance evidence for this Rust abstraction."
+    },
+    {
+      "rust": "prolly::Store::get_validated_shared",
+      "classification": "idiomatic",
+      "status": "implemented",
+      "family": "core",
+      "performance": "owned",
+      "languages": {
+        "python": "HostStoreCallback/ForeignRemoteStore contract (prolly::Store::get_validated_shared)",
+        "go": "prolly.RemoteStore contract with Rust-owned defaults (prolly::Store::get_validated_shared)",
+        "node": "NativeHostStore/RemoteStore contract (prolly::Store::get_validated_shared)",
+        "kotlin": "HostStoreCallback/RemoteStore contract (prolly::Store::get_validated_shared)",
+        "java": "HostStoreAdapter/RemoteStore contract (prolly::Store::get_validated_shared)",
+        "ruby": "Prolly::HostStoreCallback/ForeignRemoteStore contract (prolly::Store::get_validated_shared)",
+        "swift": "HostStoreCallback/ForeignRemoteStore contract (prolly::Store::get_validated_shared)",
+        "wasm": "RemoteStore contract with Rust-owned defaults (prolly::Store::get_validated_shared)"
+      },
+      "exclusions": {},
+      "tests": [
+        "portable-parity::custom-store-callbacks"
+      ],
+      "docs": [
+        "bindings/api/idiomatic-equivalents.json#store-trait"
+      ],
+      "equivalence": "store-trait",
+      "rationale": "prolly::Store::get_validated_shared is represented by the reviewed store-trait host-language contract instead of a literal Rust declaration.",
+      "reviewed": true,
+      "audience": "rust-extension",
+      "audience_rationale": "prolly::Store::get_validated_shared supports the portable application API through the store-trait contract and is not a separately invoked application operation.",
       "reconciliation": "bound-idiomatic",
       "reconciliation_evidence": [
         "bindings/api/idiomatic-equivalents.json#store-trait"

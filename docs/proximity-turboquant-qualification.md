@@ -294,7 +294,7 @@ The local release-command audit on 2026-09-12 records each gate separately:
 | browser-WASM build, typecheck, and package tests | Passed: 37/37, including canonical TurboQuant wire parity |
 | maintained binding TurboQuant lifecycle | Python, Go, Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM lifecycle tests exercise pre-cancelled search, reported TurboQuant statistics, direct TurboQuant catalog dispatch, and TurboQuant-based composite search; Ruby passes 23/23 with 264 assertions, and the full 18-module Kotlin/Java reactor passes locally |
 | maintained binding cookbooks | Python, Go, Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM document build, forced search, verification, and manifest reopen |
-| generated classification audit | Regenerated from current-head async-feature rustdoc: all 73 TurboQuant rows are `implemented` and `release_complete`; the normal 3,414-operation inventory check passes |
+| generated classification audit | Regenerated from current-head async-feature rustdoc: all 73 TurboQuant rows are `implemented` and `release_complete`; the normal 3,418-operation inventory check passes, including the four Rust-owned validated-read store defaults |
 | release binding inventory | Repository gate remains open: 2,998 pre-existing public Rust entries are classified incomplete; none is a TurboQuant entry |
 
 The binding inventory distinction is intentional. TurboQuant's production
