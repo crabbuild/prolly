@@ -1098,6 +1098,7 @@ fn pack_codes(codes: &[u8], bit_width: u8) -> Result<Vec<u8>, Error> {
     Ok(packed)
 }
 
+#[cfg(test)]
 fn unpack_code(packed: &[u8], index: usize, bit_width: u8) -> u8 {
     let bit_offset = index * bit_width as usize;
     let byte = bit_offset / 8;
@@ -1105,6 +1106,54 @@ fn unpack_code(packed: &[u8], index: usize, bit_width: u8) -> u8 {
     let window =
         u16::from(packed[byte]) | (packed.get(byte + 1).copied().map(u16::from).unwrap_or(0) << 8);
     ((window >> shift) & ((1u16 << bit_width) - 1)) as u8
+}
+
+fn fill_centroids(
+    packed: &[u8],
+    start: usize,
+    bit_width: u8,
+    codebook: Codebook,
+    output: &mut [f64],
+) {
+    let bit_offset = start * bit_width as usize;
+    debug_assert_eq!(bit_offset % 8, 0);
+    let packed = &packed[bit_offset / 8..];
+    match bit_width {
+        2 => {
+            debug_assert_eq!(output.len() % 4, 0);
+            for (codes, centroids) in packed.iter().zip(output.chunks_exact_mut(4)) {
+                let codes = *codes;
+                centroids[0] = codebook.centroid(codes & 0x03);
+                centroids[1] = codebook.centroid((codes >> 2) & 0x03);
+                centroids[2] = codebook.centroid((codes >> 4) & 0x03);
+                centroids[3] = codebook.centroid(codes >> 6);
+            }
+        }
+        3 => {
+            debug_assert_eq!(output.len() % 8, 0);
+            for (codes, centroids) in packed.chunks_exact(3).zip(output.chunks_exact_mut(8)) {
+                let codes =
+                    u32::from(codes[0]) | (u32::from(codes[1]) << 8) | (u32::from(codes[2]) << 16);
+                centroids[0] = codebook.centroid((codes & 0x07) as u8);
+                centroids[1] = codebook.centroid(((codes >> 3) & 0x07) as u8);
+                centroids[2] = codebook.centroid(((codes >> 6) & 0x07) as u8);
+                centroids[3] = codebook.centroid(((codes >> 9) & 0x07) as u8);
+                centroids[4] = codebook.centroid(((codes >> 12) & 0x07) as u8);
+                centroids[5] = codebook.centroid(((codes >> 15) & 0x07) as u8);
+                centroids[6] = codebook.centroid(((codes >> 18) & 0x07) as u8);
+                centroids[7] = codebook.centroid(((codes >> 21) & 0x07) as u8);
+            }
+        }
+        4 => {
+            debug_assert_eq!(output.len() % 2, 0);
+            for (codes, centroids) in packed.iter().zip(output.chunks_exact_mut(2)) {
+                let codes = *codes;
+                centroids[0] = codebook.centroid(codes & 0x0f);
+                centroids[1] = codebook.centroid(codes >> 4);
+            }
+        }
+        _ => unreachable!("validated TurboQuant bit width"),
+    }
 }
 
 fn validate_code_value(bytes: &[u8], dimensions: usize, bit_width: u8) -> Result<f64, Error> {
@@ -1196,9 +1245,13 @@ pub(crate) fn score_code_value(
         let mut start = 0usize;
         while start < dimensions {
             let end = start.saturating_add(PRODUCT_SLOTS).min(dimensions);
-            for (offset, centroid) in centroids[..end - start].iter_mut().enumerate() {
-                *centroid = codebook.centroid(unpack_code(packed, start + offset, bit_width));
-            }
+            fill_centroids(
+                packed,
+                start,
+                bit_width,
+                codebook,
+                &mut centroids[..end - start],
+            );
             fill_query_products_f64(
                 kernel,
                 &prepared_query.weighted[start..end],
@@ -1435,6 +1488,35 @@ mod tests {
                 assert_eq!(packed.len(), (len * bit_width as usize).div_ceil(8));
                 for (index, expected) in codes.iter().enumerate() {
                     assert_eq!(unpack_code(&packed, index, bit_width), *expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn grouped_centroid_decode_matches_the_canonical_bit_decoder() {
+        for dimensions in [8usize, 24, 128, 200, 768] {
+            for bit_width in [2, 3, 4] {
+                let maximum = 1u8 << bit_width;
+                let codes: Vec<_> = (0..dimensions)
+                    .map(|index| ((index * 11 + 5) as u8) % maximum)
+                    .collect();
+                let packed = pack_codes(&codes, bit_width).unwrap();
+                let codebook = codebook(bit_width);
+                for start in (0..dimensions).step_by(64) {
+                    let end = start.saturating_add(64).min(dimensions);
+                    let mut decoded = vec![0.0; end - start];
+                    fill_centroids(&packed, start, bit_width, codebook, &mut decoded);
+                    for (offset, centroid) in decoded.into_iter().enumerate() {
+                        assert_eq!(
+                            centroid.to_bits(),
+                            codebook
+                                .centroid(unpack_code(&packed, start + offset, bit_width))
+                                .to_bits(),
+                            "dimensions={dimensions}, bits={bit_width}, index={}",
+                            start + offset,
+                        );
+                    }
                 }
             }
         }
