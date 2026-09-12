@@ -374,9 +374,10 @@ Publish `catalog.typed_root()` with `put_named_content_root` or
 `compare_and_swap_named_content_root`; replacement is atomic and independent
 of PRXI publication. `AsyncAcceleratorCatalog::load` and
 `AsyncCompositeAccelerator::load` provide the same validation and planner
-capabilities for async-only stores. `AsyncCompositeAccelerator::build_from_hnsw`
-and `build_from_product_quantizer` construct and publish bounded delta/shadow
-sidecars from async-only base and current snapshots.
+capabilities for async-only stores. `AsyncCompositeAccelerator::build_from_hnsw`,
+`build_from_product_quantizer`, and `build_from_turboquant` construct and
+publish bounded delta/shadow sidecars from async-only base and current
+snapshots.
 `AsyncAcceleratorCatalog::publish` binds already-validated async sidecars to the
 current descriptor.
 
@@ -455,9 +456,9 @@ Membership proofs bind PRXI bytes, the ordered path, and exact PRVR bytes.
 Structural proofs carry the exact typed closure and replay every summary,
 radius, routing, vector, and directory invariant in an isolated store. Native
 search proofs commit request/filter/budgets/kernel and record frontier, visited
-objects, candidates, and completion. PQ, TurboQuant, HNSW, and composite proofs authenticate
-sidecar closures and replay execution. Only exact native L2 returns
-`ExactL2Optimal`; other modes return `HonestExecution`.
+objects, candidates, and completion. PQ, TurboQuant, HNSW, and composite proofs
+authenticate sidecar closures and replay execution. Only exact native L2
+returns `ExactL2Optimal`; other modes return `HonestExecution`.
 
 ## Verification and operational limits
 

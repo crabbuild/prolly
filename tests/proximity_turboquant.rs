@@ -614,6 +614,37 @@ fn turboquant_catalog_and_typed_graph_include_complete_closure() {
         AcceleratorCatalog::load(store.clone(), catalog.manifest_cid().clone(), map.tree())
             .unwrap();
     assert_eq!(reopened.entries().len(), 1);
+    let mut corrupt_catalog = Store::get(&store, catalog.manifest_cid().as_bytes())
+        .unwrap()
+        .unwrap();
+    let fingerprint = catalog.entries()[0].configuration_fingerprint.as_bytes();
+    let fingerprint_offset = corrupt_catalog
+        .windows(fingerprint.len())
+        .position(|window| window == fingerprint)
+        .expect("catalog contains the TurboQuant configuration fingerprint");
+    corrupt_catalog[fingerprint_offset + fingerprint.len() - 1] ^= 1;
+    let corrupt_catalog_cid = prolly::Cid::from_bytes(&corrupt_catalog);
+    Store::put(&store, corrupt_catalog_cid.as_bytes(), &corrupt_catalog).unwrap();
+    match AcceleratorCatalog::load(store.clone(), corrupt_catalog_cid, map.tree()) {
+        Err(prolly::Error::InvalidProximityObject { kind, reason }) => {
+            assert_eq!(kind, "accelerator catalog");
+            assert_eq!(reason, "catalog TurboQuant fingerprint mismatch");
+        }
+        _ => panic!("mutated TurboQuant catalog fingerprint must fail closed"),
+    }
+    let other_map =
+        ProximityMap::build(store.clone(), ProximityConfig::new(128), records(34, 128)).unwrap();
+    match AcceleratorCatalog::load(
+        store.clone(),
+        catalog.manifest_cid().clone(),
+        other_map.tree(),
+    ) {
+        Err(prolly::Error::InvalidProximityObject { kind, reason }) => {
+            assert_eq!(kind, "accelerator catalog");
+            assert_eq!(reason, "catalog is bound to a different source snapshot");
+        }
+        _ => panic!("TurboQuant catalog must reject another source snapshot"),
+    }
     let walk = walk_content_graph(
         &store,
         &[TypedContentRoot::new(

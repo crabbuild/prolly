@@ -307,3 +307,51 @@ fn invalid(reason: impl Into<String>) -> Error {
         reason: reason.into(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(kind: CatalogAcceleratorKind, label: &[u8]) -> AcceleratorCatalogEntry {
+        AcceleratorCatalogEntry {
+            kind,
+            configuration_fingerprint: Cid::from_bytes(&[label, b"-config"].concat()),
+            manifest: Cid::from_bytes(&[label, b"-manifest"].concat()),
+        }
+    }
+
+    #[test]
+    fn manifest_requires_appended_turboquant_kind_to_be_sorted_and_unique() {
+        let source = Cid::from_bytes(b"source");
+        let hnsw = entry(CatalogAcceleratorKind::Hnsw, b"hnsw");
+        let turboquant = entry(CatalogAcceleratorKind::TurboQuantized, b"turboquant");
+        let canonical = Manifest {
+            source: source.clone(),
+            entries: vec![hnsw.clone(), turboquant.clone()],
+        };
+        let decoded = Manifest::decode(&canonical.encode().unwrap()).unwrap();
+        assert_eq!(decoded.source, source);
+        assert_eq!(decoded.entries, vec![hnsw.clone(), turboquant.clone()]);
+
+        for entries in [
+            vec![turboquant.clone(), hnsw],
+            vec![turboquant.clone(), turboquant],
+        ] {
+            match (Manifest {
+                source: source.clone(),
+                entries,
+            })
+            .encode()
+            {
+                Err(Error::InvalidProximityObject { kind, reason }) => {
+                    assert_eq!(kind, "accelerator catalog");
+                    assert_eq!(
+                        reason,
+                        "catalog entries must be sorted, unique, and contain one entry per kind"
+                    );
+                }
+                _ => panic!("unsorted or duplicate TurboQuant catalog must fail closed"),
+            }
+        }
+    }
+}
