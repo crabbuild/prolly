@@ -127,8 +127,11 @@ query-by-codebook product table once per search. Candidate scoring then decodes
 packed codes, reconstructs the exact positive half from the codebook's frozen
 bit-symmetric negative half, and performs the same coordinate-ordered scalar
 reduction without repeating a floating-point multiply for every candidate
-component. The private table uses fixed-size product rows for each supported
-bit width, so every dynamic lookup is safe and statically bounded; the complete
+component. L2, cosine, and inner-product scoring accumulate the reconstructed
+norm in that same packed-code traversal; cosine and inner product use it to
+remove reconstruction-direction norm drift, while L2 uses it in the full MSE
+distance. The private table uses fixed-size product rows for each supported bit
+width, so every dynamic lookup is safe and statically bounded; the complete
 TurboQuant algorithm module forbids unsafe code. This halves the
 scalar/automatic query table to
 `dimensions * 2^(bit_width - 1) * 8` bytes (1 MiB at the maximum supported

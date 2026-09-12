@@ -1606,11 +1606,7 @@ pub(crate) fn score_code_value(
         kernel,
         QueryKernel::ScalarDeterministic | QueryKernel::AutoDeterministic
     ) {
-        if matches!(metric, DistanceMetric::L2Squared | DistanceMetric::Cosine) {
-            score_precomputed_centroids::<true>(packed, prepared_query, bit_width)
-        } else {
-            score_precomputed_centroids::<false>(packed, prepared_query, bit_width)
-        }
+        score_precomputed_centroids(packed, prepared_query, bit_width)
     } else {
         let codebook = codebook(bit_width);
         let inverse_sqrt_dimensions = 1.0 / sqrt_down(dimensions as f64);
@@ -1629,11 +1625,9 @@ pub(crate) fn score_code_value(
                 codebook,
                 &mut centroids[..end - start],
             );
-            if matches!(metric, DistanceMetric::L2Squared | DistanceMetric::Cosine) {
-                for &centroid in &centroids[..end - start] {
-                    let reconstructed = centroid * inverse_sqrt_dimensions;
-                    reconstructed_norm_squared += reconstructed * reconstructed;
-                }
+            for &centroid in &centroids[..end - start] {
+                let reconstructed = centroid * inverse_sqrt_dimensions;
+                reconstructed_norm_squared += reconstructed * reconstructed;
             }
             fill_query_products_f64(
                 kernel,
@@ -1648,13 +1642,26 @@ pub(crate) fn score_code_value(
         }
         (reduced, reconstructed_norm_squared)
     };
-    let dot = if metric == DistanceMetric::Cosine {
-        // Cosine preparation normalizes both query and source. Multiplying by
-        // the persisted original source norm would violate scale invariance
-        // and collapse large positive similarities at the clamp boundary.
-        reconstructed_unit_dot
-    } else {
-        norm * reconstructed_unit_dot
+    let dot = match metric {
+        DistanceMetric::L2Squared => norm * reconstructed_unit_dot,
+        DistanceMetric::Cosine => {
+            // Cosine preparation normalizes both query and source. Multiplying
+            // by the persisted original source norm would violate scale
+            // invariance and collapse large positive similarities at the
+            // clamp boundary.
+            reconstructed_unit_dot
+        }
+        DistanceMetric::InnerProduct => {
+            // The persisted norm describes the original source vector, while
+            // the packed codes reconstruct only its unit direction. Remove
+            // quantization-induced reconstruction-norm drift before restoring
+            // the exact source magnitude.
+            if norm == 0.0 {
+                0.0
+            } else {
+                norm * reconstructed_unit_dot / sqrt_down(reconstructed_norm_squared)
+            }
+        }
     };
     let distance = match metric {
         DistanceMetric::L2Squared => {
@@ -1675,7 +1682,7 @@ pub(crate) fn score_code_value(
 }
 
 #[inline]
-fn score_precomputed_centroids<const INCLUDE_RECONSTRUCTED_NORM: bool>(
+fn score_precomputed_centroids(
     packed: &[u8],
     prepared: &TurboQuantPreparedQuery,
     bit_width: u8,
@@ -1697,10 +1704,7 @@ fn score_precomputed_centroids<const INCLUDE_RECONSTRUCTED_NORM: bool>(
                 ];
                 for (row, code) in rows.iter().zip(codes) {
                     reduced += symmetric_row_product_2(row, code);
-                    if INCLUDE_RECONSTRUCTED_NORM {
-                        reconstructed_norm_squared +=
-                            prepared.reconstructed_squares[usize::from(code)];
-                    }
+                    reconstructed_norm_squared += prepared.reconstructed_squares[usize::from(code)];
                 }
             }
         }
@@ -1711,10 +1715,7 @@ fn score_precomputed_centroids<const INCLUDE_RECONSTRUCTED_NORM: bool>(
                 for (row, products) in rows.iter().enumerate() {
                     let code = ((codes >> (row * 3)) & 0x07) as u8;
                     reduced += symmetric_row_product_4(products, code);
-                    if INCLUDE_RECONSTRUCTED_NORM {
-                        reconstructed_norm_squared +=
-                            prepared.reconstructed_squares[usize::from(code)];
-                    }
+                    reconstructed_norm_squared += prepared.reconstructed_squares[usize::from(code)];
                 }
             }
         }
@@ -1723,10 +1724,7 @@ fn score_precomputed_centroids<const INCLUDE_RECONSTRUCTED_NORM: bool>(
                 let codes = [byte & 0x0f, byte >> 4];
                 for (row, code) in rows.iter().zip(codes) {
                     reduced += symmetric_row_product_8(row, code);
-                    if INCLUDE_RECONSTRUCTED_NORM {
-                        reconstructed_norm_squared +=
-                            prepared.reconstructed_squares[usize::from(code)];
-                    }
+                    reconstructed_norm_squared += prepared.reconstructed_squares[usize::from(code)];
                 }
             }
         }
@@ -2827,6 +2825,48 @@ mod tests {
         let expected = 1.0 - (dot / sqrt_down(reconstructed_norm_squared)).clamp(-1.0, 1.0);
         assert_eq!(score.to_bits(), expected.to_bits());
         assert_ne!(score.to_bits(), (1.0 - dot.clamp(-1.0, 1.0)).to_bits());
+    }
+
+    #[test]
+    fn inner_product_approximate_score_normalizes_the_quantized_direction() {
+        let dimensions = 8;
+        let bit_width = 4;
+        let mut weighted = vec![0.0; dimensions];
+        weighted[0] = 0.125;
+        let prepared = TurboQuantPreparedQuery::new(
+            weighted.clone(),
+            1.0,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        );
+        let codes = vec![15; dimensions];
+        let packed = pack_codes(&codes, bit_width).unwrap();
+        let norm = 2.0f64;
+        let mut encoded = norm.to_le_bytes().to_vec();
+        encoded.extend_from_slice(&packed);
+
+        let score = score_code_value(
+            &encoded,
+            &prepared,
+            DistanceMetric::InnerProduct,
+            dimensions,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        )
+        .unwrap();
+
+        let centroid = codebook(bit_width).centroid(15);
+        let mut dot = 0.0;
+        let mut reconstructed_norm_squared = 0.0;
+        let inverse_sqrt_dimensions = 1.0 / sqrt_down(dimensions as f64);
+        for weight in weighted {
+            dot += weight * centroid;
+            let reconstructed = centroid * inverse_sqrt_dimensions;
+            reconstructed_norm_squared += reconstructed * reconstructed;
+        }
+        let expected = -norm * dot / sqrt_down(reconstructed_norm_squared);
+        assert_eq!(score.to_bits(), expected.to_bits());
+        assert_ne!(score.to_bits(), (-norm * dot).to_bits());
     }
 
     #[test]

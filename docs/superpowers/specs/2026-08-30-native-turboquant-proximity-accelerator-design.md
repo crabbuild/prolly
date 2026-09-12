@@ -504,22 +504,29 @@ The transform is applied to the query once per search. Search precomputes
 order. It also computes L2 `query_norm_squared` from the prepared query with the
 canonical scalar accumulation.
 
-For one encoded vector, L2 and inner product restore the original source norm:
+For one encoded vector, define the ordered reconstructed-direction dot product:
 
 ```text
-approx_dot = stored_norm *
-             sum_i(transformed_query_i * reconstructed_centroid[code_i]
-                   / sqrt(dimensions))
+reconstructed_unit_dot =
+    sum_i(transformed_query_i * reconstructed_centroid[code_i]
+          / sqrt(dimensions))
 ```
 
-Cosine preparation normalizes both source and query, so its routing dot product
-omits `stored_norm`. This preserves cosine scale invariance and prevents large
-original norms from saturating the similarity clamp:
+The scalar Lloyd–Max reconstruction is not exactly unit length. For cosine and
+inner product, project that reconstruction back onto the unit sphere before
+scoring. This is a Prolly routing correction layered on the unchanged
+TurboQuant-MSE encoding: the persisted `stored_norm` already carries the exact
+source magnitude, so allowing codebook norm drift to change magnitude twice is
+incorrect and measurably harms candidate recall. Cosine preparation normalizes
+both source and query and therefore omits `stored_norm`; inner product restores
+it after the direction correction:
 
 ```text
-approx_cosine_dot =
-    sum_i(transformed_normalized_query_i * reconstructed_centroid[code_i]
-          / sqrt(dimensions))
+reconstructed_unit_norm_squared =
+    sum_i((reconstructed_centroid[code_i] / sqrt(dimensions))^2)
+approx_direction_dot =
+    reconstructed_unit_dot / sqrt(reconstructed_unit_norm_squared)
+approx_inner_product_dot = stored_norm * approx_direction_dot
 ```
 
 Products are generated in coordinate order and reduced in canonical scalar
@@ -527,22 +534,21 @@ Products are generated in coordinate order and reduced in canonical scalar
 reduction must remain scalar and ordered, matching the existing deterministic
 SIMD strategy.
 
+L2 retains the MSE reconstruction itself rather than the spherical projection.
 Metric scores are:
 
 ```text
-reconstructed_unit_norm_squared =
-    sum_i((reconstructed_centroid[code_i] / sqrt(dimensions))^2)
 L2Squared   = query_norm_squared
               + stored_norm^2 * reconstructed_unit_norm_squared
-              - 2 * approx_dot
-Cosine      = 1 - clamp(reconstructed_unit_dot
-                        / sqrt(reconstructed_unit_norm_squared), -1, 1)
-InnerProduct = -approx_dot
+              - 2 * stored_norm * reconstructed_unit_dot
+Cosine      = 1 - clamp(approx_direction_dot, -1, 1)
+InnerProduct = -approx_inner_product_dot
 ```
 
-The L2 reconstruction norm is derived deterministically from the packed codes.
-It cannot be replaced by one: a particular Lloyd–Max reconstruction is not
-exactly unit length, and that substitution would no longer rank by squared
+The reconstruction norm is derived deterministically from the packed codes in
+the same traversal as the dot product. It cannot be replaced by one for L2: a
+particular Lloyd–Max reconstruction is not exactly unit length, and that
+substitution would no longer rank by squared
 distance to the reconstructed source vector. Implementations accumulate the
 dot product and this norm in the same coordinate-ordered packed-code traversal;
 they must not decode the complete code a second time.
