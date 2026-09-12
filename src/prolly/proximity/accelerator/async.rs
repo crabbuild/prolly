@@ -21,7 +21,8 @@ use super::turboquant::config_fingerprint as turboquant_fingerprint;
 use super::turboquant::{
     codebook as turboquant_codebook, encode_vector_reusing, enforce_resource,
     invalid_object as invalid_turboquant_object, packed_len as turboquant_packed_len,
-    resource_limit as turboquant_resource_limit, turboquant_code_tree_config,
+    resource_limit as turboquant_resource_limit,
+    temporary_peak_bytes as turboquant_temporary_peak_bytes, turboquant_code_tree_config,
     validate_code_tree_root as validate_turboquant_code_tree_root, EncodingScratch,
     Manifest as TurboQuantManifest, StructuredRotation, TurboQuantizationBuildLimits,
     TurboQuantizationBuildStats, TurboQuantizationConfig, TurboQuantizer,
@@ -796,30 +797,30 @@ where
                 turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
             })
     })?;
-    let batch_output_bytes = batch.len().checked_mul(8 + packed_len).ok_or_else(|| {
+    let encoded_value_bytes = 8usize.checked_add(packed_len).ok_or_else(|| {
         turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
     })?;
-    let physical_peak = plan
-        .owned_bytes()
-        .checked_add(batch_input_bytes)
-        .and_then(|value| value.checked_add(batch_output_bytes))
-        .and_then(|value| value.checked_add(per_worker_buffers.checked_mul(worker_threads)?))
-        .ok_or_else(|| {
-            turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-        })?;
+    let physical_peak = turboquant_temporary_peak_bytes(
+        plan.owned_bytes(),
+        per_worker_buffers,
+        worker_threads,
+        batch_input_bytes,
+        batch.len(),
+        encoded_value_bytes,
+    )?;
     enforce_resource(
         "TurboQuant temporary bytes",
         limits.max_temporary_bytes,
         physical_peak,
     )?;
-    let logical_peak = plan
-        .owned_bytes()
-        .checked_add(batch_input_bytes)
-        .and_then(|value| value.checked_add(batch_output_bytes))
-        .and_then(|value| value.checked_add(per_worker_buffers))
-        .ok_or_else(|| {
-            turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-        })?;
+    let logical_peak = turboquant_temporary_peak_bytes(
+        plan.owned_bytes(),
+        per_worker_buffers,
+        1,
+        batch_input_bytes,
+        batch.len(),
+        encoded_value_bytes,
+    )?;
     state.peak_temporary_bytes = state.peak_temporary_bytes.max(logical_peak);
 
     let dimensions = plan.dimensions();
@@ -1025,23 +1026,20 @@ impl AsyncTurboQuantizer {
             .ok_or_else(|| {
                 turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
             })?;
-        let required_temporary_bytes = plan
-            .owned_bytes()
-            .checked_add(
-                per_worker_buffers
-                    .checked_mul(parallelism.threads())
-                    .ok_or_else(|| {
-                        turboquant_resource_limit(
-                            "TurboQuant temporary bytes",
-                            usize::MAX,
-                            usize::MAX,
-                        )
-                    })?,
-            )
-            .and_then(|value| value.checked_add(8 + packed_len))
-            .ok_or_else(|| {
-                turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-            })?;
+        let encoded_value_bytes = 8usize.checked_add(packed_len).ok_or_else(|| {
+            turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+        })?;
+        let minimum_input_bytes = dimensions_usize.checked_mul(4).ok_or_else(|| {
+            turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+        })?;
+        let required_temporary_bytes = turboquant_temporary_peak_bytes(
+            plan.owned_bytes(),
+            per_worker_buffers,
+            parallelism.threads(),
+            minimum_input_bytes,
+            1,
+            encoded_value_bytes,
+        )?;
         enforce_resource(
             "TurboQuant temporary bytes",
             limits.max_temporary_bytes,
@@ -1067,25 +1065,82 @@ impl AsyncTurboQuantizer {
                 reason: "cannot create TurboQuant worker pool".to_owned(),
             })?;
         let mut state = AsyncTurboQuantBuildState {
-            peak_temporary_bytes: plan
-                .owned_bytes()
-                .checked_add(per_worker_buffers)
-                .and_then(|value| value.checked_add(8 + packed_len))
-                .ok_or_else(|| {
-                    turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-                })?,
+            peak_temporary_bytes: turboquant_temporary_peak_bytes(
+                plan.owned_bytes(),
+                per_worker_buffers,
+                1,
+                minimum_input_bytes,
+                1,
+                encoded_value_bytes,
+            )?,
             ..Default::default()
         };
         const ENCODE_BATCH_RECORDS: usize = 128;
-        let mut batch = Vec::with_capacity(ENCODE_BATCH_RECORDS);
+        let mut batch = if limits.max_temporary_bytes.is_some() {
+            Vec::new()
+        } else {
+            Vec::with_capacity(ENCODE_BATCH_RECORDS)
+        };
+        let mut batch_input_bytes = 0usize;
         let mut source = map
             .directory
             .range(&map.tree().directory, &[], None)
             .await?;
         while let Some(entry) = source.next().await {
             let (key, bytes) = entry?;
+            let mut next_batch_input_bytes = batch_input_bytes;
+            if let Some(limit) = limits.max_temporary_bytes {
+                let record_input_bytes =
+                    key.len().checked_add(minimum_input_bytes).ok_or_else(|| {
+                        turboquant_resource_limit(
+                            "TurboQuant temporary bytes",
+                            usize::MAX,
+                            usize::MAX,
+                        )
+                    })?;
+                let mut projected_input_bytes = batch_input_bytes
+                    .checked_add(record_input_bytes)
+                    .ok_or_else(|| {
+                    turboquant_resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+                })?;
+                let mut projected_peak = turboquant_temporary_peak_bytes(
+                    plan.owned_bytes(),
+                    per_worker_buffers,
+                    parallelism.threads(),
+                    projected_input_bytes,
+                    batch.len() + 1,
+                    encoded_value_bytes,
+                )?;
+                if projected_peak > limit && !batch.is_empty() {
+                    append_turboquant_batch(
+                        &mut builder,
+                        std::mem::take(&mut batch),
+                        &plan,
+                        &config,
+                        parallelism.threads(),
+                        per_worker_buffers,
+                        packed_len,
+                        pool.as_ref(),
+                        &limits,
+                        &mut state,
+                    )
+                    .await?;
+                    projected_input_bytes = record_input_bytes;
+                    projected_peak = turboquant_temporary_peak_bytes(
+                        plan.owned_bytes(),
+                        per_worker_buffers,
+                        parallelism.threads(),
+                        projected_input_bytes,
+                        1,
+                        encoded_value_bytes,
+                    )?;
+                }
+                enforce_resource("TurboQuant temporary bytes", Some(limit), projected_peak)?;
+                next_batch_input_bytes = projected_input_bytes;
+            }
             let stored = StoredRecord::decode(&bytes, dimensions)?;
             batch.push((key, stored.vector));
+            batch_input_bytes = next_batch_input_bytes;
             if batch.len() == ENCODE_BATCH_RECORDS {
                 append_turboquant_batch(
                     &mut builder,
@@ -1100,6 +1155,7 @@ impl AsyncTurboQuantizer {
                     &mut state,
                 )
                 .await?;
+                batch_input_bytes = 0;
             }
         }
         append_turboquant_batch(

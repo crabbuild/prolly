@@ -223,17 +223,20 @@ where
             .checked_mul(25)
             .and_then(|value| value.checked_add(packed_len))
             .ok_or_else(|| resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX))?;
-        let required_temporary_bytes = plan
-            .owned_bytes()
-            .checked_add(
-                per_worker_buffers
-                    .checked_mul(parallelism.threads())
-                    .ok_or_else(|| {
-                        resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-                    })?,
-            )
-            .and_then(|value| value.checked_add(8 + packed_len))
+        let encoded_value_bytes = 8usize
+            .checked_add(packed_len)
             .ok_or_else(|| resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX))?;
+        let minimum_input_bytes = dimensions_usize
+            .checked_mul(4)
+            .ok_or_else(|| resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX))?;
+        let required_temporary_bytes = temporary_peak_bytes(
+            plan.owned_bytes(),
+            per_worker_buffers,
+            parallelism.threads(),
+            minimum_input_bytes,
+            1,
+            encoded_value_bytes,
+        )?;
         enforce_resource(
             "TurboQuant temporary bytes",
             limits.max_temporary_bytes,
@@ -241,11 +244,14 @@ where
         )?;
         // Logical build statistics are canonical across worker counts. The
         // limit above still reserves every requested worker's scratch space.
-        let mut peak_temporary_bytes = plan
-            .owned_bytes()
-            .checked_add(per_worker_buffers)
-            .and_then(|value| value.checked_add(8 + packed_len))
-            .ok_or_else(|| resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX))?;
+        let mut peak_temporary_bytes = temporary_peak_bytes(
+            plan.owned_bytes(),
+            per_worker_buffers,
+            1,
+            minimum_input_bytes,
+            1,
+            encoded_value_bytes,
+        )?;
 
         let codebook = codebook(config.bit_width);
         let sqrt_dimensions = sqrt_down(f64::from(dimensions));
@@ -272,7 +278,11 @@ where
             .transpose()
             .map_err(|_| invalid_config("cannot create TurboQuant worker pool"))?;
         const ENCODE_BATCH_RECORDS: usize = 128;
-        let mut batch = Vec::with_capacity(ENCODE_BATCH_RECORDS);
+        let mut batch = if limits.max_temporary_bytes.is_some() {
+            Vec::new()
+        } else {
+            Vec::with_capacity(ENCODE_BATCH_RECORDS)
+        };
         {
             let mut commit_batch = |batch: Vec<(Vec<u8>, Vec<f32>)>| -> Result<(), Error> {
                 if batch.is_empty() {
@@ -286,33 +296,27 @@ where
                             resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
                         })
                 })?;
-                let batch_output_bytes =
-                    batch.len().checked_mul(8 + packed_len).ok_or_else(|| {
-                        resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-                    })?;
-                let physical_peak = plan
-                    .owned_bytes()
-                    .checked_add(batch_input_bytes)
-                    .and_then(|value| value.checked_add(batch_output_bytes))
-                    .and_then(|value| {
-                        value.checked_add(per_worker_buffers.checked_mul(parallelism.threads())?)
-                    })
-                    .ok_or_else(|| {
-                        resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-                    })?;
+                let physical_peak = temporary_peak_bytes(
+                    plan.owned_bytes(),
+                    per_worker_buffers,
+                    parallelism.threads(),
+                    batch_input_bytes,
+                    batch.len(),
+                    encoded_value_bytes,
+                )?;
                 enforce_resource(
                     "TurboQuant temporary bytes",
                     limits.max_temporary_bytes,
                     physical_peak,
                 )?;
-                let logical_peak = plan
-                    .owned_bytes()
-                    .checked_add(batch_input_bytes)
-                    .and_then(|value| value.checked_add(batch_output_bytes))
-                    .and_then(|value| value.checked_add(per_worker_buffers))
-                    .ok_or_else(|| {
-                        resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-                    })?;
+                let logical_peak = temporary_peak_bytes(
+                    plan.owned_bytes(),
+                    per_worker_buffers,
+                    1,
+                    batch_input_bytes,
+                    batch.len(),
+                    encoded_value_bytes,
+                )?;
                 peak_temporary_bytes = peak_temporary_bytes.max(logical_peak);
 
                 let encoded = if let Some(pool) = &pool {
@@ -399,15 +403,52 @@ where
                 }
                 Ok(())
             };
+            let mut batch_input_bytes = 0usize;
             for entry in map
                 .directory_manager()
                 .range(&map.tree().directory, &[], None)?
             {
                 let (key, bytes) = entry?;
+                let mut next_batch_input_bytes = batch_input_bytes;
+                if let Some(limit) = limits.max_temporary_bytes {
+                    let record_input_bytes =
+                        key.len().checked_add(minimum_input_bytes).ok_or_else(|| {
+                            resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+                        })?;
+                    let mut projected_input_bytes = batch_input_bytes
+                        .checked_add(record_input_bytes)
+                        .ok_or_else(|| {
+                            resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+                        })?;
+                    let mut projected_peak = temporary_peak_bytes(
+                        plan.owned_bytes(),
+                        per_worker_buffers,
+                        parallelism.threads(),
+                        projected_input_bytes,
+                        batch.len() + 1,
+                        encoded_value_bytes,
+                    )?;
+                    if projected_peak > limit && !batch.is_empty() {
+                        commit_batch(std::mem::take(&mut batch))?;
+                        projected_input_bytes = record_input_bytes;
+                        projected_peak = temporary_peak_bytes(
+                            plan.owned_bytes(),
+                            per_worker_buffers,
+                            parallelism.threads(),
+                            projected_input_bytes,
+                            1,
+                            encoded_value_bytes,
+                        )?;
+                    }
+                    enforce_resource("TurboQuant temporary bytes", Some(limit), projected_peak)?;
+                    next_batch_input_bytes = projected_input_bytes;
+                }
                 let stored = StoredRecord::decode(&bytes, dimensions)?;
                 batch.push((key, stored.vector));
+                batch_input_bytes = next_batch_input_bytes;
                 if batch.len() == ENCODE_BATCH_RECORDS {
                     commit_batch(std::mem::take(&mut batch))?;
+                    batch_input_bytes = 0;
                 }
             }
             commit_batch(batch)?;
@@ -1660,6 +1701,27 @@ pub(crate) fn enforce_resource(
         ));
     }
     Ok(())
+}
+
+pub(crate) fn temporary_peak_bytes(
+    plan_bytes: usize,
+    per_worker_bytes: usize,
+    workers: usize,
+    input_bytes: usize,
+    records: usize,
+    encoded_value_bytes: usize,
+) -> Result<usize, Error> {
+    let worker_bytes = per_worker_bytes
+        .checked_mul(workers)
+        .ok_or_else(|| resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX))?;
+    let output_bytes = records
+        .checked_mul(encoded_value_bytes)
+        .ok_or_else(|| resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX))?;
+    plan_bytes
+        .checked_add(worker_bytes)
+        .and_then(|value| value.checked_add(input_bytes))
+        .and_then(|value| value.checked_add(output_bytes))
+        .ok_or_else(|| resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX))
 }
 
 pub(crate) fn resource_limit(resource: &'static str, limit: usize, actual: usize) -> Error {

@@ -498,6 +498,94 @@ fn turboquant_every_build_limit_fails_typed_before_manifest_publication() {
 }
 
 #[test]
+fn turboquant_temporary_limit_adapts_batches_before_encoding() {
+    let dimensions = 128usize;
+    let config = TurboQuantizationConfig {
+        bit_width: 4,
+        rerank_multiplier: 8,
+        seed: 43,
+    };
+    let single_store = Arc::new(MemStore::new());
+    let single_map = ProximityMap::build(
+        single_store,
+        ProximityConfig::new(dimensions as u32),
+        records(1, dimensions),
+    )
+    .unwrap();
+    let (_, single_stats) =
+        TurboQuantizer::build(&single_map, config.clone(), BuildParallelism::serial()).unwrap();
+    let temporary_limit = single_stats.peak_temporary_bytes;
+
+    let source = records(33, dimensions);
+    let sync_store = Arc::new(MemStore::new());
+    let sync_map = ProximityMap::build(
+        sync_store,
+        ProximityConfig::new(dimensions as u32),
+        source.clone(),
+    )
+    .unwrap();
+    let (oracle, mut expected_stats) =
+        TurboQuantizer::build(&sync_map, config.clone(), BuildParallelism::serial()).unwrap();
+    assert!(expected_stats.peak_temporary_bytes > temporary_limit);
+    expected_stats.peak_temporary_bytes = temporary_limit;
+    let limits = TurboQuantizationBuildLimits {
+        max_temporary_bytes: Some(temporary_limit),
+        ..Default::default()
+    };
+    let (bounded, bounded_stats) = TurboQuantizer::build_with_limits(
+        &sync_map,
+        config.clone(),
+        BuildParallelism::serial(),
+        limits.clone(),
+    )
+    .unwrap();
+    assert_eq!(bounded.manifest_cid(), oracle.manifest_cid());
+    assert_eq!(bounded_stats, expected_stats);
+
+    #[cfg(feature = "async-store")]
+    {
+        use prolly::{AsyncProximityMap, AsyncTurboQuantizer, SyncStoreAsAsync};
+        use std::future::Future;
+        use std::task::{Context, Poll};
+
+        fn block_on<F: Future>(future: F) -> F::Output {
+            let waker = futures_util::task::noop_waker();
+            let mut context = Context::from_waker(&waker);
+            let mut future = Box::pin(future);
+            loop {
+                match future.as_mut().poll(&mut context) {
+                    Poll::Ready(value) => return value,
+                    Poll::Pending => std::thread::yield_now(),
+                }
+            }
+        }
+
+        let async_store = Arc::new(MemStore::new());
+        block_on(async {
+            let async_map = AsyncProximityMap::build(
+                SyncStoreAsAsync::new(async_store),
+                ProximityConfig::new(dimensions as u32),
+                source,
+            )
+            .await
+            .unwrap();
+            let (async_bounded, async_stats) = AsyncTurboQuantizer::build_with_limits(
+                &async_map,
+                config,
+                BuildParallelism::serial(),
+                limits,
+                2,
+                &ContentGraphLimits::default(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(async_bounded.manifest_cid(), oracle.manifest_cid());
+            assert_eq!(async_stats, expected_stats);
+        });
+    }
+}
+
+#[test]
 fn turboquant_all_supported_codes_and_representative_dimensions_rerank_exactly() {
     for dimensions in [8usize, 24, 200] {
         for bit_width in [2, 3, 4] {
