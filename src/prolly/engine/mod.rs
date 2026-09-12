@@ -337,15 +337,19 @@ where
 
         operation.record_cache_miss();
         self.metrics.add_cache_misses(1);
-        let bytes = self
+        let read = self
             .store
-            .get_shared(cid.as_bytes())
+            .get_validated_shared(cid.as_bytes())
             .await
             .map_err(|error| Error::Store(Box::new(error)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
-        operation.record_read(bytes.len());
-        self.metrics.record_point_read(bytes.len());
-        let node = Arc::new(validation::decode_read(cid, &tree.config.format, bytes)?);
+        operation.record_read(read.bytes().len());
+        self.metrics.record_point_read(read.bytes().len());
+        let node = Arc::new(validation::decode_validated_read(
+            cid,
+            &tree.config.format,
+            read,
+        )?);
         if let Ok(mut cache) = self.node_cache.write() {
             let evictions = cache.insert_read(cid.clone(), node.clone());
             self.metrics.add_cache_evictions(evictions);
@@ -385,7 +389,7 @@ where
                 .collect::<Vec<_>>();
             let loaded = self
                 .store
-                .batch_get_shared_ordered_unique(&keys)
+                .batch_get_validated_shared_ordered_unique(&keys)
                 .await
                 .map_err(|error| Error::Store(Box::new(error)))?;
             let key_count = keys.len();
@@ -394,13 +398,17 @@ where
                 return Err(Error::InvalidNode);
             }
             let mut decoded = Vec::with_capacity(loaded.len());
-            for (cid, bytes) in missing_cids.into_iter().zip(loaded) {
-                let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
-                let bytes_len = bytes.len();
+            for (cid, read) in missing_cids.into_iter().zip(loaded) {
+                let read = read.ok_or_else(|| Error::NotFound(cid.clone()))?;
+                let bytes_len = read.bytes().len();
                 operation.record_read(bytes_len);
                 decoded.push((
                     cid.clone(),
-                    Arc::new(validation::decode_read(&cid, &tree.config.format, bytes)?),
+                    Arc::new(validation::decode_validated_read(
+                        &cid,
+                        &tree.config.format,
+                        read,
+                    )?),
                     bytes_len,
                 ));
             }
@@ -507,14 +515,18 @@ where
         }
 
         self.metrics.add_cache_misses(1);
-        let bytes = self
+        let read = self
             .store
             .inner()
-            .get_shared(cid.as_bytes())
+            .get_validated_shared(cid.as_bytes())
             .map_err(|error| Error::Store(Box::new(error)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
-        self.metrics.record_point_read(bytes.len());
-        let node = Arc::new(validation::decode_read(cid, &self.config.format, bytes)?);
+        self.metrics.record_point_read(read.bytes().len());
+        let node = Arc::new(validation::decode_validated_read(
+            cid,
+            &self.config.format,
+            read,
+        )?);
         if admit {
             if let Ok(mut cache) = self.node_cache.write() {
                 let evictions = cache.insert_read(cid.clone(), node.clone());

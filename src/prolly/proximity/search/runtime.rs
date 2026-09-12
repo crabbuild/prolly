@@ -14,7 +14,9 @@ use crate::prolly::proximity::storage::quantized::ScalarQuantized;
 use crate::prolly::proximity::storage::vector::ExternalVector;
 use crate::prolly::proximity::storage::{Descriptor, ProximityNode};
 use crate::prolly::store::{AsyncStore, SyncStoreAsAsync};
-use crate::prolly::store::{BatchOp, NodePublication, Store};
+use crate::prolly::store::{
+    BatchOp, NodePublication, Store, ValidatedSharedRead, ValidatedSharedReadBatch,
+};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
@@ -196,6 +198,23 @@ impl<S: Store + Clone> Store for SearchIo<S> {
         }
     }
 
+    fn get_validated_shared(&self, key: &[u8]) -> Result<Option<ValidatedSharedRead>, Self::Error> {
+        let Ok(cid) = <[u8; 32]>::try_from(key).map(Cid) else {
+            return self.store.get_validated_shared(key);
+        };
+        match self.runtime.load(self, self.kind, &cid, 2, |bytes| {
+            validate_cached_object(bytes, self.dimensions)
+        }) {
+            Ok(loaded) => Ok(Some(ValidatedSharedRead::cid_verified(loaded.bytes))),
+            Err(Error::NotFound(_)) => Ok(None),
+            Err(Error::Store(error)) => match error.downcast::<S::Error>() {
+                Ok(error) => Err(*error),
+                Err(_) => self.store.get_validated_shared(key),
+            },
+            Err(_) => self.store.get_validated_shared(key),
+        }
+    }
+
     fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
         self.store.put(key, value)
     }
@@ -254,6 +273,30 @@ impl<S: Store + Clone> Store for SearchIo<S> {
                 Err(_) => self.store.batch_get_shared_ordered_unique(keys),
             },
             Err(_) => self.store.batch_get_shared_ordered_unique(keys),
+        }
+    }
+
+    fn batch_get_validated_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<ValidatedSharedReadBatch, Self::Error> {
+        let cids = keys
+            .iter()
+            .map(|key| <[u8; 32]>::try_from(*key).map(Cid))
+            .collect::<Result<Vec<_>, _>>();
+        let Ok(cids) = cids else {
+            return self.store.batch_get_validated_shared_ordered_unique(keys);
+        };
+        match self.runtime.load_batch(self, &cids, self.kind, 2) {
+            Ok(values) => Ok(values
+                .into_iter()
+                .map(|value| value.map(ValidatedSharedRead::cid_verified))
+                .collect()),
+            Err(Error::Store(error)) => match error.downcast::<S::Error>() {
+                Ok(error) => Err(*error),
+                Err(_) => self.store.batch_get_validated_shared_ordered_unique(keys),
+            },
+            Err(_) => self.store.batch_get_validated_shared_ordered_unique(keys),
         }
     }
 
@@ -333,6 +376,30 @@ where
         }
     }
 
+    async fn get_validated_shared(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<ValidatedSharedRead>, Self::Error> {
+        let Ok(cid) = <[u8; 32]>::try_from(key).map(Cid) else {
+            return self.store.get_validated_shared(key).await;
+        };
+        match self
+            .runtime
+            .load_async(self, self.kind, &cid, 2, |bytes| {
+                validate_cached_object(bytes, self.dimensions)
+            })
+            .await
+        {
+            Ok(loaded) => Ok(Some(ValidatedSharedRead::cid_verified(loaded.bytes))),
+            Err(Error::NotFound(_)) => Ok(None),
+            Err(Error::Store(error)) => match error.downcast::<S::Error>() {
+                Ok(error) => Err(*error),
+                Err(_) => self.store.get_validated_shared(key).await,
+            },
+            Err(_) => self.store.get_validated_shared(key).await,
+        }
+    }
+
     async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
         self.store.put(key, value).await
     }
@@ -399,6 +466,45 @@ where
                 Err(_) => self.store.batch_get_shared_ordered_unique(keys).await,
             },
             Err(_) => self.store.batch_get_shared_ordered_unique(keys).await,
+        }
+    }
+
+    async fn batch_get_validated_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<ValidatedSharedReadBatch, Self::Error> {
+        let cids = keys
+            .iter()
+            .map(|key| <[u8; 32]>::try_from(*key).map(Cid))
+            .collect::<Result<Vec<_>, _>>();
+        let Ok(cids) = cids else {
+            return self
+                .store
+                .batch_get_validated_shared_ordered_unique(keys)
+                .await;
+        };
+        match self
+            .runtime
+            .load_batch_async(self, &cids, self.kind, 2)
+            .await
+        {
+            Ok(values) => Ok(values
+                .into_iter()
+                .map(|value| value.map(ValidatedSharedRead::cid_verified))
+                .collect()),
+            Err(Error::Store(error)) => match error.downcast::<S::Error>() {
+                Ok(error) => Err(*error),
+                Err(_) => {
+                    self.store
+                        .batch_get_validated_shared_ordered_unique(keys)
+                        .await
+                }
+            },
+            Err(_) => {
+                self.store
+                    .batch_get_validated_shared_ordered_unique(keys)
+                    .await
+            }
         }
     }
 
@@ -1253,6 +1359,9 @@ fn validate_cached_object(bytes: &[u8], dimensions: Option<u32>) -> Result<(), E
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::prolly::engine::validation::decode_validated_read;
+    use crate::prolly::format::TreeFormat;
+    use crate::prolly::store::MemStore;
 
     fn key(label: &[u8], kind: ContentObjectKind) -> CacheKey {
         CacheKey {
@@ -1324,5 +1433,43 @@ mod tests {
         assert!(state.transform_plans.is_empty());
         assert_eq!(state.turboquant_bytes, 0);
         assert_eq!(state.bytes, 0);
+    }
+
+    #[test]
+    fn search_io_marks_only_runtime_verified_bytes_as_cid_verified() {
+        let bytes = Node::new_leaf().to_bytes();
+        let cid = Cid::from_bytes(&bytes);
+        let store = Arc::new(MemStore::new());
+        store.put(cid.as_bytes(), &bytes).unwrap();
+        let io = SearchIo::new(store, Arc::new(SearchRuntime::default()));
+
+        let read = Store::get_validated_shared(&io, cid.as_bytes())
+            .unwrap()
+            .unwrap();
+        let (loaded, cid_verified) = read.into_parts();
+        assert!(cid_verified);
+        assert_eq!(loaded.as_ref(), bytes);
+    }
+
+    #[test]
+    fn corrupt_runtime_fallback_remains_unverified_and_fails_closed() {
+        let valid = Node::new_leaf().to_bytes();
+        let cid = Cid::from_bytes(&valid);
+        let corrupt = Node::builder()
+            .keys(vec![b"different".to_vec()])
+            .vals(vec![b"value".to_vec()])
+            .build()
+            .to_bytes();
+        let store = Arc::new(MemStore::new());
+        store.put(cid.as_bytes(), &corrupt).unwrap();
+        let io = SearchIo::new(store, Arc::new(SearchRuntime::default()));
+
+        let read = Store::get_validated_shared(&io, cid.as_bytes())
+            .unwrap()
+            .unwrap();
+        assert!(matches!(
+            decode_validated_read(&cid, &TreeFormat::default(), read),
+            Err(Error::CidMismatch { .. })
+        ));
     }
 }

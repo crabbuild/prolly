@@ -4,6 +4,7 @@ use crate::prolly::cid::Cid;
 use crate::prolly::error::Error;
 use crate::prolly::format::TreeFormat;
 use crate::prolly::node::{Node, ReadNode};
+use crate::prolly::store::ValidatedSharedRead;
 
 /// Reject bytes that are not the content addressed by `expected`.
 pub(crate) fn validate_cid(expected: &Cid, bytes: &[u8]) -> Result<(), Error> {
@@ -40,6 +41,27 @@ pub(crate) fn decode_read(
     bytes: Arc<[u8]>,
 ) -> Result<ReadNode, Error> {
     validate_cid(expected_cid, &bytes)?;
+    decode_cid_verified_read(expected_format, bytes)
+}
+
+/// Decode retained bytes while honoring a CID check already performed by a
+/// crate-owned store adapter for this exact read.
+pub(crate) fn decode_validated_read(
+    expected_cid: &Cid,
+    expected_format: &TreeFormat,
+    read: ValidatedSharedRead,
+) -> Result<ReadNode, Error> {
+    let (bytes, cid_verified) = read.into_parts();
+    if !cid_verified {
+        validate_cid(expected_cid, &bytes)?;
+    }
+    decode_cid_verified_read(expected_format, bytes)
+}
+
+fn decode_cid_verified_read(
+    expected_format: &TreeFormat,
+    bytes: Arc<[u8]>,
+) -> Result<ReadNode, Error> {
     let node = ReadNode::from_shared(bytes).map_err(|error| match error {
         Error::Deserialize(_) => Error::InvalidNode,
         other => other,
