@@ -174,6 +174,11 @@ class TurboQuantQualificationTests(unittest.TestCase):
             with self.assertRaises(qualification.QualificationError):
                 qualification.wasm_smoke_is_valid(output, revision)
 
+    def test_tap_summary_accepts_node_spec_and_dot_reporters(self):
+        self.assertTrue(qualification._tap_summary_is_zero("# fail 0\n", "fail"))
+        self.assertTrue(qualification._tap_summary_is_zero("ℹ skipped 0\n", "skipped"))
+        self.assertFalse(qualification._tap_summary_is_zero("ℹ fail 1\n", "fail"))
+
 
 if __name__ == "__main__":
     unittest.main()

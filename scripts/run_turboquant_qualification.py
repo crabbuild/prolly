@@ -500,11 +500,15 @@ def wasm_smoke_is_valid(output: Path, revision: str) -> bool:
         raise QualificationError("WASM resume revision mismatch")
     if state.get("test_sha256") != hashlib.sha256(test_log.encode()).hexdigest():
         raise QualificationError("WASM resume test digest mismatch")
-    if not re.search(r"# fail\s+0(?:\s|$)", test_log) or not re.search(
-        r"# skipped\s+0(?:\s|$)", test_log
+    if not _tap_summary_is_zero(test_log, "fail") or not _tap_summary_is_zero(
+        test_log, "skipped"
     ):
         raise QualificationError("WASM resume test log is not an unskipped passing suite")
     return True
+
+
+def _tap_summary_is_zero(output: str, field: str) -> bool:
+    return re.search(rf"^(?:#|ℹ)\s*{re.escape(field)}\s+0\s*$", output, re.MULTILINE) is not None
 
 
 def run_wasm_smoke(repo: Path, output: Path, revision: str) -> None:
@@ -524,8 +528,8 @@ def run_wasm_smoke(repo: Path, output: Path, revision: str) -> None:
         if result.returncode != 0:
             raise QualificationError(f"WASM smoke failed in {' '.join(command)}; see {logs / name}")
     test_log = results[1][1]
-    if not re.search(r"# fail\s+0(?:\s|$)", test_log) or not re.search(
-        r"# skipped\s+0(?:\s|$)", test_log
+    if not _tap_summary_is_zero(test_log, "fail") or not _tap_summary_is_zero(
+        test_log, "skipped"
     ):
         raise QualificationError("WASM smoke did not report an unskipped passing suite")
     for expected in (
