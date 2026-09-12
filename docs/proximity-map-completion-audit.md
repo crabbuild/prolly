@@ -84,12 +84,13 @@ and test smoke gate. `scripts/summarize_turboquant_qualification.py` accepts
 only the complete, disjoint shard set and emits consolidated rows plus separate
 forced-backend and `Auto` gate results.
 
-The first six corrected schema-v3 cells are retained in
+The first ten corrected schema-v3 cells are retained in
 [`proximity-turboquant-v3-qualification.md`](proximity-turboquant-v3-qualification.md).
 They cover 10K and 100K × 768 at the default four-bit, 8× setting for all
-three metrics. Squared-L2 recall is 1.00 after correcting reconstructed-vector
-norm scoring; cosine and inner-product recall remain 0.00. This partial
-evidence leaves 45,354 matrix cells and all final release gates open.
+three metrics, plus matching 16× cosine and inner-product diagnostics.
+Squared-L2 recall is 1.00 after correcting reconstructed-vector norm scoring;
+the product-oriented rows still fail the recall floor at 16×. This partial
+evidence leaves 45,350 matrix cells and all final release gates open.
 
 Smoke command:
 

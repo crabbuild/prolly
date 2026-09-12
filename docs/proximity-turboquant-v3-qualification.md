@@ -1,15 +1,18 @@
 # TurboQuant Schema-v3 Partial Qualification Evidence
 
-This report retains six real cells from the corrected TurboQuant production
+This report retains ten real cells from the corrected TurboQuant production
 matrix: the default four-bit, 8× rerank path at 10K and 100K records, 768
-dimensions, and every supported metric. These cells use the unique,
+dimensions, and every supported metric, plus matching 16× cosine and
+inner-product diagnostics. These cells use the unique,
 architecture-stable schema-v3 dataset. They are partial evidence, not a
 complete production qualification, and they keep `Auto` selection disabled.
 
 ## Environment and contract
 
 - Date: 2026-09-12
-- Revision: `43a6c55564df2750e77298542a490dec9baa6ff9`
+- Revisions: default 8× cells at
+  `43a6c55564df2750e77298542a490dec9baa6ff9`; 16× diagnostics at
+  `8966204c11d3bf73173ea2f1354002344582d5b2`
 - Qualification schema: `prolly-turboquant-qualification-v3`
 - Benchmark schema: 3
 - Dataset: `linear-mod-2000003-v2`
@@ -23,7 +26,7 @@ complete production qualification, and they keep `Auto` selection disabled.
 - Build workers: 1, 2, and 4
 - Search samples: 30 per implementation
 
-The six retained directories contain the immutable manifest, raw CSV, stderr
+The ten retained directories contain the immutable manifest, raw CSV, stderr
 log, completion state, and content digest for one stable full-matrix shard.
 An exact `--resume` invocation revalidated every directory without rerunning
 its benchmark.
@@ -57,6 +60,22 @@ The TurboQuant sidecar is 3,975,264 bytes at 10K and 39,757,465 bytes at
 working set exceeds the default 32 MiB TurboQuant runtime-cache partition, so
 physical reads after warmup are valid bounded-cache behavior.
 
+## Rerank-window diagnostic
+
+Doubling the approved rerank multiplier from 8× to 16× does not provide a
+general quality correction:
+
+| Records | Metric | TQ recall, 8× → 16× | PQ recall, 8× → 16× | TQ/PQ 16× p95 |
+| ---: | --- | ---: | ---: | ---: |
+| 10K | Cosine | 0.00 → 0.00 | 0.50 → 0.50 | 3.88× |
+| 10K | Inner product | 0.00 → 0.00 | 0.00 → 1.00 | 7.43× |
+| 100K | Cosine | 0.00 → 0.50 | 0.00 → 0.00 | 11.44× |
+| 100K | Inner product | 0.00 → 0.00 | 0.00 → 0.00 | 10.61× |
+
+The approved 160-candidate window still fails every TurboQuant recall floor
+in this diagnostic and increases rerank work. This rules out changing the
+frozen default from 8× to 16× as a sufficient cosine/inner-product remedy.
+
 ## Build results
 
 | Records | Metric | TQ/PQ build time, 1 worker | 2 workers | 4 workers |
@@ -83,7 +102,7 @@ These development-host observations do not replace the required pinned-host
   while cosine and inner product fail both recall and latency requirements.
 - Both sampled scales fail the comparative-size gate; the TurboQuant sidecar
   is larger than PQ rather than at least 25% smaller.
-- Six of 45,360 schema-v3 matrix cells are retained. The other 45,354 cells,
+- Ten of 45,360 schema-v3 matrix cells are retained. The other 45,350 cells,
   complete-shard summarization, pinned production-host rerun, global binding
   inventory, and legal/patent disposition remain open.
 
