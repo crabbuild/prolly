@@ -33,6 +33,11 @@ log, completion state, and content digest for one stable full-matrix shard.
 An exact `--resume` invocation revalidated every directory without rerunning
 its benchmark.
 
+These cells span scorer revisions as correctness defects were found and fixed.
+They characterize ten matrix configurations, but they are not a combinable
+qualification shard set: the strict summarizer rejects mixed revisions. The
+complete production matrix must be rerun from one final frozen revision.
+
 ## Recall and search results
 
 | Records | Metric | TQ recall@10 | PQ recall@10 | TQ median | PQ median | TQ warm p95 | PQ warm p95 |
@@ -116,9 +121,10 @@ These development-host observations do not replace the required pinned-host
   while cosine and inner product fail both recall and latency requirements.
 - Both sampled scales fail the comparative-size gate; the TurboQuant sidecar
   is larger than PQ rather than at least 25% smaller.
-- Ten of 45,360 schema-v3 matrix cells are retained. The other 45,350 cells,
-  complete-shard summarization, pinned production-host rerun, global binding
-  inventory, and legal/patent disposition remain open.
+- Ten schema-v3 matrix configurations are characterized across development
+  revisions. All 45,360 cells still require same-revision execution before
+  complete-shard summarization; the pinned production-host rerun, global
+  binding inventory, and legal/patent disposition also remain open.
 
 TurboQuant therefore remains available only through explicit backend
 selection. `Auto` and a forced-backend GA claim remain closed.

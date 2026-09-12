@@ -384,4 +384,6 @@ reconstruction-norm work into one packed-code pass reduces the retained
 TurboQuant median by
 44.52% at 10K and 41.63% at 100K with bit-identical scores and unchanged
 logical counters. These failures keep `Auto` and forced-backend GA closed;
-45,350 schema-v3 cells and the other release gates remain open.
+the ten characterized configurations span development revisions, so all
+45,360 schema-v3 cells still require one final frozen-revision run. The other
+release gates remain open.

@@ -91,7 +91,9 @@ three metrics, plus matching 16× cosine and inner-product diagnostics.
 Squared-L2 recall is 1.00 after correcting reconstructed-vector norm scoring.
 Correct cosine reconstruction normalization raises 10K recall to 0.40 but
 still fails the floor, as do the 16× product-oriented rows. This partial
-evidence leaves 45,350 matrix cells and all final release gates open.
+evidence spans development revisions and cannot be combined by the strict
+summarizer. All 45,360 cells still require a single frozen-revision run, and
+all final release gates remain open.
 
 Smoke command:
 
