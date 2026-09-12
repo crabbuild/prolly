@@ -127,6 +127,7 @@ bad ordering/counts/references, unsupported encodings, and trailing bytes.
 | `PRXV` | external vector | current vector encoding and components |
 | `PQS8` | local scalar quantizer | dimensions/grouping/count, scales, signed codes, maximum error |
 | `PQPQ` | product-quantization manifest | source PRXI, metric/config, code-tree root, codebooks, quality |
+| `TQTQ` | TurboQuant-MSE manifest | source PRXI, dimension/metric/count, bit width/rerank/seed, frozen transform and codebook IDs, code-tree root, routing reconstruction quality, zero-vector count, configuration fingerprint |
 | `HNSW` | HNSW manifest | source PRXI, metric/config/fingerprint, graph root, entry point, level, canonical flag |
 | `HNSN` | HNSW graph value | level and key-sorted neighbors by layer |
 | `CRMF` | typed content-root manifest | typed CID, optional PRXN dimensions, logical version/time, sorted metadata |
@@ -137,8 +138,15 @@ CIDs use explicit tags. The descriptor commits Euclidean-radius rounding and
 metric normalization policies, preventing a reader from interpreting bounds
 under different math.
 
-Search policies, budgets, async settings, query kernels, and caches are runtime
-only. PQ and HNSW have independent manifests because they are rebuildable
-source-bound accelerators. Frozen exact bytes and CIDs are maintained in
-`conformance/proximity-fixtures.json`; legacy canonical fixtures are
-test-only rejection inputs.
+TurboQuant code-tree values contain one canonical finite nonnegative `f64-le`
+norm followed by exactly `ceil(dimensions * bit_width / 8)` bytes of packed
+little-endian centroid indices. Supported dimensions are divisible by eight,
+so persisted production codes have no unused tail bits; the decoder still
+rejects nonzero padding in bounded codec tests. A zero norm requires positive
+zero and all-zero codes.
+
+Search policies, budgets, async settings, query kernels, transform-plan caches,
+and worker counts are runtime only. PQ, TurboQuant, and HNSW have independent
+manifests because they are rebuildable source-bound accelerators. Frozen exact
+bytes and CIDs are maintained in `conformance/proximity-fixtures.json`; legacy
+canonical fixtures are test-only rejection inputs.

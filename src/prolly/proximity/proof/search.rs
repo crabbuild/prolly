@@ -147,7 +147,7 @@ pub enum ProximitySearchEvent {
     Completed(SearchCompletion),
 }
 
-/// Self-contained proof for native, PQ, or HNSW search replay.
+/// Self-contained proof for native, PQ, TurboQuant, HNSW, or composite search replay.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ProximitySearchProof {
     pub format_version: u8,

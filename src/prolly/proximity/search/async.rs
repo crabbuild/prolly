@@ -92,8 +92,9 @@ where
         Ok(result)
     }
 
-    /// Plan and execute native, eligible-exact, PQ, or HNSW search through an
-    /// async-only store using the same logical planner as synchronous search.
+    /// Plan and execute native, eligible-exact, PQ, TurboQuant, HNSW, or
+    /// composite search through an async-only store using the same logical
+    /// planner as synchronous search.
     pub async fn search_with_accelerators(
         &self,
         accelerators: &AsyncAcceleratorSet,
