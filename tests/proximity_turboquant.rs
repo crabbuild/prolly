@@ -56,6 +56,72 @@ impl prolly::AsyncStore for PublicationBoundAsyncStore {
     }
 }
 
+#[cfg(feature = "async-store")]
+#[derive(Clone)]
+struct CancellingReadAsyncStore {
+    inner: Arc<MemStore>,
+    reads: Arc<AtomicUsize>,
+    cancel_after: Arc<AtomicUsize>,
+    cancellation: prolly::CancellationToken,
+}
+
+#[cfg(feature = "async-store")]
+impl CancellingReadAsyncStore {
+    fn new(inner: Arc<MemStore>, cancellation: prolly::CancellationToken) -> Self {
+        Self {
+            inner,
+            reads: Arc::new(AtomicUsize::new(0)),
+            cancel_after: Arc::new(AtomicUsize::new(usize::MAX)),
+            cancellation,
+        }
+    }
+
+    fn arm(&self, read: usize) {
+        assert!(read > 0);
+        self.reads.store(0, Ordering::SeqCst);
+        self.cancel_after.store(read, Ordering::SeqCst);
+    }
+
+    fn reset_reads(&self) {
+        self.reads.store(0, Ordering::SeqCst);
+        self.cancel_after.store(usize::MAX, Ordering::SeqCst);
+    }
+
+    fn reads(&self) -> usize {
+        self.reads.load(Ordering::SeqCst)
+    }
+
+    fn after_read(&self) {
+        let read = self.reads.fetch_add(1, Ordering::SeqCst) + 1;
+        if read == self.cancel_after.load(Ordering::SeqCst) {
+            self.cancellation.cancel();
+        }
+    }
+}
+
+#[cfg(feature = "async-store")]
+impl prolly::AsyncStore for CancellingReadAsyncStore {
+    type Error = prolly::MemStoreError;
+
+    async fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Self::Error> {
+        let result = Store::get(&self.inner, key);
+        self.after_read();
+        result
+    }
+
+    async fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Self::Error> {
+        Store::put(&self.inner, key, value)
+    }
+
+    async fn delete(&self, key: &[u8]) -> Result<(), Self::Error> {
+        Store::delete(&self.inner, key)
+    }
+
+    async fn batch(&self, ops: &[BatchOp<'_>]) -> Result<(), Self::Error> {
+        Store::batch(&self.inner, ops)
+    }
+}
+
 const NO_FAULT: usize = usize::MAX;
 
 #[derive(Default)]
@@ -1484,6 +1550,151 @@ fn turboquant_async_build_load_search_verify_and_cancel_match_sync() {
         assert_eq!(cancelled.completion, SearchCompletion::Cancelled);
         assert!(cancelled.neighbors.is_empty());
     });
+}
+
+#[cfg(feature = "async-store")]
+#[test]
+fn turboquant_async_cancellation_covers_every_store_read_boundary() {
+    use prolly::{
+        AsyncProximityMap, AsyncSearchControl, AsyncTurboQuantizer, CancellationToken,
+        SearchCompletion,
+    };
+    use std::future::Future;
+    use std::task::{Context, Poll};
+
+    fn block_on<F: Future>(future: F) -> F::Output {
+        let waker = futures_util::task::noop_waker();
+        let mut context = Context::from_waker(&waker);
+        let mut future = Box::pin(future);
+        loop {
+            match future.as_mut().poll(&mut context) {
+                Poll::Ready(value) => return value,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    let backing = Arc::new(MemStore::new());
+    let source = ProximityMap::build(
+        backing.clone(),
+        ProximityConfig::new(128),
+        records(129, 128),
+    )
+    .unwrap();
+    let (index, _) = TurboQuantizer::build(
+        &source,
+        TurboQuantizationConfig {
+            rerank_multiplier: 256,
+            ..TurboQuantizationConfig::default()
+        },
+        BuildParallelism::serial(),
+    )
+    .unwrap();
+    let descriptor = source.tree().descriptor.clone();
+    let manifest = index.manifest_cid().clone();
+    let query: Vec<_> = (0..128).map(|index| index as f32 / 29.0 - 1.0).collect();
+    let eligible: Vec<Vec<u8>> = (0..13)
+        .map(|record| format!("vector-{record:04}").into_bytes())
+        .collect();
+
+    for direct_lookup in [false, true] {
+        let make_request = || {
+            let mut request = forced_turboquant_request(&query, 13);
+            if direct_lookup {
+                request.filter = ProximityFilter::EligibleKeys(&eligible);
+            }
+            request
+        };
+        let baseline_reads = block_on(async {
+            let cancellation = CancellationToken::default();
+            let store = CancellingReadAsyncStore::new(backing.clone(), cancellation.clone());
+            let map = AsyncProximityMap::load(store.clone(), descriptor.clone())
+                .await
+                .unwrap();
+            let index = AsyncTurboQuantizer::load(&store, manifest.clone())
+                .await
+                .unwrap();
+            store.reset_reads();
+            let result = index
+                .search(
+                    &map,
+                    make_request(),
+                    AsyncSearchControl {
+                        cancellation: Some(cancellation),
+                        ..AsyncSearchControl::default()
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                result.completion,
+                SearchCompletion::ApproximatePolicySatisfied
+            );
+            assert_eq!(result.plan.direct_lookup, direct_lookup);
+            store.reads()
+        });
+        assert!(baseline_reads > 0);
+
+        for cancel_after in 1..=baseline_reads {
+            block_on(async {
+                let cancellation = CancellationToken::default();
+                let store = CancellingReadAsyncStore::new(backing.clone(), cancellation.clone());
+                let map = AsyncProximityMap::load(store.clone(), descriptor.clone())
+                    .await
+                    .unwrap();
+                let index = AsyncTurboQuantizer::load(&store, manifest.clone())
+                    .await
+                    .unwrap();
+                store.arm(cancel_after);
+                let result = index
+                    .search(
+                        &map,
+                        make_request(),
+                        AsyncSearchControl {
+                            cancellation: Some(cancellation),
+                            ..AsyncSearchControl::default()
+                        },
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    result.completion,
+                    SearchCompletion::Cancelled,
+                    "direct_lookup={direct_lookup}: cancellation after physical read {cancel_after} of \
+                     {baseline_reads} was missed"
+                );
+                assert!(result.neighbors.is_empty());
+                assert!(store.reads() <= baseline_reads);
+            });
+        }
+
+        block_on(async {
+            let cancellation = CancellationToken::default();
+            cancellation.cancel();
+            let store = CancellingReadAsyncStore::new(backing.clone(), cancellation.clone());
+            let map = AsyncProximityMap::load(store.clone(), descriptor.clone())
+                .await
+                .unwrap();
+            let index = AsyncTurboQuantizer::load(&store, manifest.clone())
+                .await
+                .unwrap();
+            store.reset_reads();
+            let result = index
+                .search(
+                    &map,
+                    make_request(),
+                    AsyncSearchControl {
+                        cancellation: Some(cancellation),
+                        ..AsyncSearchControl::default()
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(result.completion, SearchCompletion::Cancelled);
+            assert!(result.neighbors.is_empty());
+            assert_eq!(store.reads(), 0, "pre-cancelled search performed I/O");
+        });
+    }
 }
 
 #[cfg(feature = "async-store")]

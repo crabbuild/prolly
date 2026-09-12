@@ -358,6 +358,20 @@ where
     S: AsyncStore + Clone,
     S::Error: Send + Sync,
 {
+    pub(crate) fn bind_search_runtime(
+        &self,
+        runtime: Arc<super::SearchRuntime>,
+    ) -> AsyncProximityMap<super::SearchIo<S>> {
+        let store = super::SearchIo::new(self.store.clone(), runtime)
+            .with_proximity_dimensions(self.tree.config.dimensions);
+        let directory = AsyncProlly::new(store.clone(), self.tree.directory.config.clone());
+        AsyncProximityMap {
+            store,
+            directory,
+            tree: self.tree.clone(),
+        }
+    }
+
     pub async fn load(store: S, descriptor_cid: Cid) -> Result<Self, Error> {
         let descriptor_bytes = load_content(&store, &descriptor_cid).await?;
         let descriptor = Descriptor::decode(&descriptor_bytes)?;
@@ -998,6 +1012,31 @@ impl Ord for AsyncRanked {
     }
 }
 
+struct AsyncReranked(RerankCandidate);
+
+impl PartialEq for AsyncReranked {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.distance.to_bits() == other.0.distance.to_bits() && self.0.key() == other.0.key()
+    }
+}
+
+impl Eq for AsyncReranked {}
+
+impl PartialOrd for AsyncReranked {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AsyncReranked {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0
+            .distance
+            .total_cmp(&other.0.distance)
+            .then_with(|| self.0.key().cmp(other.0.key()))
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn search_turboquant_async<S>(
     store: &super::SearchIo<S>,
@@ -1042,6 +1081,14 @@ where
         index.config.bit_width,
         request.kernel,
     )?;
+    if let Some(completion) = stop_reason(control) {
+        return Ok(SearchResult {
+            neighbors: Vec::new(),
+            stats: ProximitySearchStats::default(),
+            completion,
+            plan: plan.summary(),
+        });
+    }
     let code_store =
         store.for_kind(crate::prolly::content_graph::ContentObjectKind::TurboQuantization);
     let codes = AsyncProlly::new(code_store, index.code_tree.config.clone());
@@ -1063,7 +1110,12 @@ where
                 completion = stopped;
                 break;
             }
-            let Some(code) = codes.get(&index.code_tree, key).await? else {
+            let code = codes.get(&index.code_tree, key).await?;
+            if let Some(stopped) = stop_reason(control) {
+                completion = stopped;
+                break;
+            }
+            let Some(code) = code else {
                 if source_bound {
                     return Err(Error::InvalidProximityObject {
                         kind: "TurboQuant",
@@ -1096,12 +1148,26 @@ where
         }
     } else {
         let mut range = codes.range(&index.code_tree, &[], None).await?;
+        if let Some(stopped) = stop_reason(control) {
+            completion = stopped;
+        }
         loop {
+            if matches!(
+                completion,
+                SearchCompletion::Cancelled | SearchCompletion::DeadlineExceeded
+            ) {
+                break;
+            }
             if let Some(stopped) = stop_reason(control) {
                 completion = stopped;
                 break;
             }
-            let Some(entry) = range.next().await else {
+            let entry = range.next().await;
+            if let Some(stopped) = stop_reason(control) {
+                completion = stopped;
+                break;
+            }
+            let Some(entry) = entry else {
                 break;
             };
             let (key, code) = entry?;
@@ -1179,8 +1245,24 @@ where
     else {
         return Err(invalid_search("PQ executor requires a PQ plan"));
     };
+    if let Some(completion) = stop_reason(control) {
+        return Ok(SearchResult {
+            neighbors: Vec::new(),
+            stats: ProximitySearchStats::default(),
+            completion,
+            plan: plan.summary(),
+        });
+    }
     let query = prepare_vector(index.metric, request.query, index.dimensions)?;
     let lookup = build_lookup(&query, index.metric, &index.codebooks);
+    if let Some(completion) = stop_reason(control) {
+        return Ok(SearchResult {
+            neighbors: Vec::new(),
+            stats: ProximitySearchStats::default(),
+            completion,
+            plan: plan.summary(),
+        });
+    }
     let code_store =
         store.for_kind(crate::prolly::content_graph::ContentObjectKind::ProductQuantization);
     let codes = AsyncProlly::new(code_store, index.code_tree.config.clone());
@@ -1202,7 +1284,12 @@ where
                 completion = stopped;
                 break;
             }
-            let Some(code) = codes.get(&index.code_tree, key).await? else {
+            let code = codes.get(&index.code_tree, key).await?;
+            if let Some(stopped) = stop_reason(control) {
+                completion = stopped;
+                break;
+            }
+            let Some(code) = code else {
                 if source_bound {
                     return Err(Error::InvalidProximityObject {
                         kind: "product quantizer",
@@ -1229,11 +1316,28 @@ where
         }
     } else {
         let mut range = codes.range(&index.code_tree, &[], None).await?;
-        while let Some(entry) = range.next().await {
+        if let Some(stopped) = stop_reason(control) {
+            completion = stopped;
+        }
+        loop {
+            if matches!(
+                completion,
+                SearchCompletion::Cancelled | SearchCompletion::DeadlineExceeded
+            ) {
+                break;
+            }
             if let Some(stopped) = stop_reason(control) {
                 completion = stopped;
                 break;
             }
+            let entry = range.next().await;
+            if let Some(stopped) = stop_reason(control) {
+                completion = stopped;
+                break;
+            }
+            let Some(entry) = entry else {
+                break;
+            };
             let (key, code) = entry?;
             if excluded.is_some_and(|excluded| excluded.contains(&key)) {
                 continue;
@@ -1297,11 +1401,33 @@ where
     S: AsyncStore + Clone,
     S::Error: Send + Sync,
 {
-    let mut approximate = approximate.into_vec();
-    approximate.sort();
-    let mut reranked = Vec::<RerankCandidate>::with_capacity(approximate.len());
+    if let Some(stopped) = stop_reason(control) {
+        *completion = stopped;
+        return Ok(Vec::new());
+    }
+    let mut approximate_heap = approximate;
+    let mut approximate_descending = Vec::with_capacity(approximate_heap.len());
+    loop {
+        if let Some(stopped) = stop_reason(control) {
+            *completion = stopped;
+            return Ok(Vec::new());
+        }
+        let Some(candidate) = approximate_heap.pop() else {
+            break;
+        };
+        approximate_descending.push(candidate);
+    }
+    let mut reranked = Vec::<RerankCandidate>::with_capacity(approximate_descending.len());
+    if let Some(stopped) = stop_reason(control) {
+        *completion = stopped;
+        return Ok(Vec::new());
+    }
     let mut directory_session = directory.read(&tree.directory).await?;
-    for candidate in approximate {
+    if let Some(stopped) = stop_reason(control) {
+        *completion = stopped;
+        return Ok(Vec::new());
+    }
+    for candidate in approximate_descending.into_iter().rev() {
         if let Some(stopped) = stop_reason(control) {
             *completion = stopped;
             break;
@@ -1310,7 +1436,12 @@ where
             *completion = SearchCompletion::BudgetExhausted;
             break;
         }
-        let Some(handle) = directory_session.get_handle(&candidate.key).await? else {
+        let handle = directory_session.get_handle(&candidate.key).await?;
+        if let Some(stopped) = stop_reason(control) {
+            *completion = stopped;
+            break;
+        }
+        let Some(handle) = handle else {
             return Err(Error::InvalidProximityObject {
                 kind: object_kind,
                 reason: missing_code_message.to_owned(),
@@ -1330,6 +1461,10 @@ where
             tree.config.dimensions,
         )?;
         let distance = record.vector.score(request.kernel, metric, query);
+        if let Some(stopped) = stop_reason(control) {
+            *completion = stopped;
+            break;
+        }
         stats.nodes_read += 1;
         stats.bytes_read += bytes;
         stats.committed_bytes += bytes;
@@ -1338,17 +1473,46 @@ where
     }
     stats.reranked_candidates = reranked.len();
     stats.candidate_handles_peak = reranked.len();
-    stats.candidate_retained_bytes_peak = retained_candidate_bytes(&reranked);
-    reranked.sort_by(|left, right| {
-        left.distance
-            .total_cmp(&right.distance)
-            .then_with(|| left.key().cmp(right.key()))
-    });
-    reranked
-        .into_iter()
-        .take(request.k)
-        .map(|candidate| candidate.into_neighbor(tree.config.dimensions))
-        .collect()
+    let mut retained_backings = HashSet::with_capacity(reranked.len());
+    let mut retained_bytes = 0usize;
+    for candidate in &reranked {
+        if let Some(stopped) = stop_reason(control) {
+            *completion = stopped;
+            return Ok(Vec::new());
+        }
+        if retained_backings.insert(candidate.backing_id()) {
+            retained_bytes = retained_bytes.saturating_add(candidate.retained_bytes());
+        }
+    }
+    stats.candidate_retained_bytes_peak = retained_bytes;
+    let mut reranked_heap = BinaryHeap::with_capacity(reranked.len());
+    for candidate in reranked {
+        if let Some(stopped) = stop_reason(control) {
+            *completion = stopped;
+            return Ok(Vec::new());
+        }
+        reranked_heap.push(AsyncReranked(candidate));
+    }
+    let mut reranked_descending = Vec::with_capacity(reranked_heap.len());
+    loop {
+        if let Some(stopped) = stop_reason(control) {
+            *completion = stopped;
+            return Ok(Vec::new());
+        }
+        let Some(candidate) = reranked_heap.pop() else {
+            break;
+        };
+        reranked_descending.push(candidate.0);
+    }
+    let mut neighbors = Vec::with_capacity(request.k.min(reranked_descending.len()));
+    for candidate in reranked_descending.into_iter().rev().take(request.k) {
+        if let Some(stopped) = stop_reason(control) {
+            *completion = stopped;
+            return Ok(Vec::new());
+        }
+        neighbors.push(candidate.into_neighbor(tree.config.dimensions)?);
+    }
+    Ok(neighbors)
 }
 
 #[allow(clippy::too_many_arguments)]

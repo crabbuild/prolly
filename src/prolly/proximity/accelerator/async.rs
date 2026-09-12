@@ -1191,12 +1191,8 @@ impl AsyncTurboQuantizer {
         S: AsyncStore + Clone,
         S::Error: Send + Sync,
     {
-        let runtime_map = crate::prolly::proximity::AsyncProximityMap::load_with_runtime(
-            map.store_clone(),
-            map.tree().descriptor.clone(),
-            Arc::new(crate::prolly::proximity::SearchRuntime::default()),
-        )
-        .await?;
+        let runtime_map =
+            map.bind_search_runtime(Arc::new(crate::prolly::proximity::SearchRuntime::default()));
         let set = AsyncAcceleratorSet::empty().with_turboquant(runtime_map.tree(), self.clone())?;
         runtime_map
             .search_with_accelerators(&set, request, control)
