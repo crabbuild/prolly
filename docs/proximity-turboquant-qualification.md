@@ -310,7 +310,7 @@ The local release-command audit on 2026-09-12 records each gate separately:
 | `cargo fmt --all -- --check` and `git diff --check` | Passed |
 | warnings-denied all-target/all-feature Clippy | Passed |
 | Rust 1.89 all-target/all-feature check | Passed; repository-wide unfulfilled-lint-expectation warnings remain non-fatal under that compiler |
-| all-feature tests | Passed: 546 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
+| all-feature tests | Passed at `88ef05f9084d035bb6b1e257f1d3127bba05e7ea`: 551 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
 | scalar scorer safety and strict-provenance Miri checks | The TurboQuant algorithm module has `#![forbid(unsafe_code)]`; Miri passed the every-code signed-zero/extreme-weight symmetry oracle and scalar/SIMD bit-identity test |
 | bounded coverage-guided fuzz smoke | Passed: 2,048 arbitrary-decode executions and 256 bounded lifecycle executions under `cargo-fuzz` 0.13.2; the lifecycle target found a repeated-equal-error quality rounding defect, whose minimized input now has an exact build/verify/reopen regression test |
 | all-feature doctests | Passed: 74/74 |
