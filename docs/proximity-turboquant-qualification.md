@@ -344,3 +344,13 @@ construction than PQ, but warm p95 search is 2.63× to 5.43× PQ and the
 sidecar is 22.79× larger. These cells are therefore evidence for the forced
 path and against enabling `Auto`, not a substitute for the remaining 45,357
 production cells.
+
+The retained
+[`proximity-turboquant-100k-qualification.md`](proximity-turboquant-100k-qualification.md)
+report adds one schema-v2 100K × 768 default-path cell for each supported
+metric. The first build-gate-scale evidence is negative: TurboQuant recall@10
+is 0.00/0.50/0.00 for L2/cosine/inner product, and warm p95 is
+8.18×/9.98×/9.35× PQ. Those deterministic per-row failures keep
+forced-backend GA and `Auto` unqualified; they cannot be averaged away by the
+successful smaller cells. The remaining 45,354 production cells and the
+pinned-host rerun remain open.
