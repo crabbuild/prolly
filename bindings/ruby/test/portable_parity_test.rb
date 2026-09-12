@@ -318,6 +318,41 @@ class PortableParityTest < Minitest::Test
           assert_equal Prolly::SearchBackendRecord::TURBO_QUANTIZED,
                        proof.verify(proximity.descriptor).result.backend
         end
+        proximity.build_accelerator_catalog(turboquant: index).use do |catalog|
+          assert_equal Prolly::CatalogAcceleratorKindRecord::TURBO_QUANTIZED,
+                       catalog.entries.first.kind
+          assert_equal Prolly::SearchBackendRecord::TURBO_QUANTIZED,
+                       catalog.search(proximity, request).backend
+        end
+        current, = proximity.mutate([
+          Prolly::ProximityMutationRecord.new(
+            key: 'turbo-00'.b,
+            vector: [0.25, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            value: 'updated'.b
+          )
+        ])
+        built_composite = current.build_composite_turboquant(proximity, index)
+        refute_nil built_composite.accelerator
+        built_composite.accelerator.use do |composite|
+          assert_equal Prolly::CompositeBaseKindRecord::TURBO_QUANTIZED,
+                       composite.base_kind
+          composite_request = Prolly::ProximitySearchRequestRecord.new(
+            query: request.query,
+            k: request.k,
+            policy: request.policy,
+            adaptive_quality: request.adaptive_quality,
+            budget: request.budget,
+            filter: request.filter,
+            kernel: request.kernel,
+            backend: Prolly::SearchBackendRecord::COMPOSITE,
+            hnsw_ef_search: request.hnsw_ef_search,
+            pq_rerank_multiplier: request.pq_rerank_multiplier,
+            turboquant_rerank_multiplier: request.turboquant_rerank_multiplier
+          )
+          assert_equal Prolly::SearchBackendRecord::COMPOSITE,
+                       composite.search(current, composite_request).backend
+        end
+        current.close
         proximity.load_turboquant(manifest).use do |loaded|
           assert_equal manifest, loaded.manifest
         end

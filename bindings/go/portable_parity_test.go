@@ -650,6 +650,55 @@ func TestTurboQuantizerLifecycleIsPortableVerifiableAndBounded(t *testing.T) {
 	if err != nil || verified.Result.Backend != "turbo-quantized" {
 		t.Fatalf("TurboQuant proof = %#v, %v", verified, err)
 	}
+	catalog, err := proximity.BuildAcceleratorCatalog(nil, nil, index, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := catalog.Entries()
+	if err != nil || len(entries) != 1 || entries[0].Kind != CatalogTurboQuantized {
+		t.Fatalf("TurboQuant catalog entries = %#v, %v", entries, err)
+	}
+	catalogResult, err := catalog.Search(context.Background(), proximity, request)
+	if err != nil || catalogResult.Backend != "turbo-quantized" {
+		t.Fatalf("TurboQuant catalog search = %#v, %v", catalogResult, err)
+	}
+	catalog.Close()
+
+	current, _, err := proximity.Mutate([]ProximityMutation{UpsertProximity(
+		[]byte("turbo-vector-00"),
+		[]float32{0.25, 0, 0, 1, 2, 3, 4, 5},
+		[]byte("updated"),
+	)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(current.Close)
+	compositeConfig, err := DefaultCompositeAcceleratorConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	compositeLimits, err := DefaultCompositeBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	compositeBuilt, err := current.BuildCompositeTurboQuant(
+		proximity, index, compositeConfig, compositeLimits,
+	)
+	if err != nil || compositeBuilt.Accelerator == nil {
+		t.Fatalf("TurboQuant composite build = %#v, %v", compositeBuilt, err)
+	}
+	composite := compositeBuilt.Accelerator
+	baseKind, err := composite.BaseKind()
+	if err != nil || baseKind != CompositeBaseTurboQuantized {
+		t.Fatalf("TurboQuant composite base kind = %v, %v", baseKind, err)
+	}
+	compositeRequest := request
+	compositeRequest.Backend = SearchBackendComposite
+	compositeResult, err := composite.Search(context.Background(), current, compositeRequest)
+	if err != nil || compositeResult.Backend != "composite" {
+		t.Fatalf("TurboQuant composite search = %#v, %v", compositeResult, err)
+	}
+	composite.Close()
 	index.Close()
 	loaded, err := proximity.LoadTurboQuant(manifest)
 	if err != nil {

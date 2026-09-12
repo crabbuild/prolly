@@ -250,6 +250,30 @@ final class PortableParityTests: XCTestCase {
                 .turboQuantized
             )
             proof.close()
+            let catalog = try proximity.buildAcceleratorCatalog(turboquant: index)
+            XCTAssertEqual(catalog.entries.first?.kind, .turboQuantized)
+            XCTAssertEqual(try catalog.search(proximity, request: request).backend, .turboQuantized)
+            catalog.close()
+            let current = try proximity.mutate([
+                ProximityMutationRecord(
+                    key: Data("turbo-00".utf8),
+                    vector: [0.25, 0, 0, 1, 0, 0, 0, 0],
+                    value: Data("updated".utf8)
+                )
+            ]).map
+            let compositeBuilt = try current.buildCompositeTurboquant(
+                baseMap: proximity, base: index
+            )
+            let composite = try XCTUnwrap(compositeBuilt.accelerator)
+            XCTAssertEqual(composite.baseKind, .turboQuantized)
+            var compositeRequest = request
+            compositeRequest.backend = .composite
+            XCTAssertEqual(
+                try composite.search(current, request: compositeRequest).backend,
+                .composite
+            )
+            composite.close()
+            current.close()
             index.close()
             let loaded = try proximity.loadTurboquant(manifest)
             XCTAssertEqual(loaded.manifest, manifest)

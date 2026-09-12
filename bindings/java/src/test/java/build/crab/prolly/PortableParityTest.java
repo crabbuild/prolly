@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import build.crab.prolly.javaapi.AcceleratorCatalogEntry;
 import build.crab.prolly.javaapi.Engine;
 import build.crab.prolly.javaapi.CompositeAcceleratorConfig;
 import build.crab.prolly.javaapi.HnswBuildLimits;
@@ -247,6 +248,34 @@ class PortableParityTest {
                     assertEquals(
                             SearchBackendRecord.TURBO_QUANTIZED,
                             proof.verify(proximity.descriptor()).getResult().getBackend());
+                }
+                try (var catalog = proximity.buildAcceleratorCatalog(null, null, index, null)) {
+                    assertEquals(1, catalog.entries().size());
+                    assertEquals(
+                            AcceleratorCatalogEntry.Kind.TURBO_QUANTIZED,
+                            catalog.entries().get(0).kind());
+                    assertEquals("turbo_quantized", catalog.search(proximity, request).backend());
+                }
+                var mutation = proximity.mutate(List.of(ProximityMutation.upsert(
+                        bytes("turbo-00"),
+                        new float[] {0.25f, 0, 0, 1, 0, 0, 0, 0},
+                        bytes("updated"))));
+                try (var current = mutation.map()) {
+                    var compositeBuilt = current.buildCompositeTurboquant(proximity, index);
+                    assertNotNull(compositeBuilt.accelerator());
+                    try (var composite = compositeBuilt.accelerator()) {
+                        assertEquals("TURBO_QUANTIZED", composite.baseKind());
+                        var compositeRequest = SearchRequest.fixedBudget(
+                                new float[] {0, 0, 0, 1, 0, 0, 0, 0},
+                                3,
+                                SearchRequest.SearchBudget.unlimited(),
+                                SearchRequest.SearchFilter.all(),
+                                SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                                SearchRequest.Backend.COMPOSITE);
+                        assertEquals(
+                                "composite",
+                                composite.search(current, compositeRequest).backend());
+                    }
                 }
             }
             try (var loaded = proximity.loadTurboquant(manifest)) {

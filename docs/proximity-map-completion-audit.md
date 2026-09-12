@@ -26,7 +26,10 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 The TurboQuant binding deliverable is also mapped directly: Python, Go,
 Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM each expose and
 test build/load/verify/forced-search behavior, pre-cancelled search, and
-reported build/search statistics, and each corresponding
+reported build/search statistics. Every lifecycle also attaches the native
+TurboQuant sidecar directly to an accelerator catalog, dispatches a catalog
+search through it, and constructs and searches a mutation-aware composite
+whose base kind is TurboQuant. Each corresponding
 `bindings/*/COOKBOOK.md` now includes a deterministic RAG-sidecar lifecycle.
 The regenerated `bindings/api/classification-audit.json` contains 73
 TurboQuant rows, all `implemented` and `release_complete`.

@@ -298,6 +298,41 @@ class PortableParityTest {
                             proof.verify(proximity.descriptor).result.backend,
                         )
                     }
+                    proximity.buildAcceleratorCatalog(turboquant = index).use { catalog ->
+                        assertEquals(
+                            CatalogAcceleratorKindRecord.TURBO_QUANTIZED,
+                            catalog.entries.single().kind,
+                        )
+                        assertEquals(
+                            SearchBackendRecord.TURBO_QUANTIZED,
+                            catalog.search(proximity, request).backend,
+                        )
+                    }
+                    val (current, _) = proximity.mutate(
+                        listOf(
+                            ProximityMutationRecord(
+                                "turbo-00".bytes(),
+                                listOf(0.25f, 0f, 0f, 1f, 0f, 0f, 0f, 0f),
+                                "updated".bytes(),
+                            ),
+                        ),
+                    )
+                    current.use {
+                        val composite = current.buildCompositeTurboquant(proximity, index).accelerator
+                        requireNotNull(composite).use {
+                            assertEquals(
+                                CompositeBaseKindRecord.TURBO_QUANTIZED,
+                                composite.baseKind,
+                            )
+                            assertEquals(
+                                SearchBackendRecord.COMPOSITE,
+                                composite.search(
+                                    current,
+                                    request.copy(backend = SearchBackendRecord.COMPOSITE),
+                                ).backend,
+                            )
+                        }
+                    }
                     proximity.loadTurboquant(manifest).use { loaded ->
                         assertArrayEquals(manifest, loaded.manifest)
                     }

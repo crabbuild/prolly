@@ -313,6 +313,44 @@ class PortableParityTests(unittest.TestCase):
                         proof.verify(proximity.descriptor).result.backend,
                         SearchBackendRecord.TURBO_QUANTIZED,
                     )
+                with proximity.build_accelerator_catalog(turboquant=index) as catalog:
+                    self.assertEqual(
+                        catalog.entries[0].kind,
+                        CatalogAcceleratorKindRecord.TURBO_QUANTIZED,
+                    )
+                    self.assertEqual(
+                        catalog.search(proximity, request).backend,
+                        SearchBackendRecord.TURBO_QUANTIZED,
+                    )
+
+                current, _ = proximity.mutate(
+                    [
+                        ProximityMutationRecord(
+                            key=b"turbo-00",
+                            vector=[0.25, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                            value=b"updated",
+                        )
+                    ]
+                )
+                with current:
+                    composite = current.build_composite_turboquant(
+                        proximity, index
+                    ).accelerator
+                    self.assertIsNotNone(composite)
+                    with composite:
+                        self.assertEqual(
+                            composite.base_kind,
+                            CompositeBaseKindRecord.TURBO_QUANTIZED,
+                        )
+                        composite_request = exact_proximity_search_request(
+                            [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3
+                        )
+                        composite_request.policy = SearchPolicyKind.FIXED_BUDGET
+                        composite_request.backend = SearchBackendRecord.COMPOSITE
+                        self.assertEqual(
+                            composite.search(current, composite_request).backend,
+                            SearchBackendRecord.COMPOSITE,
+                        )
 
             with proximity.load_turboquant(manifest) as loaded:
                 self.assertEqual(loaded.manifest, manifest)

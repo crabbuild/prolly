@@ -267,6 +267,26 @@ test("WASM TurboQuant lifecycle is portable, verified, and cancellable", { skip:
     const proof = index.proveSearch(proximity, request);
     assert.equal(proof.verify(proximity.descriptor()).result.backend, "turbo_quantized");
     proof.close();
+    const catalog = proximity.buildAcceleratorCatalog({ turboquant: index });
+    assert.equal(catalog.entries()[0].kind, "turbo_quantized");
+    assert.equal((await catalog.search(proximity, request)).backend, "turbo_quantized");
+    catalog.close();
+
+    const current = proximity.mutate([{
+      key: bytes("tq-vector-00"),
+      vector: new Float32Array([0.25, 0, 0, 1, 0, 0, 0, 0]),
+      value: bytes("updated"),
+    }]).map;
+    const compositeBuilt = await current.buildCompositeTurboQuant(proximity, index);
+    assert.ok(compositeBuilt.accelerator);
+    const composite = compositeBuilt.accelerator!;
+    assert.equal(composite.baseKind(), "turbo_quantized");
+    assert.equal((await composite.search(current, {
+      ...request,
+      backend: "composite",
+    })).backend, "composite");
+    composite.close();
+    current.close();
     index.close();
     const loaded = proximity.loadTurboQuant(manifest);
     assert.deepEqual(loaded.manifest(), manifest);
