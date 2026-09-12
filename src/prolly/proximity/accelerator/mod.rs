@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod composite;
 pub mod hnsw;
 pub mod pq;
+pub(crate) mod quantized;
 pub(crate) mod sq8;
 pub mod turboquant;
 

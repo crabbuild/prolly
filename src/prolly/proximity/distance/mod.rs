@@ -6,6 +6,7 @@ mod simd;
 pub(crate) use canonical::euclidean_radius_up;
 pub(crate) use quantized::score as score_quantized;
 pub(crate) use scalar::{prepare_vector, score};
+pub(crate) use simd::fill_query_products_f64;
 #[cfg(test)]
 pub(crate) use simd::{query_kernel_calls, reset_query_kernel_calls};
 pub(crate) use simd::{query_score, query_score_encoded};

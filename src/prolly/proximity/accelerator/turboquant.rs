@@ -9,22 +9,22 @@ use crate::prolly::cid::Cid;
 use crate::prolly::config::Config;
 use crate::prolly::encoding::Encoding;
 use crate::prolly::error::Error;
-use crate::prolly::proximity::distance::canonical::sqrt_down;
-use crate::prolly::proximity::distance::prepare_vector;
-use crate::prolly::proximity::search::{
-    retained_candidate_bytes, EligibilityCardinality, PreparedFilter, RerankCandidate,
+use crate::prolly::proximity::accelerator::quantized::{
+    admit_quantized, rerank_authoritative, QuantizedRanked,
 };
+use crate::prolly::proximity::distance::canonical::sqrt_down;
+use crate::prolly::proximity::distance::{fill_query_products_f64, prepare_vector};
+use crate::prolly::proximity::search::{EligibilityCardinality, PreparedFilter};
 use crate::prolly::proximity::storage::codec::{put_cid, put_f64, put_varint, Reader};
 use crate::prolly::proximity::storage::StoredRecord;
 use crate::prolly::proximity::{
-    BuildParallelism, DistanceMetric, ProximityMap, ProximitySearchStats, SearchBackend,
-    SearchCompletion, SearchPolicy, SearchRequest, SearchResult,
+    BuildParallelism, DistanceMetric, ProximityMap, ProximitySearchStats, QueryKernel,
+    SearchBackend, SearchCompletion, SearchPolicy, SearchRequest, SearchResult,
 };
 use crate::prolly::store::{NodePublication, PublicationOrigin, Store};
 use crate::prolly::tree::Tree;
 use crate::prolly::Prolly;
 use rayon::prelude::*;
-use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
 const MAGIC: &[u8; 4] = b"TQTQ";
@@ -679,7 +679,7 @@ where
         let prepared_query = prepare_query_from_prepared(&query, &self.plan, self.dimensions);
         let filter = PreparedFilter::new(request.filter.clone(), &map.tree().directory)?;
         let mut stats = ProximitySearchStats::default();
-        let mut approximate = BinaryHeap::<TurboQuantRanked>::new();
+        let mut approximate = BinaryHeap::<QuantizedRanked>::new();
         let mut completion = SearchCompletion::ApproximatePolicySatisfied;
 
         if *direct_lookup {
@@ -701,17 +701,23 @@ where
                     }
                     continue;
                 };
-                if !admit_code(
+                if !admit_quantized(
                     key.clone(),
-                    code,
-                    &prepared_query,
-                    self.metric,
-                    self.dimensions as usize,
-                    self.config.bit_width,
+                    &code,
                     *rerank_target,
                     &request,
                     &mut stats,
                     &mut approximate,
+                    |code| {
+                        score_code_value(
+                            code,
+                            &prepared_query,
+                            self.metric,
+                            self.dimensions as usize,
+                            self.config.bit_width,
+                            request.kernel,
+                        )
+                    },
                 )? {
                     completion = SearchCompletion::BudgetExhausted;
                     break;
@@ -723,75 +729,39 @@ where
                 if !filter.contains(&key) || excluded(&key)? {
                     continue;
                 }
-                if !admit_code(
+                if !admit_quantized(
                     key,
-                    code,
-                    &prepared_query,
-                    self.metric,
-                    self.dimensions as usize,
-                    self.config.bit_width,
+                    &code,
                     *rerank_target,
                     &request,
                     &mut stats,
                     &mut approximate,
+                    |code| {
+                        score_code_value(
+                            code,
+                            &prepared_query,
+                            self.metric,
+                            self.dimensions as usize,
+                            self.config.bit_width,
+                            request.kernel,
+                        )
+                    },
                 )? {
                     completion = SearchCompletion::BudgetExhausted;
                     break;
                 }
             }
         }
-        let mut approximate = approximate.into_vec();
-        approximate.sort();
-        let mut reranked = Vec::with_capacity(approximate.len());
-        let mut directory = map.directory_manager().read(&map.tree().directory)?;
-        for candidate in approximate {
-            if budget_exhausted(&request, &stats)
-                || request
-                    .budget
-                    .max_nodes
-                    .is_some_and(|limit| stats.nodes_read >= limit)
-            {
-                completion = SearchCompletion::BudgetExhausted;
-                break;
-            }
-            let Some(handle) = directory.get_handle(&candidate.key)? else {
-                return Err(invalid_object(
-                    "TurboQuant code key is absent from authoritative directory",
-                ));
-            };
-            let bytes = handle.value()?.len();
-            if request
-                .budget
-                .max_committed_bytes
-                .is_some_and(|limit| stats.committed_bytes.saturating_add(bytes) > limit)
-            {
-                completion = SearchCompletion::BudgetExhausted;
-                break;
-            }
-            let record = crate::prolly::proximity::storage::StoredRecordRef::decode(
-                handle.value()?,
-                self.dimensions,
-            )?;
-            let distance = record.vector.score(request.kernel, self.metric, &query);
-            stats.nodes_read += 1;
-            stats.bytes_read = stats.bytes_read.saturating_add(bytes);
-            stats.committed_bytes = stats.committed_bytes.saturating_add(bytes);
-            stats.distance_evaluations += 1;
-            reranked.push(RerankCandidate::new(handle, &candidate.key, distance)?);
-        }
-        stats.reranked_candidates = reranked.len();
-        stats.candidate_handles_peak = reranked.len();
-        stats.candidate_retained_bytes_peak = retained_candidate_bytes(&reranked);
-        reranked.sort_by(|left, right| {
-            left.distance
-                .total_cmp(&right.distance)
-                .then_with(|| left.key().cmp(right.key()))
-        });
-        let neighbors = reranked
-            .into_iter()
-            .take(request.k)
-            .map(|candidate| candidate.into_neighbor(self.dimensions))
-            .collect::<Result<Vec<_>, Error>>()?;
+        let neighbors = rerank_authoritative(
+            map,
+            &request,
+            &query,
+            self.dimensions,
+            approximate,
+            &mut stats,
+            &mut completion,
+            "TurboQuant code key is absent from authoritative directory",
+        )?;
         Ok(SearchResult {
             neighbors,
             stats,
@@ -1164,84 +1134,6 @@ fn validate_code_value(bytes: &[u8], dimensions: usize, bit_width: u8) -> Result
     Ok(norm)
 }
 
-#[derive(Clone, Debug)]
-struct TurboQuantRanked {
-    distance: f64,
-    key: Vec<u8>,
-}
-
-impl PartialEq for TurboQuantRanked {
-    fn eq(&self, other: &Self) -> bool {
-        self.distance.to_bits() == other.distance.to_bits() && self.key == other.key
-    }
-}
-
-impl Eq for TurboQuantRanked {}
-
-impl PartialOrd for TurboQuantRanked {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for TurboQuantRanked {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.distance
-            .total_cmp(&other.distance)
-            .then_with(|| self.key.cmp(&other.key))
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn admit_code(
-    key: Vec<u8>,
-    bytes: Vec<u8>,
-    prepared_query: &TurboQuantPreparedQuery,
-    metric: DistanceMetric,
-    dimensions: usize,
-    bit_width: u8,
-    target: usize,
-    request: &SearchRequest<'_>,
-    stats: &mut ProximitySearchStats,
-    approximate: &mut BinaryHeap<TurboQuantRanked>,
-) -> Result<bool, Error> {
-    if request
-        .budget
-        .max_nodes
-        .is_some_and(|limit| stats.nodes_read >= limit)
-        || request
-            .budget
-            .max_committed_bytes
-            .is_some_and(|limit| stats.committed_bytes.saturating_add(bytes.len()) > limit)
-        || request
-            .budget
-            .max_distance_evaluations
-            .is_some_and(|limit| {
-                stats
-                    .distance_evaluations
-                    .saturating_add(stats.quantized_distance_evaluations)
-                    >= limit
-            })
-        || request
-            .budget
-            .max_frontier_entries
-            .is_some_and(|limit| approximate.len().saturating_add(1) > limit)
-    {
-        return Ok(false);
-    }
-    let distance = score_code_value(&bytes, prepared_query, metric, dimensions, bit_width)?;
-    stats.nodes_read += 1;
-    stats.bytes_read = stats.bytes_read.saturating_add(bytes.len());
-    stats.committed_bytes = stats.committed_bytes.saturating_add(bytes.len());
-    stats.quantized_distance_evaluations += 1;
-    approximate.push(TurboQuantRanked { distance, key });
-    if approximate.len() > target {
-        approximate.pop();
-    }
-    stats.frontier_peak = stats.frontier_peak.max(approximate.len());
-    Ok(true)
-}
-
 pub(crate) struct TurboQuantPreparedQuery {
     weighted: Vec<f64>,
     norm_squared: f64,
@@ -1286,6 +1178,7 @@ pub(crate) fn score_code_value(
     metric: DistanceMetric,
     dimensions: usize,
     bit_width: u8,
+    kernel: QueryKernel,
 ) -> Result<f64, Error> {
     let norm = validate_code_value(bytes, dimensions, bit_width)?;
     let packed = &bytes[8..];
@@ -1293,13 +1186,28 @@ pub(crate) fn score_code_value(
     let dot = if norm == 0.0 {
         0.0
     } else {
-        norm * prepared_query
-            .weighted
-            .iter()
-            .enumerate()
-            .fold(0.0, |sum, (index, query)| {
-                sum + query * codebook.centroid(unpack_code(packed, index, bit_width))
-            })
+        const PRODUCT_SLOTS: usize = 64;
+        let mut centroids = [0.0f64; PRODUCT_SLOTS];
+        let mut products = [0.0f64; PRODUCT_SLOTS];
+        let mut reduced = 0.0;
+        let mut start = 0usize;
+        while start < dimensions {
+            let end = start.saturating_add(PRODUCT_SLOTS).min(dimensions);
+            for (offset, centroid) in centroids[..end - start].iter_mut().enumerate() {
+                *centroid = codebook.centroid(unpack_code(packed, start + offset, bit_width));
+            }
+            fill_query_products_f64(
+                kernel,
+                &prepared_query.weighted[start..end],
+                &centroids[..end - start],
+                &mut products[..end - start],
+            );
+            for &product in &products[..end - start] {
+                reduced += product;
+            }
+            start = end;
+        }
+        norm * reduced
     };
     let distance = match metric {
         DistanceMetric::L2Squared => {
@@ -1442,18 +1350,6 @@ fn require_version(found: u8) -> Result<(), Error> {
     }
 }
 
-fn budget_exhausted(request: &SearchRequest<'_>, stats: &ProximitySearchStats) -> bool {
-    request
-        .budget
-        .max_distance_evaluations
-        .is_some_and(|maximum| {
-            stats
-                .distance_evaluations
-                .saturating_add(stats.quantized_distance_evaluations)
-                >= maximum
-        })
-}
-
 fn enforce_resource(
     resource: &'static str,
     limit: Option<usize>,
@@ -1579,5 +1475,54 @@ mod tests {
         value.fill(0);
         *value.last_mut().unwrap() = 0x80;
         assert!(validate_code_value(&value, 9, 3).is_err());
+    }
+
+    #[test]
+    fn scalar_and_simd_approximate_scores_are_bit_identical() {
+        for dimensions in [8usize, 24, 128, 200, 768] {
+            let prepared = TurboQuantPreparedQuery {
+                weighted: (0..dimensions)
+                    .map(|index| ((index as f64 + 0.25) * 0.03125).sin())
+                    .collect(),
+                norm_squared: 17.25,
+            };
+            for bit_width in [2, 3, 4] {
+                let maximum = 1u8 << bit_width;
+                let codes: Vec<_> = (0..dimensions)
+                    .map(|index| ((index * 7 + 3) as u8) % maximum)
+                    .collect();
+                let mut encoded = 1.25f64.to_le_bytes().to_vec();
+                encoded.extend_from_slice(&pack_codes(&codes, bit_width).unwrap());
+                for metric in [
+                    DistanceMetric::L2Squared,
+                    DistanceMetric::Cosine,
+                    DistanceMetric::InnerProduct,
+                ] {
+                    let scalar = score_code_value(
+                        &encoded,
+                        &prepared,
+                        metric,
+                        dimensions,
+                        bit_width,
+                        QueryKernel::ScalarDeterministic,
+                    )
+                    .unwrap();
+                    let simd = score_code_value(
+                        &encoded,
+                        &prepared,
+                        metric,
+                        dimensions,
+                        bit_width,
+                        QueryKernel::SimdDeterministic,
+                    )
+                    .unwrap();
+                    assert_eq!(
+                        scalar.to_bits(),
+                        simd.to_bits(),
+                        "dimension={dimensions}, bits={bit_width}, metric={metric:?}",
+                    );
+                }
+            }
+        }
     }
 }
