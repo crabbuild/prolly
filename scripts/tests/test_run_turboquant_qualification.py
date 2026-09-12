@@ -142,6 +142,16 @@ class TurboQuantQualificationTests(unittest.TestCase):
         output = valid_output(cell)
         with self.assertRaises(qualification.QualificationError):
             qualification.validate_output(
+                output.replace(
+                    f"dataset={qualification.BENCH_DATASET}", "dataset=superseded"
+                ),
+                cell,
+                "a" * 40,
+                (1, 2, 4),
+                2,
+            )
+        with self.assertRaises(qualification.QualificationError):
+            qualification.validate_output(
                 output.replace("revision=" + "a" * 40, "revision=" + "b" * 40),
                 cell,
                 "a" * 40,

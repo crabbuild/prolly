@@ -24,9 +24,16 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+const BENCHMARK_DATASET_ID: &str = "linear-mod-2000003-v2";
+const BENCHMARK_VECTOR_PERIOD: u64 = 2_000_003;
+
 fn main() {
     let records = env_usize("PROLLY_PROXIMITY_BENCH_RECORDS").unwrap_or(1_000);
     assert!(records > 0, "benchmark record count must be positive");
+    assert!(
+        u64::try_from(records).is_ok_and(|records| records <= BENCHMARK_VECTOR_PERIOD),
+        "benchmark record count exceeds the deterministic dataset's unique-vector period"
+    );
     let dimensions =
         env_list("PROLLY_PROXIMITY_BENCH_DIMENSIONS").unwrap_or_else(|| vec![8, 128, 768, 1_536]);
     assert!(
@@ -104,7 +111,8 @@ fn main() {
         );
     }
     println!("prolly proximity benchmark");
-    println!("schema_version=2");
+    println!("schema_version=3");
+    println!("dataset={BENCHMARK_DATASET_ID}");
     println!("revision={}", command_output("git", &["rev-parse", "HEAD"]));
     println!(
         "compiler={}",
@@ -1788,12 +1796,20 @@ fn make_records(count: usize, dimensions: usize) -> Vec<ProximityRecord> {
 }
 
 fn make_vector(index: usize, dimensions: usize) -> Vec<f32> {
+    let index = u64::try_from(index).expect("benchmark vector index must fit in u64");
     (0..dimensions)
         .map(|component| {
+            let component =
+                u64::try_from(component).expect("benchmark vector component index must fit in u64");
+            // The multiplier is coprime to BENCHMARK_VECTOR_PERIOD, so the
+            // first 2,000,003 component-zero values are distinct. Using u64
+            // rather than usize also freezes identical datasets on 32-bit
+            // WASM and 64-bit native targets. The previous modulus (20,003)
+            // repeated the complete vector about five times in a 100K cell.
             let mixed = index
                 .wrapping_mul(1_000_003)
                 .wrapping_add(component.wrapping_mul(97_409));
-            ((mixed % 20_003) as f32 - 10_001.0) / 1_000.0
+            ((mixed % BENCHMARK_VECTOR_PERIOD) as f64 - 1_000_001.0) as f32 / 100_000.0
         })
         .collect()
 }

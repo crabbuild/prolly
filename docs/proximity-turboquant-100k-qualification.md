@@ -8,6 +8,14 @@ first retained cells at the design's 100K build-gate scale. They expose
 forced-backend recall failures and do not qualify either forced-backend GA or
 `Auto` selection.
 
+> **Superseded qualification dataset:** A subsequent audit found that the v2
+> benchmark generator repeated complete vectors every 20,003 records and used
+> architecture-width `usize` wrapping. At 100K, each vector therefore appears
+> about five times and Recall@10 changes in coarse duplicate groups. These
+> rows remain reproducible performance and rank-depth diagnostics, but they do
+> not count toward the corrected, architecture-stable schema-v3 production
+> matrix.
+
 ## Environment and contract
 
 - Date: 2026-09-12

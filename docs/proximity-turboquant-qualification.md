@@ -108,8 +108,9 @@ peaks. `_work` rows retain frontier peak and the completion discriminator (`0`
 exact, `1` approximate-policy-satisfied, `2` budget-exhausted, `3` cancelled,
 `4` deadline-exceeded). `_io` records logical nodes consumed and actual store
 read operations, while `_rerank` records authoritative candidates reranked and
-committed logical bytes. The output preamble's `schema_version=2` identifies
-these counter meanings.
+committed logical bytes. The output preamble's `schema_version=3` identifies
+these counter meanings and the corrected, architecture-stable qualification
+dataset contract.
 `turboquant_build_resources` reports peak owned scratch bytes and butterfly
 operations, while
 `source_closure_bytes` reports the authoritative map closure and
@@ -203,7 +204,14 @@ compiler, target, store, and cache mode.
 ### Qualification runner
 
 `scripts/run_turboquant_qualification.py` is the authoritative native-matrix
-orchestrator. The full profile deterministically enumerates 45,360 cells: all
+orchestrator. Qualification schema v3 requires the
+`linear-mod-2000003-v2` dataset identifier. Its `u64` arithmetic is identical
+on native and WASM targets, and its 2,000,003-record period exceeds the largest
+1M matrix tier. The superseded generator repeated complete vectors every
+20,003 records and used architecture-width `usize` wrapping; retained v2 rows
+remain reproducible diagnostics but are not GA matrix evidence.
+
+The full profile deterministically enumerates 45,360 cells: all
 required count, dimension, metric, requested-`k`, eligibility, bit-width, and
 fixed rerank combinations across warm/cold memory, warm/cold file, and
 warm/cold async/batched environments, plus exhaustive reranking through 10K
@@ -342,8 +350,8 @@ report adds one real schema-v2 10K × 768 default-path cell for each supported
 metric. Every cell demonstrates 1.0 TurboQuant recall and materially faster
 construction than PQ, but warm p95 search is 2.63× to 5.43× PQ and the
 sidecar is 22.79× larger. These cells are therefore evidence for the forced
-path and against enabling `Auto`, not a substitute for the remaining 45,357
-production cells.
+path and against enabling `Auto`. They predate the v3 dataset contract and do
+not substitute for any of its 45,360 production cells.
 
 The retained
 [`proximity-turboquant-100k-qualification.md`](proximity-turboquant-100k-qualification.md)
@@ -356,4 +364,8 @@ successful smaller cells. Three 16× rerank cells restore 768-dimensional L2
 recall to 1.00 but leave cosine at 0.50 and inner product at 0.00. The matching
 100K × 1536 default cells have 0.00 TurboQuant recall for every metric and
 20.45× to 23.49× PQ p95, despite faster builds. The remaining 45,348
-production cells and the pinned-host rerun remain open.
+production cells and the pinned-host rerun appeared open under v2. Subsequent
+audit found that v2 repeated every vector after 20,003 records, making its
+100K Recall@10 quantized in coarse duplicate groups. Those rows remain useful
+performance and rank-depth diagnostics, but none counts toward the corrected
+v3 production matrix.

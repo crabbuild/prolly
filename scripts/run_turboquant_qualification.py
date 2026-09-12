@@ -20,8 +20,9 @@ from datetime import datetime, timezone
 from typing import Iterable, Sequence
 
 
-CONTRACT_SCHEMA = "prolly-turboquant-qualification-v2"
-BENCH_SCHEMA_VERSION = 2
+CONTRACT_SCHEMA = "prolly-turboquant-qualification-v3"
+BENCH_SCHEMA_VERSION = 3
+BENCH_DATASET = "linear-mod-2000003-v2"
 FULL_RECORDS = (1_000, 10_000, 100_000, 1_000_000)
 FULL_DIMENSIONS = (128, 200, 768, 1_536, 3_072)
 FULL_METRICS = ("l2", "cosine", "inner_product")
@@ -177,6 +178,7 @@ def make_contract(
     return {
         "schema": CONTRACT_SCHEMA,
         "benchmark_schema_version": BENCH_SCHEMA_VERSION,
+        "dataset": BENCH_DATASET,
         "profile": profile,
         "revision": revision,
         "workers": list(workers),
@@ -292,6 +294,7 @@ def _expected_preamble(cell: Cell, revision: str, repeats: int) -> dict[str, str
     eligible = max(1, math.ceil(cell.records * cell.eligibility_ppm / 1_000_000))
     return {
         "schema_version": str(BENCH_SCHEMA_VERSION),
+        "dataset": BENCH_DATASET,
         "revision": revision,
         "store": cell.environment.store,
         "records": str(cell.records),
