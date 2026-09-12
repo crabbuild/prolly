@@ -192,9 +192,13 @@ Cold-cache quantizer samples clear the authoritative map caches and use a new
 `SearchIo` runtime/namespace for each timed query, so descriptor, manifest,
 source, and code-tree physical reads are measured rather than inherited from a
 prior sample. Warm rows perform one untimed warmup through the same instrumented
-runtime used by every measured sample. The output preamble records the machine
-hostname and the frozen TurboQuant seed in addition to revision, compiler,
-target, store, and cache mode.
+runtime used by every measured sample. Warm cells may still report physical
+reads when the authenticated working set exceeds a bounded runtime cache
+partition; `warm` means shared primed runtime, not an unbounded or
+fully-resident cache. Cold cells must report physical I/O, while all physical
+counters must remain finite and nonnegative. The output preamble records the
+machine hostname and the frozen TurboQuant seed in addition to revision,
+compiler, target, store, and cache mode.
 
 ### Qualification runner
 

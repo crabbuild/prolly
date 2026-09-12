@@ -98,6 +98,45 @@ class TurboQuantQualificationTests(unittest.TestCase):
         for cell in qualification.enumerate_cells("smoke"):
             qualification.validate_output(valid_output(cell), cell, revision, (1, 2, 4), 2)
 
+    def test_warm_validation_allows_bounded_cache_eviction_io(self):
+        revision = "a" * 40
+        cell = next(
+            cell
+            for cell in qualification.enumerate_cells("smoke")
+            if not cell.environment.cold and not cell.environment.async_quantizers
+        )
+        output = valid_output(cell).replace(
+            f"turboquant_search_scalar_p95,{cell.dimensions},0,1.0,10,0",
+            f"turboquant_search_scalar_p95,{cell.dimensions},0,1.0,10,2",
+        )
+        qualification.validate_output(output, cell, revision, (1, 2, 4), 2)
+
+    def test_cold_validation_requires_physical_io(self):
+        revision = "a" * 40
+        cell = next(
+            cell
+            for cell in qualification.enumerate_cells("smoke")
+            if cell.environment.cold and not cell.environment.async_quantizers
+        )
+        output = valid_output(cell).replace(
+            f"turboquant_search_scalar_p95,{cell.dimensions},0,1.0,10,2",
+            f"turboquant_search_scalar_p95,{cell.dimensions},0,1.0,10,0",
+        )
+        with self.assertRaisesRegex(
+            qualification.QualificationError, "cold .* has no physical I/O"
+        ):
+            qualification.validate_output(output, cell, revision, (1, 2, 4), 2)
+
+    def test_output_validator_rejects_negative_counters(self):
+        revision = "a" * 40
+        cell = qualification.enumerate_cells("smoke")[0]
+        output = valid_output(cell).replace(
+            f"source_build,{cell.dimensions},0,1.0,10,20",
+            f"source_build,{cell.dimensions},0,1.0,-1,20",
+        )
+        with self.assertRaisesRegex(qualification.QualificationError, "invalid CSV row"):
+            qualification.validate_output(output, cell, revision, (1, 2, 4), 2)
+
     def test_output_validator_rejects_missing_rows_and_wrong_provenance(self):
         cell = qualification.enumerate_cells("smoke")[0]
         output = valid_output(cell)
