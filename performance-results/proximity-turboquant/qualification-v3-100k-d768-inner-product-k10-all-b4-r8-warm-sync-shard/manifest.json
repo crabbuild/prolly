@@ -45,7 +45,7 @@
     "full_matrix_digest": "a4c137363c5cffe5390a2959217017321f5f17daabf2babb83c52f17a3571d9f",
     "max_cell_records": null,
     "profile": "full",
-    "revision": "43a6c55564df2750e77298542a490dec9baa6ff9",
+    "revision": "d79fbf0c267711b2707582f4a1d2bbd8a6cde6d9",
     "schema": "prolly-turboquant-qualification-v3",
     "search_repeats": 30,
     "shard_cell_count": 1,
@@ -59,5 +59,5 @@
       4
     ]
   },
-  "created_at": "2026-09-12T19:04:49.889421+00:00"
+  "created_at": "2026-09-12T20:05:06.344455+00:00"
 }

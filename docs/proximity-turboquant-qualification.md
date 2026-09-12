@@ -379,14 +379,16 @@ report records the first six corrected schema-v3 cells: 10K and 100K × 768
 default-path coverage for every metric. Correct reconstructed-vector norm
 scoring restores squared-L2 recall to 1.00 at both scales. Correct cosine
 reconstruction normalization raises 10K recall from 0.00 to 0.40 but leaves
-100K recall at 0.00; inner product remains at 0.00. Every row exceeds the
-1.25× PQ warm-p95 ceiling. Matching 16× cosine and inner-product diagnostics
-also fail every TurboQuant recall floor, ruling out that approved larger
-shortlist as a sufficient fix. Fusing the corrected L2 dot-product and
+100K recall at 0.00. Correcting inner-product reconstruction-direction norm
+drift raises the 10K default row from 0.00 to 1.00; the 100K default row stays
+at 0.00 but reaches 1.00 with the approved 16× window. Every row exceeds the
+1.25× PQ warm-p95 ceiling. Matching 16× cosine diagnostics still fail the
+recall floor, ruling out that approved larger shortlist as a sufficient
+general fix. Fusing the corrected L2 dot-product and
 reconstruction-norm work into one packed-code pass reduces the retained
 TurboQuant median by
 44.52% at 10K and 41.63% at 100K with bit-identical scores and unchanged
-logical counters. These failures keep `Auto` and forced-backend GA closed;
+logical counters. The remaining per-row failures keep `Auto` and forced-backend GA closed;
 the ten characterized configurations span development revisions, so all
 45,360 schema-v3 cells still require one final frozen-revision run. The other
 release gates remain open.

@@ -12,9 +12,8 @@ complete production qualification, and they keep `Auto` selection disabled.
 - Date: 2026-09-12
 - Revisions: squared-L2 cells at
   `f08e7dfa604bcc4bfd1c406d4c5e4dfcc8550d09`, cosine cells at
-  `be8e5aef66447059f06a5fb54c2f6ed213e265bd`, default 8× inner-product
-  cells at `43a6c55564df2750e77298542a490dec9baa6ff9`, and 16× inner-product
-  diagnostics at `8966204c11d3bf73173ea2f1354002344582d5b2`
+  `be8e5aef66447059f06a5fb54c2f6ed213e265bd`, and all inner-product
+  cells at `d79fbf0c267711b2707582f4a1d2bbd8a6cde6d9`
 - Qualification schema: `prolly-turboquant-qualification-v3`
 - Benchmark schema: 3
 - Dataset: `linear-mod-2000003-v2`
@@ -44,10 +43,10 @@ complete production matrix must be rerun from one final frozen revision.
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | 10K | Squared L2 | 1.00 | 1.00 | 9,078.458 µs | 1,362.500 µs | 9,467.416 µs | 1,555.000 µs |
 | 10K | Cosine | 0.40 | 0.50 | 9,395.834 µs | 1,315.833 µs | 9,878.500 µs | 1,515.917 µs |
-| 10K | Inner product | 0.00 | 0.00 | 8,633.792 µs | 1,382.125 µs | 9,063.250 µs | 1,517.000 µs |
+| 10K | Inner product | 1.00 | 0.00 | 8,754.041 µs | 1,268.584 µs | 9,059.792 µs | 1,397.708 µs |
 | 100K | Squared L2 | 1.00 | 0.00 | 112,362.791 µs | 21,696.166 µs | 116,111.541 µs | 40,152.750 µs |
 | 100K | Cosine | 0.00 | 0.00 | 123,336.708 µs | 12,494.084 µs | 133,789.417 µs | 12,777.958 µs |
-| 100K | Inner product | 0.00 | 0.00 | 120,492.667 µs | 12,583.125 µs | 130,040.000 µs | 13,219.042 µs |
+| 100K | Inner product | 0.00 | 0.00 | 115,012.917 µs | 11,637.458 µs | 125,509.125 µs | 12,944.125 µs |
 
 The squared-L2 rows validate the corrected distance calculation. A quantized
 Lloyd–Max reconstruction is not exactly unit length, so its squared norm must
@@ -57,11 +56,13 @@ to 1.00 at both retained scales. Cosine source-scale invariance is separately
 enforced by regression test. Normalizing by the packed-code reconstruction
 norm raises 10K cosine recall from 0.00 to 0.40, but the fixed 80-candidate
 shortlist still misses the recall floor and does not improve the 100K row.
-Inner product has the same unresolved shortlist-quality failure.
+Projecting the inner-product reconstruction back to unit length before
+restoring the exact persisted source norm raises 10K default-path recall from
+0.00 to 1.00. The 100K default 80-candidate window still misses the floor.
 
-TurboQuant search is 6.66×/7.14×/6.25× PQ at the median and
-6.09×/6.52×/5.97× at p95 for 10K L2/cosine/inner product. At 100K it is
-5.18×/9.87×/9.58× at the median and 2.89×/10.47×/9.84× at p95.
+TurboQuant search is 6.66×/7.14×/6.90× PQ at the median and
+6.09×/6.52×/6.48× at p95 for 10K L2/cosine/inner product. At 100K it is
+5.18×/9.87×/9.88× at the median and 2.89×/10.47×/9.70× at p95.
 Absolute and paired ratios are individual development-host observations; the
 logical counters and gate disposition are deterministic.
 
@@ -87,13 +88,14 @@ general quality correction:
 | Records | Metric | TQ recall, 8× → 16× | PQ recall, 8× → 16× | TQ/PQ 16× p95 |
 | ---: | --- | ---: | ---: | ---: |
 | 10K | Cosine | 0.40 → 0.40 | 0.50 → 0.50 | 6.15× |
-| 10K | Inner product | 0.00 → 0.00 | 0.00 → 1.00 | 7.43× |
+| 10K | Inner product | 1.00 → 1.00 | 0.00 → 1.00 | 6.12× |
 | 100K | Cosine | 0.00 → 0.50 | 0.00 → 0.00 | 11.75× |
-| 100K | Inner product | 0.00 → 0.00 | 0.00 → 0.00 | 10.61× |
+| 100K | Inner product | 0.00 → 1.00 | 0.00 → 0.00 | 10.02× |
 
-The approved 160-candidate window still fails every TurboQuant recall floor
-in this diagnostic and increases rerank work. This rules out changing the
-frozen default from 8× to 16× as a sufficient cosine/inner-product remedy.
+The approved 160-candidate window now passes inner product at both sampled
+scales, demonstrating that the direction correction materially improves rank
+depth. It still fails cosine at both scales and increases rerank work, so
+changing the frozen default from 8× to 16× is not a sufficient general remedy.
 
 ## Build results
 
@@ -101,10 +103,10 @@ frozen default from 8× to 16× as a sufficient cosine/inner-product remedy.
 | ---: | --- | ---: | ---: | ---: |
 | 10K | Squared L2 | 30.91% | 25.32% | 23.14% |
 | 10K | Cosine | 30.01% | 24.33% | 20.97% |
-| 10K | Inner product | 31.01% | 24.96% | 24.31% |
+| 10K | Inner product | 32.06% | 25.85% | 25.09% |
 | 100K | Squared L2 | 31.94% | 36.71% | 31.68% |
 | 100K | Cosine | 40.96% | 36.70% | 30.88% |
-| 100K | Inner product | 33.60% | 35.78% | 40.90% |
+| 100K | Inner product | 37.08% | 32.24% | 31.27% |
 
 Every sampled build is faster than its paired PQ build. All worker counts
 produce identical manifests and canonical logical statistics within a cell.
@@ -115,10 +117,12 @@ These development-host observations do not replace the required pinned-host
 
 - The two squared-L2 cells pass the forced-backend recall floor: recall is at
   least 0.95 and does not trail equal-shortlist PQ by more than 0.01.
-- All four cosine and inner-product cells fail the 0.95 recall floor. A row
-  cannot be rescued by averaging it with a passing metric or scale.
+- The 10K inner-product default cell now also passes and exceeds the
+  equal-shortlist PQ recall. Both cosine cells and the 100K inner-product
+  default cell still fail the 0.95 floor; passing rows cannot hide them.
 - All six cells fail `Auto`: the L2 rows exceed the 1.25× PQ warm-p95 ceiling,
-  while cosine and inner product fail both recall and latency requirements.
+  every other row also exceeds the ceiling, and three rows additionally fail
+  recall.
 - Both sampled scales fail the comparative-size gate; the TurboQuant sidecar
   is larger than PQ rather than at least 25% smaller.
 - Ten schema-v3 matrix configurations are characterized across development

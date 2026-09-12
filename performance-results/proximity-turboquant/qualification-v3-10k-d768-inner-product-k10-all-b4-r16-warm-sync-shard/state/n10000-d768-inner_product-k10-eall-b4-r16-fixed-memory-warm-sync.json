@@ -23,7 +23,7 @@
     "--bench",
     "prolly_proximity_bench"
   ],
-  "completed_at": "2026-09-12T19:12:54.288024+00:00",
+  "completed_at": "2026-09-12T20:05:02.014173+00:00",
   "disposition": "completed",
-  "sha256": "46fddc0726238a39abb9a46cf3482408f524e6dba290656484f55676bd843cc2"
+  "sha256": "ad9c1790e78925f135bdd5949400f250e77f8ddf5447b04314a802bd0fac49f5"
 }

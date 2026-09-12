@@ -3,8 +3,8 @@
   "completed_cells": 1,
   "expected_cells": 1,
   "failed": [],
-  "finished_at": "2026-09-12T19:03:08.657159+00:00",
-  "revision": "43a6c55564df2750e77298542a490dec9baa6ff9",
+  "finished_at": "2026-09-12T20:06:50.786986+00:00",
+  "revision": "d79fbf0c267711b2707582f4a1d2bbd8a6cde6d9",
   "schema": "prolly-turboquant-qualification-v3",
   "typed_scalability_failures": 0,
   "wasm_smoke": false
