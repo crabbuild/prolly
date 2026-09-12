@@ -1588,13 +1588,13 @@ pub(crate) fn score_code_value(
 ) -> Result<f64, Error> {
     let norm = validate_code_value(bytes, dimensions, bit_width)?;
     let packed = &bytes[8..];
-    let dot = if norm == 0.0 {
+    let reconstructed_unit_dot = if norm == 0.0 {
         0.0
     } else if matches!(
         kernel,
         QueryKernel::ScalarDeterministic | QueryKernel::AutoDeterministic
     ) {
-        norm * score_precomputed_centroids(packed, prepared_query, bit_width)
+        score_precomputed_centroids(packed, prepared_query, bit_width)
     } else {
         let codebook = codebook(bit_width);
         const PRODUCT_SLOTS: usize = 64;
@@ -1622,7 +1622,15 @@ pub(crate) fn score_code_value(
             }
             start = end;
         }
-        norm * reduced
+        reduced
+    };
+    let dot = if metric == DistanceMetric::Cosine {
+        // Cosine preparation normalizes both query and source. Multiplying by
+        // the persisted original source norm would violate scale invariance
+        // and collapse large positive similarities at the clamp boundary.
+        reconstructed_unit_dot
+    } else {
+        norm * reconstructed_unit_dot
     };
     let distance = match metric {
         DistanceMetric::L2Squared => {
@@ -2573,6 +2581,65 @@ mod tests {
         )
         .unwrap();
         assert_eq!(score.to_bits(), 0.0f64.to_bits());
+    }
+
+    #[test]
+    fn cosine_approximate_score_is_source_scale_invariant() {
+        let dimensions = 8;
+        let bit_width = 4;
+        let prepared = TurboQuantPreparedQuery::new(
+            vec![0.001; dimensions],
+            1.0,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        );
+        let packed = pack_codes(&vec![8; dimensions], bit_width).unwrap();
+        let encoded = |norm: f64| {
+            let mut bytes = norm.to_le_bytes().to_vec();
+            bytes.extend_from_slice(&packed);
+            bytes
+        };
+        let small = encoded(2.0);
+        let large = encoded(200.0);
+        let cosine_small = score_code_value(
+            &small,
+            &prepared,
+            DistanceMetric::Cosine,
+            dimensions,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        )
+        .unwrap();
+        let cosine_large = score_code_value(
+            &large,
+            &prepared,
+            DistanceMetric::Cosine,
+            dimensions,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        )
+        .unwrap();
+        assert_eq!(cosine_small.to_bits(), cosine_large.to_bits());
+
+        let inner_small = score_code_value(
+            &small,
+            &prepared,
+            DistanceMetric::InnerProduct,
+            dimensions,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        )
+        .unwrap();
+        let inner_large = score_code_value(
+            &large,
+            &prepared,
+            DistanceMetric::InnerProduct,
+            dimensions,
+            bit_width,
+            QueryKernel::ScalarDeterministic,
+        )
+        .unwrap();
+        assert_ne!(inner_small.to_bits(), inner_large.to_bits());
     }
 
     #[test]

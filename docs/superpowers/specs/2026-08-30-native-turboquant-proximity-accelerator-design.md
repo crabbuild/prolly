@@ -504,12 +504,22 @@ The transform is applied to the query once per search. Search precomputes
 order. It also computes L2 `query_norm_squared` from the prepared query with the
 canonical scalar accumulation.
 
-For one encoded vector:
+For one encoded vector, L2 and inner product restore the original source norm:
 
 ```text
 approx_dot = stored_norm *
              sum_i(transformed_query_i * reconstructed_centroid[code_i]
                    / sqrt(dimensions))
+```
+
+Cosine preparation normalizes both source and query, so its routing dot product
+omits `stored_norm`. This preserves cosine scale invariance and prevents large
+original norms from saturating the similarity clamp:
+
+```text
+approx_cosine_dot =
+    sum_i(transformed_normalized_query_i * reconstructed_centroid[code_i]
+          / sqrt(dimensions))
 ```
 
 Products are generated in coordinate order and reduced in canonical scalar
