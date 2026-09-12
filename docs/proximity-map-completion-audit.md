@@ -105,7 +105,7 @@ The completion gate is:
 ```sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo +1.81.0 check --all-targets --all-features
+cargo +1.89.0 check --all-targets --all-features
 cargo test --all-features --no-fail-fast
 cargo test --doc --all-features
 cargo bench --all-features --no-run

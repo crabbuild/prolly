@@ -112,6 +112,25 @@ default PQ at 100K × 768 and 100K × 1536, have warm p95 search no worse than
 size, or recall advantage for every enabled benchmark family. Until retained
 evidence satisfies every comparative rule, `Auto` remains disabled.
 
+## Release-command audit
+
+The local release-command audit on 2026-09-12 records each gate separately:
+
+| Command or suite | Result |
+| --- | --- |
+| `cargo fmt --all -- --check` and `git diff --check` | Passed |
+| warnings-denied all-target/all-feature Clippy | Passed |
+| Rust 1.89 all-target/all-feature check | Passed; repository-wide unfulfilled-lint-expectation warnings remain non-fatal under that compiler |
+| all-feature tests | Passed: 536 library tests plus every integration suite; one unrelated extended splice stress test remains explicitly ignored |
+| all-feature doctests | Passed: 74/74 |
+| all-feature benchmark compilation | Passed |
+| browser-WASM build, typecheck, and package tests | Passed: 37/37, including canonical TurboQuant wire parity |
+| release binding inventory | Repository gate remains open: 2,998 pre-existing public Rust entries are classified incomplete; none is a TurboQuant entry |
+
+The binding inventory distinction is intentional. TurboQuant's production
+cells are implemented, but the approved release command requires the global
+repository inventory to pass, so forced-backend GA cannot claim this gate yet.
+
 ## Local smoke evidence
 
 The implementation PR records a development-machine 64-record × 8-dimension

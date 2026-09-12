@@ -8,7 +8,7 @@ matrix and does not qualify `Auto` selection.
 ## Environment and inputs
 
 - Date: 2026-09-12
-- Benchmark revision: `60dfaa72e78ef743714dd14fa9c7d665c3429a9f`
+- Benchmark revision: `71aae3d6d3dd0df11b92959a1579188117d8e079`
 - Compiler: Rust 1.97.0, LLVM 22.1.6
 - Target: `aarch64-apple-darwin`
 - Store/cache: in-memory, warm search cache
@@ -33,16 +33,16 @@ TurboQuant row is more than `0.01` below PQ.
 
 The storage numbers below exclude the authoritative proximity-map closure and
 count only derived manifest and code-tree objects. Search ratios compare the
-30-sample TurboQuant scalar median with the PQ median; the range is across the
-three metrics.
+30-sample TurboQuant automatic-kernel median with the PQ median; the range is
+across the three metrics.
 
-| Dimensions | TurboQuant sidecar bytes | PQ sidecar bytes | TQ/PQ median search ratio | TQ recall range | PQ recall range |
+| Dimensions | TurboQuant sidecar bytes | PQ sidecar bytes | TQ `Auto`/PQ median search ratio | TQ recall range | PQ recall range |
 | ---: | ---: | ---: | ---: | ---: | ---: |
-| 128 | 76,699 | 20,914 | 1.88–1.92× | 1.0–1.0 | 1.0–1.0 |
-| 200 | 112,699 | 25,522 | 2.33–2.35× | 1.0–1.0 | 1.0–1.0 |
-| 768 | 397,699 | 61,874 | 4.33–4.80× | 1.0–1.0 | 1.0–1.0 |
-| 1536 | 781,699 | 111,034 | 5.44–5.63× | 1.0–1.0 | 1.0–1.0 |
-| 3072 | 1,549,699 | 209,338 | 6.53–6.68× | 1.0–1.0 | 1.0–1.0 |
+| 128 | 76,699 | 20,914 | 1.86–1.93× | 1.0–1.0 | 1.0–1.0 |
+| 200 | 112,699 | 25,522 | 2.28–2.36× | 1.0–1.0 | 1.0–1.0 |
+| 768 | 397,699 | 61,874 | 4.35–4.71× | 1.0–1.0 | 1.0–1.0 |
+| 1536 | 781,699 | 111,034 | 5.51–5.63× | 1.0–1.0 | 1.0–1.0 |
+| 3072 | 1,549,699 | 209,338 | 6.47–6.66× | 1.0–1.0 | 1.0–1.0 |
 
 The exact rerank path explains the perfect result on this small deterministic
 fixture: TurboQuant admits and reranks 80 candidates for each search. This is
