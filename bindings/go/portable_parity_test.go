@@ -620,6 +620,9 @@ func TestTurboQuantizerLifecycleIsPortableVerifiableAndBounded(t *testing.T) {
 	if err != nil || result.Backend != "turbo-quantized" || !bytes.Equal(result.Neighbors[0].Key, []byte("turbo-vector-00")) {
 		t.Fatalf("TurboQuant search = %#v, %v", result, err)
 	}
+	if result.Stats.DistanceEvaluations == 0 {
+		t.Fatalf("TurboQuant search stats = %#v", result.Stats)
+	}
 	runtimeCache, err := engine.NewProximitySearchRuntime()
 	if err != nil {
 		t.Fatal(err)

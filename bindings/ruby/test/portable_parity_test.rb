@@ -304,6 +304,15 @@ class PortableParityTest < Minitest::Test
         result = index.search(proximity, request)
         assert_equal Prolly::SearchBackendRecord::TURBO_QUANTIZED, result.backend
         assert_equal 'turbo-00'.b, result.neighbors.first.key
+        assert_operator result.stats.distance_evaluations, :>, 0
+        Prolly::ProximityCancellationToken.new.use do |cancellation|
+          cancellation.cancel
+          cancelled = index.search_cancellable(
+            proximity, request, cancellation: cancellation
+          )
+          assert_equal Prolly::SearchCompletionRecord::CANCELLED, cancelled.completion
+          assert_empty cancelled.neighbors
+        end
         manifest = index.manifest
         index.prove_search(proximity, request).use do |proof|
           assert_equal Prolly::SearchBackendRecord::TURBO_QUANTIZED,

@@ -253,6 +253,7 @@ test("WASM TurboQuant lifecycle is portable, verified, and cancellable", { skip:
     const result = await index.search(proximity, request);
     assert.equal(result.backend, "turbo_quantized");
     assert.equal(Buffer.from(result.neighbors[0].key).toString(), "tq-vector-00");
+    assert.ok(result.stats.distanceEvaluations > 0n);
     const cancellation = proximity.cancellationToken();
     try {
       cancellation.cancel();

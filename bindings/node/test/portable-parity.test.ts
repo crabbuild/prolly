@@ -209,6 +209,7 @@ test("TurboQuant lifecycle is portable, verifiable, and cancellable", async () =
     const result = await index.search(proximity, request);
     assert.equal(result.backend, "turbo_quantized");
     assert.equal(Buffer.from(result.neighbors[0].key).toString(), "turbo-00");
+    assert.ok(result.stats.distanceEvaluations > 0n);
     const runtime = engine.proximitySearchRuntime();
     try {
       assert.equal((await index.searchWithRuntime(proximity, request, runtime)).backend, "turbo_quantized");

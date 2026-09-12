@@ -234,6 +234,14 @@ class PortableParityTest {
                 var result = index.search(proximity, request);
                 assertEquals("turbo_quantized", result.backend());
                 assertArrayEquals(bytes("turbo-00"), result.neighbors().get(0).key());
+                assertTrue(result.stats().distanceEvaluations() > 0);
+                try (var cancellation = new ProximityCancellationToken()) {
+                    cancellation.cancel();
+                    var cancelled = index.searchCancellable(
+                            proximity, request, null, cancellation);
+                    assertEquals("cancelled", cancelled.completion());
+                    assertTrue(cancelled.neighbors().isEmpty());
+                }
                 manifest = index.manifest();
                 try (var proof = index.proveSearch(proximity, request)) {
                     assertEquals(

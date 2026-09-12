@@ -38,7 +38,7 @@ not replace the production-scale recall and performance matrix below.
 | Authoritative exact reranking and bounded candidate admission | `src/prolly/proximity/accelerator/quantized.rs`, TurboQuant/PQ search tests | Implemented |
 | Scalar/SIMD bit identity | `src/prolly/proximity/distance/simd.rs`, TurboQuant unit tests | Implemented |
 | Sync/async, catalog, composite, proof, content graph, and GC integration | focused proximity accelerator, async, proof, and content-graph tests | Implemented |
-| Maintained portable binding lifecycle and cookbook | UniFFI plus Python, Go, Node, Kotlin, Java, Ruby, Swift, and WASM facades/tests; each language's `bindings/*/COOKBOOK.md` includes a forced TurboQuant RAG sidecar lifecycle | Implemented |
+| Maintained portable binding lifecycle and cookbook | UniFFI plus Python, Go, Node, Kotlin, Java, Ruby, Swift, and WASM facades/tests; every language lifecycle asserts TurboQuant build/search statistics and pre-cancelled search, and each language's `bindings/*/COOKBOOK.md` includes a forced TurboQuant RAG sidecar lifecycle | Implemented |
 | Cross-target fixture execution on x86_64, aarch64, and browser WASM | [`proximity-turboquant-cross-target.md`](proximity-turboquant-cross-target.md), Linux CI, local aarch64 suite, browser-WASM canonical CID test | Implemented |
 | Dense paper-reference distortion and recall comparison | [`proximity-turboquant-dense-reference.md`](proximity-turboquant-dense-reference.md), retained raw JSON, reproducible generator | Implemented |
 | Complete adversarial fault injection at every read/write boundary | [`proximity-turboquant-fault-injection.md`](proximity-turboquant-fault-injection.md), ordinal cold-read/publication tests | Implemented |
@@ -291,6 +291,7 @@ The local release-command audit on 2026-09-12 records each gate separately:
 | all-feature doctests | Passed: 74/74 |
 | all-feature benchmark compilation | Passed |
 | browser-WASM build, typecheck, and package tests | Passed: 37/37, including canonical TurboQuant wire parity |
+| maintained binding TurboQuant cancellation/statistics | Python, Go, Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM lifecycle tests exercise a pre-cancelled search and assert reported TurboQuant statistics; Ruby passes 23/23 with 259 assertions, and the full 18-module Kotlin/Java reactor passes locally |
 | maintained binding cookbooks | Python, Go, Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM document build, forced search, verification, and manifest reopen |
 | release binding inventory | Repository gate remains open: 2,998 pre-existing public Rust entries are classified incomplete; none is a TurboQuant entry |
 

@@ -234,6 +234,15 @@ final class PortableParityTests: XCTestCase {
             let result = try index.search(proximity, request: request)
             XCTAssertEqual(result.backend, .turboQuantized)
             XCTAssertEqual(result.neighbors.first?.key, Data("turbo-00".utf8))
+            XCTAssertGreaterThan(result.stats.distanceEvaluations, 0)
+            let cancellation = ProximityCancellationToken()
+            cancellation.cancel()
+            let cancelled = try index.searchCancellable(
+                proximity, request: request, cancellation: cancellation
+            )
+            XCTAssertEqual(cancelled.completion, .cancelled)
+            XCTAssertTrue(cancelled.neighbors.isEmpty)
+            cancellation.close()
             let manifest = index.manifest
             let proof = try index.proveSearch(proximity, request: request)
             XCTAssertEqual(

@@ -294,6 +294,7 @@ class PortableParityTests(unittest.TestCase):
                 result = index.search(proximity, request)
                 self.assertEqual(result.backend, SearchBackendRecord.TURBO_QUANTIZED)
                 self.assertEqual(result.neighbors[0].key, b"turbo-00")
+                self.assertGreater(result.stats.distance_evaluations, 0)
                 with engine.proximity_search_runtime() as runtime:
                     self.assertEqual(
                         index.search_with_runtime(proximity, request, runtime).backend,

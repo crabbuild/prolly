@@ -282,6 +282,15 @@ class PortableParityTest {
                     val result = index.search(proximity, request)
                     assertEquals(SearchBackendRecord.TURBO_QUANTIZED, result.backend)
                     assertArrayEquals("turbo-00".bytes(), result.neighbors.first().key)
+                    assertEquals(true, result.stats.distanceEvaluations > 0uL)
+                    ProximityCancellationToken().use { cancellation ->
+                        cancellation.cancel()
+                        val cancelled = index.searchCancellable(
+                            proximity, request, cancellation = cancellation,
+                        )
+                        assertEquals(SearchCompletionRecord.CANCELLED, cancelled.completion)
+                        assertEquals(emptyList<Any>(), cancelled.neighbors)
+                    }
                     val manifest = index.manifest
                     index.proveSearch(proximity, request).use { proof ->
                         assertEquals(
