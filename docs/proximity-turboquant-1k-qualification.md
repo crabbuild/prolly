@@ -24,6 +24,12 @@ Raw benchmark output is retained in:
 - `performance-results/proximity-turboquant/qualification-1k-cosine-k10-all-b4-r8-arm64.csv`
 - `performance-results/proximity-turboquant/qualification-1k-inner-product-k10-all-b4-r8-arm64.csv`
 
+These retained files predate benchmark `schema_version=2`. Their latency,
+recall, sidecar-size, and build values remain valid for this report, but the
+quantized-search `metric_a`/`metric_b` columns use the legacy counter layout.
+New evidence must retain the schema version printed by the harness and must not
+merge rows from different schemas without an explicit conversion.
+
 ## Results
 
 Every one of the 15 TurboQuant metric/dimension rows produced recall@10 of

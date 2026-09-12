@@ -100,10 +100,13 @@ cargo bench --all-features --bench prolly_proximity_bench
 ```
 
 Search rows report the sample median; `_p95` and `_p99` companion rows report
-nearest-rank tail latency. Their counters retain logical/physical bytes read
-and candidate handle/byte peaks. `_work` rows retain frontier peak and the
-completion discriminator (`0` exact, `1` approximate-policy-satisfied, `2`
-budget-exhausted, `3` cancelled, `4` deadline-exceeded).
+nearest-rank tail latency. The main quantized-search row records quantized and
+exact distance evaluations in `metric_a` and `metric_b`; `_p95` records logical
+and physical bytes read; `_p99` records candidate-handle and retained-byte
+peaks. `_work` rows retain frontier peak and the completion discriminator (`0`
+exact, `1` approximate-policy-satisfied, `2` budget-exhausted, `3` cancelled,
+`4` deadline-exceeded). The output preamble's `schema_version=2` identifies
+these counter meanings.
 `turboquant_build_resources` reports peak owned scratch bytes and butterfly
 operations, while
 `source_closure_bytes` reports the authoritative map closure and
@@ -134,6 +137,17 @@ One harness invocation selects a single matrix configuration with
 metric text, malformed numeric values, duplicate/non-positive worker counts,
 and unsupported TurboQuant configurations fail instead of being silently
 normalized.
+
+Set `PROLLY_PROXIMITY_BENCH_ASYNC_QUANTIZERS=1` with the `async-store` feature
+to add `turboquant_search_async`, `pq_search_async`, their percentile/work
+companions, and environment-specific recall rows. These searches execute the
+native async/batched engine through `SyncStoreAsAsync`, preserving the selected
+memory or file store. Warm samples share one authenticated `SearchIo` runtime
+after an untimed warmup. Cold samples create a new runtime/namespace and reload
+the descriptor and sidecar metadata inside each timed sample; their physical
+byte count therefore includes source, manifest, and code-tree reads. Quantizer
+build rows are still the synchronous parallel builders, so a retained run must
+not label those timings as async build evidence.
 
 Cold-cache quantizer samples clear the authoritative map caches and use a new
 `SearchIo` runtime/namespace for each timed query, so descriptor, manifest,

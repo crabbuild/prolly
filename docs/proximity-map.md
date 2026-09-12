@@ -487,9 +487,10 @@ claim Dolt byte compatibility.
 The harness covers dimensions 8/128/768/1536, build worker counts, localized
 mutation, exact/adaptive/SQ8 search, scalar/SIMD, TurboQuant/PQ/HNSW/composite,
 overflow, content graph copy/GC, and proofs. TurboQuant rows report build work,
-encoded bytes, scalar/SIMD search work, rerank count, recall, and persisted
-mean-squared error. Async parity is exercised by the all-feature test suite and
-benchmark compilation.
+encoded bytes, scalar/SIMD search work, quantized and exact evaluation counts,
+recall, and persisted mean-squared error. Async parity is exercised by the
+all-feature test suite and can be measured through the benchmark's native
+async/batched search path.
 
 ```sh
 PROLLY_PROXIMITY_BENCH_RECORDS=10000 \
@@ -530,6 +531,13 @@ Use `PROLLY_PROXIMITY_BENCH_STORE=file` with an existing
 harness creates isolated child stores and removes its uniquely named run
 directory on ordinary exit; a process interruption may leave that child for
 diagnosis.
+
+Set `PROLLY_PROXIMITY_BENCH_ASYNC_QUANTIZERS=1` to add async TurboQuant and PQ
+search, percentile/work, and recall rows. Warm measurements reuse one
+authenticated runtime after an untimed warmup; combining it with
+`PROLLY_PROXIMITY_BENCH_RESET_SEARCH_CACHE=1` reloads the source and sidecar in
+a fresh runtime inside every timed sample. This option measures async/batched
+search only; the emitted quantizer build timings remain synchronous.
 
 Benchmark rows are machine-specific evidence, not performance guarantees. See
 [`proximity-map-completion-audit.md`](proximity-map-completion-audit.md)
