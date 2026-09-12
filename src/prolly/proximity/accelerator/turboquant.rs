@@ -1880,7 +1880,7 @@ mod tests {
     }
 
     #[test]
-    fn malformed_manifest_and_code_fuzz_smoke_is_bounded() {
+    fn turboquant_codec_transform_and_scorer_fuzz_smoke_is_bounded() {
         let mut state = 0x4d59_5df4_d0f3_3173u64;
         let mut next = || {
             state ^= state << 13;
@@ -1888,14 +1888,64 @@ mod tests {
             state ^= state << 17;
             state
         };
-        for _ in 0..10_000 {
+        for case in 0..10_000 {
             let length = next() as usize % 1025;
             let bytes = (0..length).map(|_| next() as u8).collect::<Vec<_>>();
             let _ = Manifest::decode(&bytes);
             for bit_width in [2, 3, 4] {
                 let _ = validate_code_value(&bytes, 8 + (next() as usize % 257), bit_width);
             }
+
+            if case < 512 {
+                let dimensions = 8 * (1 + next() as usize % 32);
+                let plan = StructuredRotation::derive(dimensions, next()).unwrap();
+                let input = (0..dimensions)
+                    .map(|_| (next() as i16 as f64) / 4096.0)
+                    .collect::<Vec<_>>();
+                let transformed = plan.apply(&input);
+                assert_eq!(transformed.len(), dimensions);
+                assert!(transformed.iter().all(|value| value.is_finite()));
+                let norm_squared = input.iter().fold(0.0, |sum, value| sum + value * value);
+
+                for bit_width in [2, 3, 4] {
+                    let mut encoded = ((next() % 2_048 + 1) as f64 / 17.0).to_le_bytes().to_vec();
+                    encoded.extend(
+                        (0..packed_len(dimensions, bit_width).unwrap()).map(|_| next() as u8),
+                    );
+                    assert!(validate_code_value(&encoded, dimensions, bit_width).is_ok());
+                    for index in 0..dimensions {
+                        assert!(unpack_code(&encoded[8..], index, bit_width) < 1 << bit_width);
+                    }
+
+                    let prepared = TurboQuantPreparedQuery::new(
+                        transformed.clone(),
+                        norm_squared,
+                        bit_width,
+                        QueryKernel::ScalarDeterministic,
+                    );
+                    for metric in [
+                        DistanceMetric::L2Squared,
+                        DistanceMetric::Cosine,
+                        DistanceMetric::InnerProduct,
+                    ] {
+                        let score = score_code_value(
+                            &encoded,
+                            &prepared,
+                            metric,
+                            dimensions,
+                            bit_width,
+                            QueryKernel::ScalarDeterministic,
+                        )
+                        .unwrap();
+                        assert!(score.is_finite());
+                    }
+                }
+            }
         }
+        let maximum_plan = StructuredRotation::derive(MAX_DIMENSIONS as usize, u64::MAX).unwrap();
+        assert_eq!(maximum_plan.dimensions(), MAX_DIMENSIONS as usize);
+        assert!(maximum_plan.operations_per_vector() > 0);
+        assert!(maximum_plan.owned_bytes() > 0);
         assert_eq!(packed_len(MAX_DIMENSIONS as usize, 4).unwrap(), 8192);
         assert!(packed_len(usize::MAX, 4).is_err());
         assert!(packed_len(usize::MAX / 2 + 1, 3).is_err());

@@ -42,6 +42,7 @@ not replace the production-scale recall and performance matrix below.
 | Cross-target fixture execution on x86_64, aarch64, and browser WASM | [`proximity-turboquant-cross-target.md`](proximity-turboquant-cross-target.md), Linux CI, local aarch64 suite, browser-WASM canonical CID test | Implemented |
 | Dense paper-reference distortion and recall comparison | [`proximity-turboquant-dense-reference.md`](proximity-turboquant-dense-reference.md), retained raw JSON, reproducible generator | Implemented |
 | Complete adversarial fault injection at every read/write boundary | [`proximity-turboquant-fault-injection.md`](proximity-turboquant-fault-injection.md), ordinal cold-read/publication tests | Implemented |
+| Bounded fuzz smoke | TurboQuant unit and proof tests cover manifest decoding, packed-bit validation/unpacking, transform derivation through the maximum supported dimension, all-metric code scoring, and randomized proof-transcript replay mutations | Implemented |
 
 ## Benchmark protocol
 

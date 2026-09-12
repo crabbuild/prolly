@@ -877,6 +877,17 @@ fn turboquant_proof_replays_the_committed_plan_and_closure() {
         assert!(candidate.verify(&ContentGraphLimits::default()).is_err());
     };
 
+    let mut fuzz_state = 0xa076_1d64_78bd_642fu64;
+    for _ in 0..64 {
+        fuzz_state ^= fuzz_state << 13;
+        fuzz_state ^= fuzz_state >> 7;
+        fuzz_state ^= fuzz_state << 17;
+        let mut candidate = proof.clone();
+        let event = fuzz_state as usize % candidate.events.len();
+        candidate.events.remove(event);
+        assert_rejected(&candidate);
+    }
+
     let mut version = proof.clone();
     version.format_version = version.format_version.wrapping_add(1);
     assert_rejected(&version);

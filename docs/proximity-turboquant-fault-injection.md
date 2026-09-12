@@ -45,6 +45,11 @@ cargo test --test proximity_turboquant \
   turboquant_fails_closed_at_every_ -- --nocapture
 ```
 
-Malformed bytes, missing objects, CID mismatches, noncanonical padding/norms,
-and bounded arbitrary-byte fuzz smoke are covered separately by the same test
-module, the TurboQuant unit tests, and `tests/proximity_wire.rs`.
+Malformed bytes, missing objects, CID mismatches, and noncanonical
+padding/norms are covered separately by the same test module and
+`tests/proximity_wire.rs`. The deterministic bounded fuzz smoke in the
+TurboQuant unit and proof tests exercises arbitrary manifest bytes, arbitrary
+packed code bits and lengths, supported and maximum-size transform derivation,
+code scoring for every metric, and randomized proof-transcript replay
+mutations. Every case must finish without panic or unbounded allocation, and
+every altered proof transcript must fail closed.
