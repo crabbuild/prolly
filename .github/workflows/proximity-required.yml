@@ -29,7 +29,12 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      # Rust 1.98 promoted this MSRV-incompatible migration to warn-by-default.
+      # Keep the repository's reviewed chunks_exact parsing until it is
+      # migrated independently of the proximity release.
+      - run: >-
+          cargo clippy --all-targets --all-features --
+          -D warnings -A clippy::chunks-exact-to-as-chunks
       - run: cargo test --all-features --test proximity_api --test proximity_metrics
       - run: >-
           cargo test --all-features
