@@ -676,6 +676,7 @@ fn bench_accelerators<S>(
             request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
             let mut result = None;
             let mut samples = Vec::with_capacity(options.repeats);
+            let mut physical_reads = 0;
             let warm_io = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()));
             if !options.reset_cache {
                 map.search_with(&accelerators, &warm_io, request.clone())
@@ -691,16 +692,12 @@ fn bench_accelerators<S>(
                 } else {
                     None
                 };
+                let io = cold_io.as_ref().unwrap_or(&warm_io);
+                let reads_before = io.physical_reads();
                 let started = Instant::now();
-                result = Some(
-                    map.search_with(
-                        &accelerators,
-                        cold_io.as_ref().unwrap_or(&warm_io),
-                        request.clone(),
-                    )
-                    .unwrap(),
-                );
+                result = Some(map.search_with(&accelerators, io, request.clone()).unwrap());
                 samples.push(started.elapsed());
+                physical_reads = io.physical_reads().saturating_sub(reads_before);
             }
             let result = result.expect("search repeats is positive");
             let latency = LatencySummary::from_samples(samples);
@@ -735,6 +732,22 @@ fn bench_accelerators<S>(
                 Duration::ZERO,
                 result.stats.frontier_peak,
                 completion_id(result.completion),
+            );
+            row(
+                &format!("{name}_io"),
+                dimensions,
+                0,
+                Duration::ZERO,
+                result.stats.nodes_read,
+                physical_reads,
+            );
+            row(
+                &format!("{name}_rerank"),
+                dimensions,
+                0,
+                Duration::ZERO,
+                result.stats.reranked_candidates,
+                result.stats.committed_bytes,
             );
             if kernel == QueryKernel::ScalarDeterministic {
                 println!(
@@ -855,6 +868,7 @@ fn bench_accelerators<S>(
     request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
     let mut result = None;
     let mut samples = Vec::with_capacity(options.repeats);
+    let mut physical_reads = 0;
     let warm_io = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()));
     if !options.reset_cache {
         map.search_with(&accelerators, &warm_io, request.clone())
@@ -870,16 +884,12 @@ fn bench_accelerators<S>(
         } else {
             None
         };
+        let io = cold_io.as_ref().unwrap_or(&warm_io);
+        let reads_before = io.physical_reads();
         let started = Instant::now();
-        result = Some(
-            map.search_with(
-                &accelerators,
-                cold_io.as_ref().unwrap_or(&warm_io),
-                request.clone(),
-            )
-            .unwrap(),
-        );
+        result = Some(map.search_with(&accelerators, io, request.clone()).unwrap());
         samples.push(started.elapsed());
+        physical_reads = io.physical_reads().saturating_sub(reads_before);
     }
     let result = result.expect("search repeats is positive");
     let latency = LatencySummary::from_samples(samples);
@@ -914,6 +924,22 @@ fn bench_accelerators<S>(
         Duration::ZERO,
         result.stats.frontier_peak,
         completion_id(result.completion),
+    );
+    row(
+        "pq_search_io",
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.nodes_read,
+        physical_reads,
+    );
+    row(
+        "pq_search_rerank",
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.reranked_candidates,
+        result.stats.committed_bytes,
     );
     println!(
         "pq_recall,{dimensions},0,0,{:.6},0",
@@ -1205,9 +1231,10 @@ fn bench_async_turboquant<S>(
     request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
     let descriptor = map.tree().descriptor.clone();
 
-    let (result, latency) = if options.reset_cache {
+    let (result, latency, physical_reads) = if options.reset_cache {
         let mut result = None;
         let mut samples = Vec::with_capacity(options.repeats);
+        let mut physical_reads = 0;
         for _ in 0..options.repeats {
             map.clear_content_cache().unwrap();
             let io = SearchIo::new(
@@ -1215,6 +1242,7 @@ fn bench_async_turboquant<S>(
                 Arc::new(SearchRuntime::default()),
             );
             let before = io.physical_bytes_read();
+            let reads_before = io.physical_reads();
             let started = Instant::now();
             let (async_map, turboquant) = block_on(async {
                 let async_map =
@@ -1233,12 +1261,14 @@ fn bench_async_turboquant<S>(
             ))
             .unwrap();
             sample.stats.physical_bytes_read = io.physical_bytes_read().saturating_sub(before);
+            physical_reads = io.physical_reads().saturating_sub(reads_before);
             samples.push(started.elapsed());
             result = Some(sample);
         }
         (
             result.expect("search repeats is positive"),
             LatencySummary::from_samples(samples),
+            physical_reads,
         )
     } else {
         let io = SearchIo::new(
@@ -1263,7 +1293,9 @@ fn bench_async_turboquant<S>(
         .unwrap();
         let mut result = None;
         let mut samples = Vec::with_capacity(options.repeats);
+        let mut physical_reads = 0;
         for _ in 0..options.repeats {
+            let reads_before = io.physical_reads();
             let started = Instant::now();
             result = Some(
                 block_on(async_map.search_with_accelerators(
@@ -1274,14 +1306,22 @@ fn bench_async_turboquant<S>(
                 .unwrap(),
             );
             samples.push(started.elapsed());
+            physical_reads = io.physical_reads().saturating_sub(reads_before);
         }
         (
             result.expect("search repeats is positive"),
             LatencySummary::from_samples(samples),
+            physical_reads,
         )
     };
 
-    emit_quantized_search_rows("turboquant_search_async", dimensions, &result, latency);
+    emit_quantized_search_rows(
+        "turboquant_search_async",
+        dimensions,
+        &result,
+        latency,
+        physical_reads,
+    );
     println!(
         "turboquant_recall_async,{dimensions},0,0,{:.6},0",
         recall_at_k(
@@ -1317,9 +1357,10 @@ fn bench_async_pq<S>(
     request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
     let descriptor = map.tree().descriptor.clone();
 
-    let (result, latency) = if options.reset_cache {
+    let (result, latency, physical_reads) = if options.reset_cache {
         let mut result = None;
         let mut samples = Vec::with_capacity(options.repeats);
+        let mut physical_reads = 0;
         for _ in 0..options.repeats {
             map.clear_content_cache().unwrap();
             let io = SearchIo::new(
@@ -1327,6 +1368,7 @@ fn bench_async_pq<S>(
                 Arc::new(SearchRuntime::default()),
             );
             let before = io.physical_bytes_read();
+            let reads_before = io.physical_reads();
             let started = Instant::now();
             let (async_map, pq) = block_on(async {
                 let async_map =
@@ -1345,12 +1387,14 @@ fn bench_async_pq<S>(
             ))
             .unwrap();
             sample.stats.physical_bytes_read = io.physical_bytes_read().saturating_sub(before);
+            physical_reads = io.physical_reads().saturating_sub(reads_before);
             samples.push(started.elapsed());
             result = Some(sample);
         }
         (
             result.expect("search repeats is positive"),
             LatencySummary::from_samples(samples),
+            physical_reads,
         )
     } else {
         let io = SearchIo::new(
@@ -1375,7 +1419,9 @@ fn bench_async_pq<S>(
         .unwrap();
         let mut result = None;
         let mut samples = Vec::with_capacity(options.repeats);
+        let mut physical_reads = 0;
         for _ in 0..options.repeats {
+            let reads_before = io.physical_reads();
             let started = Instant::now();
             result = Some(
                 block_on(async_map.search_with_accelerators(
@@ -1386,14 +1432,22 @@ fn bench_async_pq<S>(
                 .unwrap(),
             );
             samples.push(started.elapsed());
+            physical_reads = io.physical_reads().saturating_sub(reads_before);
         }
         (
             result.expect("search repeats is positive"),
             LatencySummary::from_samples(samples),
+            physical_reads,
         )
     };
 
-    emit_quantized_search_rows("pq_search_async", dimensions, &result, latency);
+    emit_quantized_search_rows(
+        "pq_search_async",
+        dimensions,
+        &result,
+        latency,
+        physical_reads,
+    );
     println!(
         "pq_recall_async,{dimensions},0,0,{:.6},0",
         recall_at_k(
@@ -1412,6 +1466,7 @@ fn emit_quantized_search_rows(
     dimensions: usize,
     result: &prolly::SearchResult,
     latency: LatencySummary,
+    physical_reads: usize,
 ) {
     row(
         name,
@@ -1444,6 +1499,22 @@ fn emit_quantized_search_rows(
         Duration::ZERO,
         result.stats.frontier_peak,
         completion_id(result.completion),
+    );
+    row(
+        &format!("{name}_io"),
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.nodes_read,
+        physical_reads,
+    );
+    row(
+        &format!("{name}_rerank"),
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.reranked_candidates,
+        result.stats.committed_bytes,
     );
 }
 

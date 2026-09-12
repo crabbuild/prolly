@@ -42,11 +42,13 @@ operation,dimensions,threads,micros,metric_a,metric_b
 For repeated accelerator searches, the base row's `micros` value is the
 sample median and `_p95`/`_p99` companion rows contain nearest-rank tail
 latency. Companion counters expose logical/physical read bytes and candidate
-retention peaks. Dedicated resource and sidecar rows record owned build bytes,
+retention peaks. Quantized `_io` rows expose logical nodes and actual store read
+operations; `_rerank` rows expose authoritative rerank counts and committed
+logical bytes. Dedicated resource and sidecar rows record owned build bytes,
 transform work, authoritative source-closure bytes, derived accelerator bytes,
-and encoded payload counts. Accelerator sidecar totals exclude content-addressed
-source objects referenced by the manifest; companion rows split manifest bytes
-from code-tree bytes.
+and encoded payload counts. Accelerator sidecar totals exclude
+content-addressed source objects referenced by the manifest; companion rows
+split manifest bytes from code-tree bytes.
 
 Default dimensions are 8, 128, 768, and 1536; build rows use 1, 2, and 4
 workers. The harness also records mutation locality, exact/adaptive/SQ8,

@@ -105,7 +105,9 @@ exact distance evaluations in `metric_a` and `metric_b`; `_p95` records logical
 and physical bytes read; `_p99` records candidate-handle and retained-byte
 peaks. `_work` rows retain frontier peak and the completion discriminator (`0`
 exact, `1` approximate-policy-satisfied, `2` budget-exhausted, `3` cancelled,
-`4` deadline-exceeded). The output preamble's `schema_version=2` identifies
+`4` deadline-exceeded). `_io` records logical nodes consumed and actual store
+read operations, while `_rerank` records authoritative candidates reranked and
+committed logical bytes. The output preamble's `schema_version=2` identifies
 these counter meanings.
 `turboquant_build_resources` reports peak owned scratch bytes and butterfly
 operations, while
