@@ -1031,6 +1031,7 @@ where
         index.dimensions,
         &transform_plan,
         index.config.bit_width,
+        request.kernel,
     )?;
     let code_store =
         store.for_kind(crate::prolly::content_graph::ContentObjectKind::TurboQuantization);

@@ -700,8 +700,13 @@ where
         }
         self.validate_binding(map, expected_source)?;
         let query = prepare_vector(self.metric, request.query, self.dimensions)?;
-        let prepared_query =
-            prepare_query_from_prepared(&query, &self.plan, self.dimensions, self.config.bit_width);
+        let prepared_query = prepare_query_from_prepared(
+            &query,
+            &self.plan,
+            self.dimensions,
+            self.config.bit_width,
+            request.kernel,
+        );
         let filter = PreparedFilter::new(request.filter.clone(), &map.tree().directory)?;
         let mut stats = ProximitySearchStats::default();
         let mut approximate = BinaryHeap::<QuantizedRanked>::new();
@@ -1293,15 +1298,20 @@ pub(crate) struct TurboQuantPreparedQuery {
 }
 
 impl TurboQuantPreparedQuery {
-    fn new(weighted: Vec<f64>, norm_squared: f64, bit_width: u8) -> Self {
-        let codebook = codebook(bit_width);
+    fn new(weighted: Vec<f64>, norm_squared: f64, bit_width: u8, kernel: QueryKernel) -> Self {
         let centroid_count = 1usize << bit_width;
-        let mut weighted_centroids = Vec::with_capacity(weighted.len() * centroid_count);
-        for weight in &weighted {
-            for code in 0..centroid_count {
-                weighted_centroids.push(*weight * codebook.centroid(code as u8));
+        let weighted_centroids = if matches!(kernel, QueryKernel::SimdDeterministic) {
+            Vec::new()
+        } else {
+            let codebook = codebook(bit_width);
+            let mut products = Vec::with_capacity(weighted.len() * centroid_count);
+            for weight in &weighted {
+                for code in 0..centroid_count {
+                    products.push(*weight * codebook.centroid(code as u8));
+                }
             }
-        }
+            products
+        };
         Self {
             weighted,
             weighted_centroids,
@@ -1317,6 +1327,7 @@ pub(crate) fn prepare_query_with_plan(
     dimensions: u32,
     plan: &StructuredRotation,
     bit_width: u8,
+    kernel: QueryKernel,
 ) -> Result<(Vec<f32>, TurboQuantPreparedQuery), Error> {
     if plan.dimensions != dimensions as usize {
         return Err(invalid_search(
@@ -1324,7 +1335,7 @@ pub(crate) fn prepare_query_with_plan(
         ));
     }
     let query = prepare_vector(metric, query, dimensions)?;
-    let prepared = prepare_query_from_prepared(&query, plan, dimensions, bit_width);
+    let prepared = prepare_query_from_prepared(&query, plan, dimensions, bit_width, kernel);
     Ok((query, prepared))
 }
 
@@ -1333,6 +1344,7 @@ fn prepare_query_from_prepared(
     plan: &StructuredRotation,
     dimensions: u32,
     bit_width: u8,
+    kernel: QueryKernel,
 ) -> TurboQuantPreparedQuery {
     let query_f64: Vec<_> = query.iter().map(|value| f64::from(*value)).collect();
     let transformed = plan.apply(&query_f64);
@@ -1344,6 +1356,7 @@ fn prepare_query_from_prepared(
             .collect(),
         query_f64.iter().fold(0.0, |sum, value| sum + value * value),
         bit_width,
+        kernel,
     )
 }
 
@@ -1760,12 +1773,35 @@ mod tests {
     fn scalar_and_simd_approximate_scores_are_bit_identical() {
         for dimensions in [8usize, 24, 128, 200, 768] {
             for bit_width in [2, 3, 4] {
-                let prepared = TurboQuantPreparedQuery::new(
-                    (0..dimensions)
-                        .map(|index| ((index as f64 + 0.25) * 0.03125).sin())
-                        .collect(),
+                let weighted = (0..dimensions)
+                    .map(|index| ((index as f64 + 0.25) * 0.03125).sin())
+                    .collect::<Vec<_>>();
+                let scalar_prepared = TurboQuantPreparedQuery::new(
+                    weighted.clone(),
                     17.25,
                     bit_width,
+                    QueryKernel::ScalarDeterministic,
+                );
+                let simd_prepared = TurboQuantPreparedQuery::new(
+                    weighted.clone(),
+                    17.25,
+                    bit_width,
+                    QueryKernel::SimdDeterministic,
+                );
+                let automatic_prepared = TurboQuantPreparedQuery::new(
+                    weighted,
+                    17.25,
+                    bit_width,
+                    QueryKernel::AutoDeterministic,
+                );
+                assert_eq!(
+                    scalar_prepared.weighted_centroids.len(),
+                    dimensions * (1usize << bit_width)
+                );
+                assert!(simd_prepared.weighted_centroids.is_empty());
+                assert_eq!(
+                    automatic_prepared.weighted_centroids.len(),
+                    dimensions * (1usize << bit_width)
                 );
                 let maximum = 1u8 << bit_width;
                 let codes: Vec<_> = (0..dimensions)
@@ -1780,7 +1816,7 @@ mod tests {
                 ] {
                     let scalar = score_code_value(
                         &encoded,
-                        &prepared,
+                        &scalar_prepared,
                         metric,
                         dimensions,
                         bit_width,
@@ -1789,7 +1825,7 @@ mod tests {
                     .unwrap();
                     let simd = score_code_value(
                         &encoded,
-                        &prepared,
+                        &simd_prepared,
                         metric,
                         dimensions,
                         bit_width,
@@ -1798,7 +1834,7 @@ mod tests {
                     .unwrap();
                     let automatic = score_code_value(
                         &encoded,
-                        &prepared,
+                        &automatic_prepared,
                         metric,
                         dimensions,
                         bit_width,
@@ -1822,7 +1858,12 @@ mod tests {
 
     #[test]
     fn l2_approximate_score_clamps_negative_estimates_to_positive_zero() {
-        let prepared = TurboQuantPreparedQuery::new(vec![1_000.0; 8], 1.0, 2);
+        let prepared = TurboQuantPreparedQuery::new(
+            vec![1_000.0; 8],
+            1.0,
+            2,
+            QueryKernel::ScalarDeterministic,
+        );
         let codes = vec![3; 8];
         let mut encoded = 1.0f64.to_le_bytes().to_vec();
         encoded.extend_from_slice(&pack_codes(&codes, 2).unwrap());

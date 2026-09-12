@@ -124,9 +124,12 @@ The scalar and automatic TurboQuant scan kernels precompute the finite
 query-by-codebook product table once per search. Candidate scoring then decodes
 packed codes and performs the same coordinate-ordered scalar reduction without
 repeating a floating-point multiply for every candidate component. The
-explicit SIMD kernel remains an independent conformance path; tests require
-all three kernels to return bit-identical scores, plans, neighbors, and logical
-statistics.
+explicit SIMD kernel remains an independent conformance path and reconstructs
+only one bounded coordinate chunk at a time. Its query preparation therefore
+does not allocate the scalar product table, avoiding
+`dimensions * 2^bit_width * 8` unused bytes per query (2 MiB at the maximum
+16,384-dimension four-bit configuration). Tests require all three kernels to
+return bit-identical scores, plans, neighbors, and logical statistics.
 
 Production qualification must retain raw outputs under
 `performance-results/proximity-turboquant/` and cover the full matrix in the
