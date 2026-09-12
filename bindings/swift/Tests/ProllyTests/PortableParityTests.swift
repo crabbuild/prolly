@@ -273,7 +273,6 @@ final class PortableParityTests: XCTestCase {
                 .composite
             )
             composite.close()
-            current.close()
             index.close()
             let loaded = try proximity.loadTurboquant(manifest)
             XCTAssertEqual(loaded.manifest, manifest)
