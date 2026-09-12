@@ -8,7 +8,7 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 
 | # | Goal | Implementation evidence | Test evidence | Benchmark row |
 | ---: | --- | --- | --- | --- |
-| 1 | Canonical localized exact-directory mutation | `src/prolly/canonical_splice.rs`, `proximity/mutation/`, `map.rs` | `tests/canonical_splice.rs`, `tests/proximity_mutation.rs` | `localized_mutation` (`nodes_written`, `nodes_reused`) |
+| 1 | Canonical localized exact-directory mutation | `src/prolly/splice.rs`, `src/prolly/proximity/mutation.rs`, `src/prolly/proximity/map.rs` | `tests/splice.rs`, `tests/proximity_mutation.rs` | `localized_mutation` (`nodes_written`, `nodes_reused`) |
 | 2 | Deterministic global best-first search | `proximity/search/engine.rs`, `map.rs` | `tests/proximity_search.rs` | `search_exact_scalar`, `search_adaptive_sq8` |
 | 3 | Conservative compositional bounds | `proximity/distance/canonical.rs`, `storage/node.rs`, `storage/overflow.rs` | `tests/proximity_metrics.rs`, `tests/proximity_overflow.rs`, verifier corruption tests | exact-search and proof rows |
 | 4 | Range/prefix/eligible/secondary filters | `proximity/search/filter.rs` | `tests/proximity_search.rs`, `tests/proximity_proofs.rs` | prefix filter is applied to all search rows |
@@ -21,7 +21,7 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 | 11 | Typed traversal, sync, manifests, GC, proofs | `content_graph/`, `proximity/proof/` | `tests/proximity_content_graph.rs`, `tests/proximity_proofs.rs` | `content_graph_copy`, `content_graph_gc_plan`, `search_proof_*` |
 | 12 | Overflow hierarchies and external vectors | `proximity/storage/{overflow,vector}.rs` | `tests/proximity_overflow.rs` | all rows use bounded overflow and externalize vectors above 4 KiB |
 | 13 | Validated source-bound HNSW | `proximity/accelerator/hnsw/` | `tests/proximity_hnsw.rs`, `tests/proximity_proofs.rs` | `hnsw_build`, `hnsw_search` |
-| 14 | Native source-bound TurboQuant-MSE routing | `proximity/accelerator/{turboquant,quantized,async}.rs`, `proximity/distance/simd.rs` | `tests/proximity_turboquant.rs`, including bounded native async direct/composite construction and cancellation at every full-scan/direct-lookup/rerank store-read boundary, `tests/proximity_wire.rs`, async/proof/content/composite suites | `turboquant_build`, `turboquant_search_scalar`, `turboquant_search_simd`, `turboquant_recall` |
+| 14 | Native source-bound TurboQuant-MSE routing | `proximity/accelerator/{turboquant,quantized,async}.rs`, `proximity/distance/simd.rs`, `proximity/search/runtime.rs` | `tests/proximity_turboquant.rs`, including bounded native async direct/composite construction and cancellation at every full-scan/direct-lookup/rerank store-read boundary, runtime tests proving that only cache-authenticated reads bypass duplicate CID hashing and corrupt fallbacks remain unverified, `tests/proximity_wire.rs`, async/proof/content/composite suites | `turboquant_build`, `turboquant_search_scalar`, `turboquant_search_simd`, `turboquant_recall` |
 
 The TurboQuant binding deliverable is also mapped directly: Python, Go,
 Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM each expose and
@@ -144,7 +144,7 @@ The focused evidence suites are:
 
 ```sh
 cargo test --test proximity_api --test proximity_metrics --test proximity_wire
-cargo test --test canonical_splice --test proximity_overflow --test proximity_mutation
+cargo test --test splice --test proximity_overflow --test proximity_mutation
 cargo test --test proximity_search --test proximity_parallel --test proximity_simd
 cargo test --all-features --test proximity_async
 cargo test --test proximity_quantization --test proximity_hnsw

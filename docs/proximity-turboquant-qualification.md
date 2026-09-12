@@ -288,7 +288,7 @@ The local release-command audit on 2026-09-12 records each gate separately:
 | `cargo fmt --all -- --check` and `git diff --check` | Passed |
 | warnings-denied all-target/all-feature Clippy | Passed |
 | Rust 1.89 all-target/all-feature check | Passed; repository-wide unfulfilled-lint-expectation warnings remain non-fatal under that compiler |
-| all-feature tests | Passed: 542 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
+| all-feature tests | Passed: 544 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
 | all-feature doctests | Passed: 74/74 |
 | all-feature benchmark compilation | Passed |
 | browser-WASM build, typecheck, and package tests | Passed: 37/37, including canonical TurboQuant wire parity |

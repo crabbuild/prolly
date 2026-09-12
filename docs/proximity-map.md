@@ -315,6 +315,14 @@ from the remote adapter, then publishes the authenticated closure in bounded
 provider batches. The planner and plan summaries are identical to
 `ProximityMap::search_with`; only I/O scheduling and physical statistics differ.
 
+Search-runtime cache admission authenticates each CID and validates its codec
+before retaining immutable bytes. That successful per-read validation is
+carried into ordered-tree decoding, so repeated warm searches do not hash the
+same authoritative leaf bytes a second time. The fast path is not a store-wide
+trust switch: ordinary stores and every runtime fallback return unverified
+reads and therefore retain the engine's CID check. Corrupt or missing content
+still fails closed and never triggers backend execution fallback.
+
 ## Composite accelerators and catalogs
 
 `CompositeAccelerator` avoids rebuilding a large HNSW, PQ, or TurboQuant
