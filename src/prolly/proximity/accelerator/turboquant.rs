@@ -1263,7 +1263,11 @@ fn fill_centroids(
     }
 }
 
-fn validate_code_value(bytes: &[u8], dimensions: usize, bit_width: u8) -> Result<f64, Error> {
+pub(crate) fn validate_code_value(
+    bytes: &[u8],
+    dimensions: usize,
+    bit_width: u8,
+) -> Result<f64, Error> {
     let expected = 8usize
         .checked_add(packed_len(dimensions, bit_width)?)
         .ok_or_else(|| invalid_object("TurboQuant code length overflow"))?;
@@ -1593,34 +1597,43 @@ pub(crate) fn turboquant_code_tree_config() -> Config {
 }
 
 pub(crate) fn validate_code_tree_root(bytes: &[u8], expected_count: u64) -> Result<(), Error> {
-    let config = turboquant_code_tree_config();
-    let hard_max = usize::try_from(config.format.chunking.hard_max_node_bytes)
-        .map_err(|_| invalid_object("TurboQuant code-tree hard byte limit exceeds usize"))?;
-    if bytes.len() > hard_max {
-        return Err(invalid_object(
-            "TurboQuant code-tree root exceeds its hard byte limit",
-        ));
-    }
-    let root = Node::from_bytes_with_format(bytes, &config.format)
-        .map_err(|_| invalid_object("malformed TurboQuant code-tree root"))?;
-    root.validate()
-        .map_err(|_| invalid_object("malformed TurboQuant code-tree root"))?;
-    let actual_count = if root.leaf {
-        u64::try_from(root.len())
-            .map_err(|_| invalid_object("TurboQuant code-tree root count exceeds u64"))?
-    } else {
-        root.child_counts.iter().try_fold(0u64, |count, child| {
-            count
-                .checked_add(*child)
-                .ok_or_else(|| invalid_object("TurboQuant code-tree root count overflow"))
-        })?
-    };
+    let root = decode_code_tree_node(bytes)?;
+    let actual_count = code_tree_node_count(&root)?;
     if actual_count != expected_count {
         return Err(invalid_object(
             "TurboQuant code-tree root count disagrees with manifest",
         ));
     }
     Ok(())
+}
+
+pub(crate) fn decode_code_tree_node(bytes: &[u8]) -> Result<Node, Error> {
+    let config = turboquant_code_tree_config();
+    let hard_max = usize::try_from(config.format.chunking.hard_max_node_bytes)
+        .map_err(|_| invalid_object("TurboQuant code-tree hard byte limit exceeds usize"))?;
+    if bytes.len() > hard_max {
+        return Err(invalid_object(
+            "TurboQuant code-tree node exceeds its hard byte limit",
+        ));
+    }
+    let node = Node::from_bytes_with_format(bytes, &config.format)
+        .map_err(|_| invalid_object("malformed TurboQuant code-tree node"))?;
+    node.validate()
+        .map_err(|_| invalid_object("malformed TurboQuant code-tree node"))?;
+    Ok(node)
+}
+
+pub(crate) fn code_tree_node_count(node: &Node) -> Result<u64, Error> {
+    if node.leaf {
+        u64::try_from(node.len())
+            .map_err(|_| invalid_object("TurboQuant code-tree node count exceeds u64"))
+    } else {
+        node.child_counts.iter().try_fold(0u64, |count, child| {
+            count
+                .checked_add(*child)
+                .ok_or_else(|| invalid_object("TurboQuant code-tree node count overflow"))
+        })
+    }
 }
 
 fn require_version(found: u8) -> Result<(), Error> {
@@ -1785,6 +1798,63 @@ mod tests {
             Err(error) => error,
         };
         assert_root_count_error(error);
+    }
+
+    #[test]
+    fn typed_walk_validates_turboquant_leaf_values_in_manifest_context() {
+        use crate::prolly::content_graph::{
+            walk_content_graph, ContentGraphLimits, ContentObjectKind, TypedContentRoot,
+        };
+        use crate::prolly::proximity::{ProximityConfig, ProximityRecord};
+
+        let store = Arc::new(MemStore::new());
+        let map = ProximityMap::build(
+            store.clone(),
+            ProximityConfig::new(8),
+            [ProximityRecord {
+                key: b"vector".to_vec(),
+                vector: vec![1.0; 8],
+                value: b"value".to_vec(),
+            }],
+        )
+        .unwrap();
+        let (index, _) = TurboQuantizer::build(
+            &map,
+            TurboQuantizationConfig::default(),
+            BuildParallelism::serial(),
+        )
+        .unwrap();
+        let manifest_bytes = Store::get(&store, index.manifest_cid().as_bytes())
+            .unwrap()
+            .unwrap();
+        let mut manifest = Manifest::decode(&manifest_bytes).unwrap();
+        let root_bytes = Store::get(&store, manifest.code_root.as_bytes())
+            .unwrap()
+            .unwrap();
+        let mut root = decode_code_tree_node(&root_bytes).unwrap();
+        assert!(root.leaf);
+        root.vals[0].pop();
+        let corrupt_root_bytes = root.to_bytes();
+        manifest.code_root = Cid::from_bytes(&corrupt_root_bytes);
+        Store::put(&store, manifest.code_root.as_bytes(), &corrupt_root_bytes).unwrap();
+        let corrupt_manifest_bytes = manifest.encode().unwrap();
+        let corrupt_manifest = Cid::from_bytes(&corrupt_manifest_bytes);
+        Store::put(&store, corrupt_manifest.as_bytes(), &corrupt_manifest_bytes).unwrap();
+
+        let error = walk_content_graph(
+            &store,
+            &[TypedContentRoot::new(
+                ContentObjectKind::TurboQuantization,
+                corrupt_manifest,
+            )],
+            &ContentGraphLimits::default(),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            Error::InvalidProximityObject { kind: "TurboQuant", reason }
+                if reason == "invalid TurboQuant code value length"
+        ));
     }
 
     #[test]
