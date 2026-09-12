@@ -288,7 +288,7 @@ The local release-command audit on 2026-09-12 records each gate separately:
 | `cargo fmt --all -- --check` and `git diff --check` | Passed |
 | warnings-denied all-target/all-feature Clippy | Passed |
 | Rust 1.89 all-target/all-feature check | Passed; repository-wide unfulfilled-lint-expectation warnings remain non-fatal under that compiler |
-| all-feature tests | Passed: 540 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
+| all-feature tests | Passed: 542 library tests plus every integration suite and 74 doc tests; one unrelated extended splice stress test remains explicitly ignored |
 | all-feature doctests | Passed: 74/74 |
 | all-feature benchmark compilation | Passed |
 | browser-WASM build, typecheck, and package tests | Passed: 37/37, including canonical TurboQuant wire parity |
@@ -314,3 +314,11 @@ report covers the next bounded tier across every supported dimension and
 metric. Its default-path recall rows pass, but its comparative timing and size
 results reinforce the decision to keep `Auto` disabled. The report explicitly
 does not close the remaining production-matrix gates.
+
+The retained
+[`proximity-turboquant-10k-qualification.md`](proximity-turboquant-10k-qualification.md)
+report adds one real schema-v2 10K × 768 squared-L2 default-path cell. It
+demonstrates 1.0 TurboQuant recall and materially faster construction than PQ,
+but its warm p95 search is 2.63× PQ and its sidecar is 22.79× larger. It is
+therefore evidence for the forced path and against enabling `Auto`, not a
+substitute for the remaining 45,359 production cells.
