@@ -4,7 +4,9 @@ use crate::prolly::error::Error;
 use crate::prolly::node::Node;
 use crate::prolly::proximity::accelerator::hnsw::storage::Manifest as HnswManifest;
 use crate::prolly::proximity::accelerator::pq::Manifest as PqManifest;
-use crate::prolly::proximity::accelerator::turboquant::Manifest as TurboQuantManifest;
+use crate::prolly::proximity::accelerator::turboquant::{
+    Manifest as TurboQuantManifest, StructuredRotation, STRUCTURED_ROTATION_ID,
+};
 use crate::prolly::proximity::accelerator::{
     catalog::Manifest as CatalogManifest, composite::Manifest as CompositeManifest,
 };
@@ -439,6 +441,19 @@ struct CacheEntry {
     generation: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct TransformPlanKey {
+    transform_id: u8,
+    dimensions: u32,
+    seed: u64,
+}
+
+struct TransformPlanEntry {
+    plan: Arc<StructuredRotation>,
+    bytes: usize,
+    generation: u64,
+}
+
 #[derive(Default)]
 struct RuntimeState {
     entries: HashMap<CacheKey, CacheEntry>,
@@ -450,6 +465,8 @@ struct RuntimeState {
     hnsw_bytes: usize,
     pq_bytes: usize,
     turboquant_bytes: usize,
+    transform_plans: HashMap<TransformPlanKey, TransformPlanEntry>,
+    transform_plan_access_log: VecDeque<(TransformPlanKey, u64)>,
     async_waiters: HashMap<CacheKey, Vec<Waker>>,
 }
 
@@ -482,10 +499,73 @@ impl SearchRuntime {
             .unwrap_or_else(|poison| poison.into_inner());
         state.entries.clear();
         state.access_log.clear();
+        state.transform_plans.clear();
+        state.transform_plan_access_log.clear();
         state.bytes = 0;
         state.authoritative_bytes = 0;
         state.hnsw_bytes = 0;
         state.pq_bytes = 0;
+        state.turboquant_bytes = 0;
+    }
+
+    pub(crate) fn turboquant_transform_plan(
+        &self,
+        dimensions: u32,
+        seed: u64,
+    ) -> Result<Arc<StructuredRotation>, Error> {
+        let key = TransformPlanKey {
+            transform_id: STRUCTURED_ROTATION_ID,
+            dimensions,
+            seed,
+        };
+        {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
+            let generation = state.generation.wrapping_add(1);
+            state.generation = generation;
+            if let Some(entry) = state.transform_plans.get_mut(&key) {
+                entry.generation = generation;
+                let plan = Arc::clone(&entry.plan);
+                state.transform_plan_access_log.push_back((key, generation));
+                compact_transform_plan_access_log(&mut state);
+                return Ok(plan);
+            }
+        }
+
+        let plan = Arc::new(StructuredRotation::derive(dimensions as usize, seed)?);
+        let bytes = plan.owned_bytes();
+        if bytes > self.policy.max_bytes || bytes > self.policy.turboquant_max_bytes {
+            return Ok(plan);
+        }
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let generation = state.generation.wrapping_add(1);
+        state.generation = generation;
+        if let Some(entry) = state.transform_plans.get_mut(&key) {
+            entry.generation = generation;
+            let cached = Arc::clone(&entry.plan);
+            state.transform_plan_access_log.push_back((key, generation));
+            compact_transform_plan_access_log(&mut state);
+            return Ok(cached);
+        }
+        state.bytes = state.bytes.saturating_add(bytes);
+        state.turboquant_bytes = state.turboquant_bytes.saturating_add(bytes);
+        state.transform_plans.insert(
+            key,
+            TransformPlanEntry {
+                plan: Arc::clone(&plan),
+                bytes,
+                generation,
+            },
+        );
+        state.transform_plan_access_log.push_back((key, generation));
+        self.evict_to_policy(&mut state, Partition::TurboQuant);
+        compact_transform_plan_access_log(&mut state);
+        Ok(plan)
     }
 
     pub(crate) fn load<S: Store, F>(
@@ -919,28 +999,34 @@ impl SearchRuntime {
             },
         );
         state.access_log.push_back((key, generation));
-        while state.entries.len() > self.policy.max_entries
+        self.evict_to_policy(state, partition);
+        compact_access_log(state);
+    }
+
+    fn evict_to_policy(&self, state: &mut RuntimeState, inserted_partition: Partition) {
+        while state
+            .entries
+            .len()
+            .saturating_add(state.transform_plans.len())
+            > self.policy.max_entries
             || state.bytes > self.policy.max_bytes
-            || partition_bytes(state, partition) > partition_limit
+            || partition_bytes(state, inserted_partition) > self.partition_limit(inserted_partition)
         {
-            let Some((candidate, candidate_generation)) = state.access_log.pop_front() else {
-                break;
-            };
-            if state
-                .entries
-                .get(&candidate)
-                .is_some_and(|entry| entry.generation == candidate_generation)
-            {
-                let removed = state
-                    .entries
-                    .remove(&candidate)
-                    .expect("checked cache entry");
-                state.bytes = state.bytes.saturating_sub(removed.bytes.len());
-                *partition_bytes_mut(state, removed.partition) =
-                    partition_bytes(state, removed.partition).saturating_sub(removed.bytes.len());
+            discard_stale_access_records(state);
+            let content_generation = state.access_log.front().map(|(_, generation)| *generation);
+            let plan_generation = state
+                .transform_plan_access_log
+                .front()
+                .map(|(_, generation)| *generation);
+            match (content_generation, plan_generation) {
+                (Some(content), Some(plan)) if plan < content => {
+                    evict_oldest_transform_plan(state);
+                }
+                (Some(_), _) => evict_oldest_content(state),
+                (None, Some(_)) => evict_oldest_transform_plan(state),
+                (None, None) => break,
             }
         }
-        compact_access_log(state);
     }
 
     fn partition_limit(&self, partition: Partition) -> usize {
@@ -1055,6 +1141,83 @@ fn compact_access_log(state: &mut RuntimeState) {
     state.access_log = current.into();
 }
 
+fn compact_transform_plan_access_log(state: &mut RuntimeState) {
+    let maximum = state
+        .transform_plans
+        .len()
+        .saturating_mul(8)
+        .saturating_add(128);
+    if state.transform_plan_access_log.len() <= maximum {
+        return;
+    }
+    let mut current = state
+        .transform_plans
+        .iter()
+        .map(|(key, entry)| (*key, entry.generation))
+        .collect::<Vec<_>>();
+    current.sort_by_key(|(_, generation)| *generation);
+    state.transform_plan_access_log = current.into();
+}
+
+fn discard_stale_access_records(state: &mut RuntimeState) {
+    while state.access_log.front().is_some_and(|(key, generation)| {
+        state
+            .entries
+            .get(key)
+            .is_none_or(|entry| entry.generation != *generation)
+    }) {
+        state.access_log.pop_front();
+    }
+    while state
+        .transform_plan_access_log
+        .front()
+        .is_some_and(|(key, generation)| {
+            state
+                .transform_plans
+                .get(key)
+                .is_none_or(|entry| entry.generation != *generation)
+        })
+    {
+        state.transform_plan_access_log.pop_front();
+    }
+}
+
+fn evict_oldest_content(state: &mut RuntimeState) {
+    let Some((key, generation)) = state.access_log.pop_front() else {
+        return;
+    };
+    if state
+        .entries
+        .get(&key)
+        .is_none_or(|entry| entry.generation != generation)
+    {
+        return;
+    }
+    let removed = state.entries.remove(&key).expect("checked cache entry");
+    state.bytes = state.bytes.saturating_sub(removed.bytes.len());
+    *partition_bytes_mut(state, removed.partition) =
+        partition_bytes(state, removed.partition).saturating_sub(removed.bytes.len());
+}
+
+fn evict_oldest_transform_plan(state: &mut RuntimeState) {
+    let Some((key, generation)) = state.transform_plan_access_log.pop_front() else {
+        return;
+    };
+    if state
+        .transform_plans
+        .get(&key)
+        .is_none_or(|entry| entry.generation != generation)
+    {
+        return;
+    }
+    let removed = state
+        .transform_plans
+        .remove(&key)
+        .expect("checked transform plan entry");
+    state.bytes = state.bytes.saturating_sub(removed.bytes);
+    state.turboquant_bytes = state.turboquant_bytes.saturating_sub(removed.bytes);
+}
+
 fn validate_cached_object(bytes: &[u8], dimensions: Option<u32>) -> Result<(), Error> {
     let magic = bytes
         .get(..4)
@@ -1130,5 +1293,36 @@ mod tests {
         assert_eq!(state.bytes, 16);
         drop(state);
         assert_eq!(pinned.as_ref(), &[1; 8]);
+    }
+
+    #[test]
+    fn turboquant_transform_plans_are_shared_weighted_evicted_and_cleared() {
+        let runtime = SearchRuntime::new(SearchRuntimePolicy {
+            max_entries: 2,
+            max_bytes: 160,
+            authoritative_max_bytes: 160,
+            hnsw_max_bytes: 160,
+            pq_max_bytes: 160,
+            turboquant_max_bytes: 160,
+        })
+        .unwrap();
+        let first = runtime.turboquant_transform_plan(8, 7).unwrap();
+        let same = runtime.turboquant_transform_plan(8, 7).unwrap();
+        assert!(Arc::ptr_eq(&first, &same));
+        assert_eq!(first.owned_bytes(), 144);
+
+        let second = runtime.turboquant_transform_plan(8, 8).unwrap();
+        assert!(!Arc::ptr_eq(&first, &second));
+        let state = runtime.state.lock().unwrap();
+        assert_eq!(state.transform_plans.len(), 1);
+        assert_eq!(state.turboquant_bytes, 144);
+        assert_eq!(state.bytes, 144);
+        drop(state);
+
+        runtime.clear();
+        let state = runtime.state.lock().unwrap();
+        assert!(state.transform_plans.is_empty());
+        assert_eq!(state.turboquant_bytes, 0);
+        assert_eq!(state.bytes, 0);
     }
 }

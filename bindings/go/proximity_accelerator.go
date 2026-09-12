@@ -14,6 +14,7 @@ type CompositeBaseKind int32
 const (
 	CompositeBaseHNSW             CompositeBaseKind = 1
 	CompositeBaseProductQuantized CompositeBaseKind = 2
+	CompositeBaseTurboQuantized   CompositeBaseKind = 3
 )
 
 type CompositeAcceleratorConfig struct {
@@ -52,9 +53,11 @@ type FullRebuildReason struct {
 }
 
 type CompositeRebuildOptions struct {
-	HNSWLimits      HNSWBuildLimits
-	PQWorkerThreads uint64
-	PQLimits        ProductQuantizationBuildLimits
+	HNSWLimits              HNSWBuildLimits
+	PQWorkerThreads         uint64
+	PQLimits                ProductQuantizationBuildLimits
+	TurboQuantWorkerThreads uint64
+	TurboQuantLimits        TurboQuantizationBuildLimits
 }
 
 type CompositeBuildOutcome struct {
@@ -70,17 +73,20 @@ const (
 	CompositeNoAcceleratorRequired   CompositeBuildOrRebuildKind = 2
 	CompositeHNSWRebuilt             CompositeBuildOrRebuildKind = 3
 	CompositeProductQuantizedRebuilt CompositeBuildOrRebuildKind = 4
+	CompositeTurboQuantizedRebuilt   CompositeBuildOrRebuildKind = 5
 )
 
 type CompositeBuildOrRebuildOutcome struct {
-	Kind           CompositeBuildOrRebuildKind
-	Composite      *CompositeAccelerator
-	HNSW           *HNSWIndex
-	PQ             *ProductQuantizer
-	Reasons        []FullRebuildReason
-	CompositeStats CompositeBuildStats
-	HNSWStats      *HNSWBuildStats
-	PQStats        *ProductQuantizationBuildStats
+	Kind            CompositeBuildOrRebuildKind
+	Composite       *CompositeAccelerator
+	HNSW            *HNSWIndex
+	PQ              *ProductQuantizer
+	TurboQuant      *TurboQuantizer
+	Reasons         []FullRebuildReason
+	CompositeStats  CompositeBuildStats
+	HNSWStats       *HNSWBuildStats
+	PQStats         *ProductQuantizationBuildStats
+	TurboQuantStats *TurboQuantizationBuildStats
 }
 
 type CatalogAcceleratorKind int32
@@ -89,6 +95,7 @@ const (
 	CatalogHNSW             CatalogAcceleratorKind = 1
 	CatalogProductQuantized CatalogAcceleratorKind = 2
 	CatalogComposite        CatalogAcceleratorKind = 3
+	CatalogTurboQuantized   CatalogAcceleratorKind = 4
 )
 
 type AcceleratorCatalogEntry struct {
@@ -209,6 +216,8 @@ func encodeCompositeRebuildOptions(value CompositeRebuildOptions) []byte {
 	out.Write(encodeHNSWBuildLimits(value.HNSWLimits))
 	writeU64(&out, value.PQWorkerThreads)
 	out.Write(encodeProductQuantizationBuildLimits(value.PQLimits))
+	writeU64(&out, value.TurboQuantWorkerThreads)
+	out.Write(encodeTurboQuantizationBuildLimits(value.TurboQuantLimits))
 	return out.Bytes()
 }
 
@@ -250,6 +259,27 @@ func decodeCompositeRebuildOptions(raw []byte) (CompositeRebuildOptions, error) 
 		return value, err
 	}
 	if value.PQLimits.MaxWorkerThreads, err = d.readOptionalUint64(); err != nil {
+		return value, err
+	}
+	if value.TurboQuantWorkerThreads, err = d.readUint64(); err != nil {
+		return value, err
+	}
+	if value.TurboQuantLimits.MaxRecords, err = d.readOptionalUint64(); err != nil {
+		return value, err
+	}
+	if value.TurboQuantLimits.MaxInputBytes, err = d.readOptionalUint64(); err != nil {
+		return value, err
+	}
+	if value.TurboQuantLimits.MaxTemporaryBytes, err = d.readOptionalUint64(); err != nil {
+		return value, err
+	}
+	if value.TurboQuantLimits.MaxTransformOperations, err = d.readOptionalUint64(); err != nil {
+		return value, err
+	}
+	if value.TurboQuantLimits.MaxEncodedOutputBytes, err = d.readOptionalUint64(); err != nil {
+		return value, err
+	}
+	if value.TurboQuantLimits.MaxWorkerThreads, err = d.readOptionalUint64(); err != nil {
 		return value, err
 	}
 	return value, d.done()
@@ -334,6 +364,15 @@ func decodeOptionalPQStats(d *byteDecoder) (*ProductQuantizationBuildStats, erro
 	return &value, err
 }
 
+func decodeOptionalTurboQuantStats(d *byteDecoder) (*TurboQuantizationBuildStats, error) {
+	present, err := d.readByte()
+	if err != nil || present == 0 {
+		return nil, err
+	}
+	value, err := decodeTurboQuantizationBuildStats(d)
+	return &value, err
+}
+
 func decodeCompositeRebuildOutcome(raw []byte) (CompositeBuildOrRebuildOutcome, error) {
 	d := byteDecoder{data: raw}
 	kind, err := d.readInt32()
@@ -361,6 +400,19 @@ func decodeCompositeRebuildOutcome(raw []byte) (CompositeBuildOrRebuildOutcome, 
 		}
 		return CompositeBuildOrRebuildOutcome{}, err
 	}
+	turboquant, err := readOptionalObject(&d)
+	if err != nil {
+		if composite != 0 {
+			ffiFreeComposite(composite)
+		}
+		if hnsw != 0 {
+			ffiFreeHNSWIndex(hnsw)
+		}
+		if pq != 0 {
+			ffiFreeProductQuantizer(pq)
+		}
+		return CompositeBuildOrRebuildOutcome{}, err
+	}
 	cleanup := func() {
 		if composite != 0 {
 			ffiFreeComposite(composite)
@@ -370,6 +422,9 @@ func decodeCompositeRebuildOutcome(raw []byte) (CompositeBuildOrRebuildOutcome, 
 		}
 		if pq != 0 {
 			ffiFreeProductQuantizer(pq)
+		}
+		if turboquant != 0 {
+			ffiFreeTurboQuantizer(turboquant)
 		}
 	}
 	reasons, err := decodeFullRebuildReasons(&d)
@@ -392,15 +447,23 @@ func decodeCompositeRebuildOutcome(raw []byte) (CompositeBuildOrRebuildOutcome, 
 		cleanup()
 		return CompositeBuildOrRebuildOutcome{}, err
 	}
+	turboquantStats, err := decodeOptionalTurboQuantStats(&d)
+	if err != nil {
+		cleanup()
+		return CompositeBuildOrRebuildOutcome{}, err
+	}
 	if err := d.done(); err != nil {
 		cleanup()
 		return CompositeBuildOrRebuildOutcome{}, err
 	}
-	if kind < 1 || kind > 4 {
+	if kind < 1 || kind > 5 {
 		cleanup()
 		return CompositeBuildOrRebuildOutcome{}, errors.New("unknown composite rebuild outcome")
 	}
-	value := CompositeBuildOrRebuildOutcome{Kind: CompositeBuildOrRebuildKind(kind), Reasons: reasons, CompositeStats: stats, HNSWStats: hnswStats, PQStats: pqStats}
+	value := CompositeBuildOrRebuildOutcome{
+		Kind: CompositeBuildOrRebuildKind(kind), Reasons: reasons, CompositeStats: stats,
+		HNSWStats: hnswStats, PQStats: pqStats, TurboQuantStats: turboquantStats,
+	}
 	if composite != 0 {
 		value.Composite = newCompositeAccelerator(composite)
 	}
@@ -409,6 +472,9 @@ func decodeCompositeRebuildOutcome(raw []byte) (CompositeBuildOrRebuildOutcome, 
 	}
 	if pq != 0 {
 		value.PQ = newProductQuantizer(pq)
+	}
+	if turboquant != 0 {
+		value.TurboQuant = newTurboQuantizer(turboquant)
 	}
 	return value, nil
 }
@@ -459,6 +525,32 @@ func (m *ProximityMap) BuildCompositePQ(baseMap *ProximityMap, base *ProductQuan
 	return decodeCompositeBuildOutcome(raw)
 }
 
+func (m *ProximityMap) BuildCompositeTurboQuant(baseMap *ProximityMap, base *TurboQuantizer, config CompositeAcceleratorConfig, limits CompositeBuildLimits) (CompositeBuildOutcome, error) {
+	current, _, currentUnlock, err := m.withHandle()
+	if err != nil {
+		return CompositeBuildOutcome{}, err
+	}
+	defer currentUnlock()
+	baseMapHandle, _, mapUnlock, err := baseMap.withHandle()
+	if err != nil {
+		return CompositeBuildOutcome{}, err
+	}
+	defer mapUnlock()
+	baseHandle, baseUnlock, err := base.withHandle()
+	if err != nil {
+		return CompositeBuildOutcome{}, err
+	}
+	defer baseUnlock()
+	raw, err := ffiProximityBuildCompositeTurboQuant(
+		current, baseMapHandle, baseHandle, encodeCompositeConfig(config),
+		encodeCompositeBuildLimits(limits),
+	)
+	if err != nil {
+		return CompositeBuildOutcome{}, err
+	}
+	return decodeCompositeBuildOutcome(raw)
+}
+
 func (m *ProximityMap) BuildOrRebuildCompositeHNSW(baseMap *ProximityMap, base *HNSWIndex, config CompositeAcceleratorConfig, limits CompositeBuildLimits, rebuild CompositeRebuildOptions) (CompositeBuildOrRebuildOutcome, error) {
 	current, _, currentUnlock, err := m.withHandle()
 	if err != nil {
@@ -499,6 +591,32 @@ func (m *ProximityMap) BuildOrRebuildCompositePQ(baseMap *ProximityMap, base *Pr
 	}
 	defer baseUnlock()
 	raw, err := ffiProximityRebuildCompositePQ(current, baseMapHandle, baseHandle, encodeCompositeConfig(config), encodeCompositeBuildLimits(limits), encodeCompositeRebuildOptions(rebuild))
+	if err != nil {
+		return CompositeBuildOrRebuildOutcome{}, err
+	}
+	return decodeCompositeRebuildOutcome(raw)
+}
+
+func (m *ProximityMap) BuildOrRebuildCompositeTurboQuant(baseMap *ProximityMap, base *TurboQuantizer, config CompositeAcceleratorConfig, limits CompositeBuildLimits, rebuild CompositeRebuildOptions) (CompositeBuildOrRebuildOutcome, error) {
+	current, _, currentUnlock, err := m.withHandle()
+	if err != nil {
+		return CompositeBuildOrRebuildOutcome{}, err
+	}
+	defer currentUnlock()
+	baseMapHandle, _, mapUnlock, err := baseMap.withHandle()
+	if err != nil {
+		return CompositeBuildOrRebuildOutcome{}, err
+	}
+	defer mapUnlock()
+	baseHandle, baseUnlock, err := base.withHandle()
+	if err != nil {
+		return CompositeBuildOrRebuildOutcome{}, err
+	}
+	defer baseUnlock()
+	raw, err := ffiProximityRebuildCompositeTurboQuant(
+		current, baseMapHandle, baseHandle, encodeCompositeConfig(config),
+		encodeCompositeBuildLimits(limits), encodeCompositeRebuildOptions(rebuild),
+	)
 	if err != nil {
 		return CompositeBuildOrRebuildOutcome{}, err
 	}
@@ -809,13 +927,13 @@ func (a *AcceleratorCatalog) withHandle() (uint64, func(), error) {
 	return a.handle, a.mu.RUnlock, nil
 }
 
-func (m *ProximityMap) BuildAcceleratorCatalog(hnsw *HNSWIndex, pq *ProductQuantizer, composite *CompositeAccelerator) (*AcceleratorCatalog, error) {
+func (m *ProximityMap) BuildAcceleratorCatalog(hnsw *HNSWIndex, pq *ProductQuantizer, turboquant *TurboQuantizer, composite *CompositeAccelerator) (*AcceleratorCatalog, error) {
 	mapHandle, _, mapUnlock, err := m.withHandle()
 	if err != nil {
 		return nil, err
 	}
 	defer mapUnlock()
-	var hnswHandle, pqHandle, compositeHandle *uint64
+	var hnswHandle, pqHandle, turboquantHandle, compositeHandle *uint64
 	var unlocks []func()
 	defer func() {
 		for i := len(unlocks) - 1; i >= 0; i-- {
@@ -838,6 +956,14 @@ func (m *ProximityMap) BuildAcceleratorCatalog(hnsw *HNSWIndex, pq *ProductQuant
 		pqHandle = &value
 		unlocks = append(unlocks, unlock)
 	}
+	if turboquant != nil {
+		value, unlock, err := turboquant.withHandle()
+		if err != nil {
+			return nil, err
+		}
+		turboquantHandle = &value
+		unlocks = append(unlocks, unlock)
+	}
 	if composite != nil {
 		value, unlock, err := composite.withHandle()
 		if err != nil {
@@ -846,7 +972,9 @@ func (m *ProximityMap) BuildAcceleratorCatalog(hnsw *HNSWIndex, pq *ProductQuant
 		compositeHandle = &value
 		unlocks = append(unlocks, unlock)
 	}
-	handle, err := ffiProximityBuildCatalog(mapHandle, hnswHandle, pqHandle, compositeHandle)
+	handle, err := ffiProximityBuildCatalog(
+		mapHandle, hnswHandle, pqHandle, turboquantHandle, compositeHandle,
+	)
 	if err != nil {
 		return nil, err
 	}

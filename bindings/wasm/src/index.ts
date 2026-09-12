@@ -910,9 +910,10 @@ export interface PortableSearchRequest {
   budget?: PortableSearchBudget;
   filter?: PortableSearchFilter;
   kernel?: "scalar_deterministic" | "simd_deterministic" | "auto_deterministic";
-  backend?: "native" | "product_quantized" | "hnsw" | "composite" | "auto";
+  backend?: "native" | "product_quantized" | "hnsw" | "composite" | "auto" | "turbo_quantized";
   hnswEfSearch?: number;
   pqRerankMultiplier?: number;
+  turboquantRerankMultiplier?: number;
   signal?: AbortSignal;
 }
 
@@ -955,6 +956,7 @@ export interface ProximitySearchRuntimePolicy {
   authoritativeMaxBytes: bigint;
   hnswMaxBytes: bigint;
   pqMaxBytes: bigint;
+  turboquantMaxBytes: bigint;
 }
 
 export interface ProximitySearchRuntimeStats {
@@ -969,6 +971,7 @@ export function defaultProximitySearchRuntimePolicy(): ProximitySearchRuntimePol
     authoritativeMaxBytes: 128n * 1024n * 1024n,
     hnswMaxBytes: 96n * 1024n * 1024n,
     pqMaxBytes: 32n * 1024n * 1024n,
+    turboquantMaxBytes: 32n * 1024n * 1024n,
   };
 }
 
@@ -1092,6 +1095,62 @@ export function defaultPqBuildLimits(): ProductQuantizationBuildLimits {
   return {};
 }
 
+export interface TurboQuantizationConfig {
+  bitWidth: 2 | 3 | 4;
+  rerankMultiplier: number;
+  seed: bigint;
+}
+
+export interface TurboQuantizationBuildLimits {
+  maxRecords?: bigint;
+  maxInputBytes?: bigint;
+  maxTemporaryBytes?: bigint;
+  maxTransformOperations?: bigint;
+  maxEncodedOutputBytes?: bigint;
+  maxWorkerThreads?: bigint;
+}
+
+export interface TurboQuantizationBuildStats {
+  encodedVectors: bigint;
+  zeroVectors: bigint;
+  transformedComponents: bigint;
+  butterflyOperations: bigint;
+  inputBytes: bigint;
+  encodedOutputBytes: bigint;
+  peakTemporaryBytes: bigint;
+}
+
+export interface TurboQuantizationQuality {
+  meanSquaredError: number;
+  maximumSquaredError: number;
+}
+
+export interface TurboQuantizationVerification {
+  encodedVectors: bigint;
+  zeroVectors: bigint;
+  quality: TurboQuantizationQuality;
+}
+
+export interface TurboQuantizationBuildOptions {
+  config?: TurboQuantizationConfig;
+  workerThreads?: bigint;
+  limits?: TurboQuantizationBuildLimits;
+  signal?: AbortSignal;
+}
+
+export interface TurboQuantizationBuildResult {
+  index: WasmTurboQuantizer;
+  stats: TurboQuantizationBuildStats;
+}
+
+export function defaultTurboQuantConfig(): TurboQuantizationConfig {
+  return { bitWidth: 4, rerankMultiplier: 8, seed: 0n };
+}
+
+export function defaultTurboQuantBuildLimits(): TurboQuantizationBuildLimits {
+  return {};
+}
+
 export interface CompositeAcceleratorConfig {
   maxDeltaRecords: bigint;
   maxShadowRecords: bigint;
@@ -1117,6 +1176,8 @@ export interface CompositeRebuildOptions {
   hnswLimits?: HnswBuildLimits;
   pqWorkerThreads?: bigint;
   pqLimits?: ProductQuantizationBuildLimits;
+  turboquantWorkerThreads?: bigint;
+  turboquantLimits?: TurboQuantizationBuildLimits;
 }
 export interface CompositeBuildOptions {
   config?: CompositeAcceleratorConfig; limits?: CompositeBuildLimits; signal?: AbortSignal;
@@ -1126,13 +1187,15 @@ export interface CompositeBuildOutcome {
   accelerator?: WasmCompositeAccelerator; reasons: FullRebuildReason[]; stats: CompositeBuildStats;
 }
 export interface CompositeBuildOrRebuildOutcome {
-  kind: "composite" | "no_accelerator_required" | "hnsw_rebuilt" | "product_quantized_rebuilt";
+  kind: "composite" | "no_accelerator_required" | "hnsw_rebuilt" | "product_quantized_rebuilt" | "turboquant_rebuilt";
   composite?: WasmCompositeAccelerator; hnsw?: WasmHnswIndex; pq?: WasmProductQuantizer;
+  turboquant?: WasmTurboQuantizer;
   reasons: FullRebuildReason[]; compositeStats: CompositeBuildStats;
   hnswStats?: HnswBuildStats; pqStats?: ProductQuantizationBuildStats;
+  turboquantStats?: TurboQuantizationBuildStats;
 }
 export interface AcceleratorCatalogEntry {
-  kind: "hnsw" | "product_quantized" | "composite";
+  kind: "hnsw" | "product_quantized" | "composite" | "turbo_quantized";
   configurationFingerprint: Uint8Array; manifest: Uint8Array;
 }
 export function defaultCompositeAcceleratorConfig(): CompositeAcceleratorConfig {
@@ -1164,6 +1227,9 @@ function ownProximitySearchRuntimePolicy(value: ProximitySearchRuntimePolicy): o
     ).toString(),
     hnswMaxBytes: requireUnsignedBigInt(value.hnswMaxBytes, "hnswMaxBytes").toString(),
     pqMaxBytes: requireUnsignedBigInt(value.pqMaxBytes, "pqMaxBytes").toString(),
+    turboquantMaxBytes: requireUnsignedBigInt(
+      value.turboquantMaxBytes, "turboquantMaxBytes",
+    ).toString(),
   };
 }
 
@@ -1234,6 +1300,34 @@ function ownPqBuildLimits(value: ProductQuantizationBuildLimits | undefined): ob
   };
 }
 
+function ownTurboQuantConfig(value: TurboQuantizationConfig | undefined): object {
+  const config = value ?? defaultTurboQuantConfig();
+  if (config.bitWidth !== 2 && config.bitWidth !== 3 && config.bitWidth !== 4) {
+    throw new RangeError("bitWidth must be 2, 3, or 4");
+  }
+  return {
+    bitWidth: config.bitWidth,
+    rerankMultiplier: requireUnsignedInteger(
+      config.rerankMultiplier, "rerankMultiplier", 0xffff_ffff,
+    ),
+    seed: requireUnsignedBigInt(config.seed, "seed").toString(),
+  };
+}
+
+function ownTurboQuantBuildLimits(value: TurboQuantizationBuildLimits | undefined): object {
+  const limits = value ?? defaultTurboQuantBuildLimits();
+  const optional = (candidate: bigint | undefined, name: string) =>
+    candidate == null ? undefined : requireUnsignedBigInt(candidate, name).toString();
+  return {
+    maxRecords: optional(limits.maxRecords, "maxRecords"),
+    maxInputBytes: optional(limits.maxInputBytes, "maxInputBytes"),
+    maxTemporaryBytes: optional(limits.maxTemporaryBytes, "maxTemporaryBytes"),
+    maxTransformOperations: optional(limits.maxTransformOperations, "maxTransformOperations"),
+    maxEncodedOutputBytes: optional(limits.maxEncodedOutputBytes, "maxEncodedOutputBytes"),
+    maxWorkerThreads: optional(limits.maxWorkerThreads, "maxWorkerThreads"),
+  };
+}
+
 function ownCompositeConfig(value: CompositeAcceleratorConfig | undefined): object {
   const config = value ?? defaultCompositeAcceleratorConfig();
   return {
@@ -1263,10 +1357,20 @@ function ownCompositeRebuildOptions(value: CompositeRebuildOptions | undefined):
   if (workerThreads !== 1n) {
     throw new RangeError("browser-safe WASM composite PQ rebuild requires pqWorkerThreads = 1");
   }
+  const turboquantWorkerThreads = requireUnsignedBigInt(
+    options.turboquantWorkerThreads ?? 1n, "turboquantWorkerThreads",
+  );
+  if (turboquantWorkerThreads !== 1n) {
+    throw new RangeError(
+      "browser-safe WASM composite TurboQuant rebuild requires turboquantWorkerThreads = 1",
+    );
+  }
   return {
     hnswLimits: ownHnswBuildLimits(options.hnswLimits),
     pqWorkerThreads: workerThreads.toString(),
     pqLimits: ownPqBuildLimits(options.pqLimits),
+    turboquantWorkerThreads: turboquantWorkerThreads.toString(),
+    turboquantLimits: ownTurboQuantBuildLimits(options.turboquantLimits),
   };
 }
 
@@ -1314,6 +1418,7 @@ function ownPortableSearchRequest(request: PortableSearchRequest): object {
     backend: request.backend ?? "native",
     hnswEfSearch: request.hnswEfSearch,
     pqRerankMultiplier: request.pqRerankMultiplier,
+    turboquantRerankMultiplier: request.turboquantRerankMultiplier,
   };
 }
 
@@ -2920,10 +3025,12 @@ function wasmCompositeRebuildOutcome(result: any): CompositeBuildOrRebuildOutcom
     composite: result.composite == null ? undefined : new WasmCompositeAccelerator(result.composite),
     hnsw: result.hnsw == null ? undefined : new WasmHnswIndex(result.hnsw),
     pq: result.pq == null ? undefined : new WasmProductQuantizer(result.pq),
+    turboquant: result.turboquant == null ? undefined : new WasmTurboQuantizer(result.turboquant),
     reasons: result.reasons,
     compositeStats: result.compositeStats,
     hnswStats: result.hnswStats,
     pqStats: result.pqStats,
+    turboquantStats: result.turboquantStats,
   };
 }
 
@@ -2942,6 +3049,7 @@ export class WasmProximitySearchRuntime implements Disposable {
       authoritativeMaxBytes: BigInt(value.authoritativeMaxBytes),
       hnswMaxBytes: BigInt(value.hnswMaxBytes),
       pqMaxBytes: BigInt(value.pqMaxBytes),
+      turboquantMaxBytes: BigInt(value.turboquantMaxBytes),
     };
   }
   stats(): ProximitySearchRuntimeStats {
@@ -3116,6 +3224,34 @@ export class WasmProximityMap implements Disposable {
   loadPq(manifest: Uint8Array): WasmProductQuantizer {
     return new WasmProductQuantizer(this.nativeHandle().loadPq(ownedPortableBytes(manifest)));
   }
+  buildTurboQuant(options: TurboQuantizationBuildOptions = {}): Promise<TurboQuantizationBuildResult> {
+    const native = this.nativeHandle();
+    const config = ownTurboQuantConfig(options.config);
+    const workerThreads = requireUnsignedBigInt(
+      options.workerThreads ?? 1n, "workerThreads",
+    ).toString();
+    const limits = ownTurboQuantBuildLimits(options.limits);
+    return portablePromise(options.signal, () => {
+      const result = native.buildTurboQuant(config, workerThreads, limits);
+      return {
+        index: new WasmTurboQuantizer(result.index),
+        stats: {
+          encodedVectors: BigInt(result.stats.encodedVectors),
+          zeroVectors: BigInt(result.stats.zeroVectors),
+          transformedComponents: BigInt(result.stats.transformedComponents),
+          butterflyOperations: BigInt(result.stats.butterflyOperations),
+          inputBytes: BigInt(result.stats.inputBytes),
+          encodedOutputBytes: BigInt(result.stats.encodedOutputBytes),
+          peakTemporaryBytes: BigInt(result.stats.peakTemporaryBytes),
+        },
+      };
+    });
+  }
+  loadTurboQuant(manifest: Uint8Array): WasmTurboQuantizer {
+    return new WasmTurboQuantizer(
+      this.nativeHandle().loadTurboQuant(ownedPortableBytes(manifest)),
+    );
+  }
   buildCompositeHnsw(baseMap: WasmProximityMap, base: WasmHnswIndex, options: CompositeBuildOptions = {}): Promise<CompositeBuildOutcome> {
     const native = this.nativeHandle();
     return portablePromise(options.signal, () => {
@@ -3127,6 +3263,13 @@ export class WasmProximityMap implements Disposable {
     const native = this.nativeHandle();
     return portablePromise(options.signal, () => {
       const result = native.buildCompositePq(baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits));
+      return { accelerator: result.accelerator == null ? undefined : new WasmCompositeAccelerator(result.accelerator), reasons: result.reasons, stats: result.stats };
+    });
+  }
+  buildCompositeTurboQuant(baseMap: WasmProximityMap, base: WasmTurboQuantizer, options: CompositeBuildOptions = {}): Promise<CompositeBuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => {
+      const result = native.buildCompositeTurboQuant(baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits));
       return { accelerator: result.accelerator == null ? undefined : new WasmCompositeAccelerator(result.accelerator), reasons: result.reasons, stats: result.stats };
     });
   }
@@ -3142,12 +3285,18 @@ export class WasmProximityMap implements Disposable {
       baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits), ownCompositeRebuildOptions(options.rebuild),
     )));
   }
+  buildOrRebuildCompositeTurboQuant(baseMap: WasmProximityMap, base: WasmTurboQuantizer, options: CompositeBuildOrRebuildOptions = {}): Promise<CompositeBuildOrRebuildOutcome> {
+    const native = this.nativeHandle();
+    return portablePromise(options.signal, () => wasmCompositeRebuildOutcome(native.buildOrRebuildCompositeTurboQuant(
+      baseMap.nativeHandle(), base.nativeHandle(), ownCompositeConfig(options.config), ownCompositeBuildLimits(options.limits), ownCompositeRebuildOptions(options.rebuild),
+    )));
+  }
   loadComposite(manifest: Uint8Array): WasmCompositeAccelerator {
     return new WasmCompositeAccelerator(this.nativeHandle().loadComposite(ownedPortableBytes(manifest)));
   }
-  buildAcceleratorCatalog(options: { hnsw?: WasmHnswIndex; pq?: WasmProductQuantizer; composite?: WasmCompositeAccelerator } = {}): WasmAcceleratorCatalog {
+  buildAcceleratorCatalog(options: { hnsw?: WasmHnswIndex; pq?: WasmProductQuantizer; turboquant?: WasmTurboQuantizer; composite?: WasmCompositeAccelerator } = {}): WasmAcceleratorCatalog {
     return new WasmAcceleratorCatalog(this.nativeHandle().buildAcceleratorCatalog(
-      options.hnsw?.manifest(), options.pq?.manifest(), options.composite?.manifest(),
+      options.hnsw?.manifest(), options.pq?.manifest(), options.turboquant?.manifest(), options.composite?.manifest(),
     ));
   }
   loadAcceleratorCatalog(manifest: Uint8Array): WasmAcceleratorCatalog {
@@ -3316,6 +3465,77 @@ export class WasmProductQuantizer implements Disposable {
   [Symbol.dispose](): void { this.close(); }
 }
 
+export class WasmTurboQuantizer implements Disposable {
+  #native?: any;
+  constructor(native: any) { this.#native = native; }
+  #open(): any {
+    if (this.#native == null) throw new Error("WASM TurboQuantizer is closed");
+    return this.#native;
+  }
+  nativeHandle(): any { return this.#open(); }
+  manifest(): Uint8Array { return ownedPortableBytes(this.#open().manifest()); }
+  sourceDescriptor(): Uint8Array { return ownedPortableBytes(this.#open().sourceDescriptor()); }
+  config(): TurboQuantizationConfig {
+    const value = this.#open().config();
+    return {
+      bitWidth: value.bitWidth,
+      rerankMultiplier: value.rerankMultiplier,
+      seed: BigInt(value.seed),
+    };
+  }
+  quality(): TurboQuantizationQuality {
+    const value = this.#open().quality();
+    return {
+      meanSquaredError: value.meanSquaredError,
+      maximumSquaredError: value.maximumSquaredError,
+    };
+  }
+  verify(map: WasmProximityMap): TurboQuantizationVerification {
+    const value = this.#open().verify(map.nativeHandle());
+    return {
+      encodedVectors: BigInt(value.encodedVectors),
+      zeroVectors: BigInt(value.zeroVectors),
+      quality: {
+        meanSquaredError: value.quality.meanSquaredError,
+        maximumSquaredError: value.quality.maximumSquaredError,
+      },
+    };
+  }
+  search(map: WasmProximityMap, request: PortableSearchRequest): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation).finally(() => cancellation.close());
+  }
+  searchWithRuntime(
+    map: WasmProximityMap,
+    request: PortableSearchRequest,
+    runtime: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const cancellation = map.cancellationToken();
+    return this.searchCancellable(map, request, cancellation, runtime)
+      .finally(() => cancellation.close());
+  }
+  searchCancellable(
+    map: WasmProximityMap, request: PortableSearchRequest,
+    cancellation: WasmProximityCancellationToken, runtime?: WasmProximitySearchRuntime,
+  ): Promise<PortableSearchResult> {
+    const native = this.#open();
+    const nativeMap = map.nativeHandle();
+    const nativeRuntime = runtime?.nativeHandle();
+    return cooperativeWasmSearch(request, cancellation, (owned, token) => (
+      nativeRuntime == null
+        ? native.searchCancellable(nativeMap, owned, token)
+        : native.searchWithRuntimeCancellable(nativeMap, owned, nativeRuntime, token)
+    ));
+  }
+  proveSearch(map: WasmProximityMap, request: PortableSearchRequest): WasmProximitySearchProof {
+    return new WasmProximitySearchProof(
+      this.#open().proveSearch(map.nativeHandle(), ownPortableSearchRequest(request)),
+    );
+  }
+  close(): void { this.#native?.free?.(); this.#native = undefined; }
+  [Symbol.dispose](): void { this.close(); }
+}
+
 export class WasmCompositeAccelerator implements Disposable {
   #native?: any;
   constructor(native: any) { this.#native = native; }
@@ -3326,7 +3546,7 @@ export class WasmCompositeAccelerator implements Disposable {
   manifest(): Uint8Array { return ownedPortableBytes(this.nativeHandle().manifest()); }
   currentSourceDescriptor(): Uint8Array { return ownedPortableBytes(this.nativeHandle().currentSourceDescriptor()); }
   baseSourceDescriptor(): Uint8Array { return ownedPortableBytes(this.nativeHandle().baseSourceDescriptor()); }
-  baseKind(): "hnsw" | "product_quantized" { return this.nativeHandle().baseKind(); }
+  baseKind(): "hnsw" | "product_quantized" | "turbo_quantized" { return this.nativeHandle().baseKind(); }
   deltaCount(): bigint { return BigInt(this.nativeHandle().deltaCount()); }
   shadowCount(): bigint { return BigInt(this.nativeHandle().shadowCount()); }
   config(): CompositeAcceleratorConfig { return this.nativeHandle().config(); }

@@ -58,7 +58,7 @@ impl Default for TurboQuantizationConfig {
 
 impl TurboQuantizationConfig {
     pub(crate) fn validate(&self, dimensions: u32) -> Result<(), Error> {
-        if !matches!(self.bit_width, 2 | 3 | 4) {
+        if !matches!(self.bit_width, 2..=4) {
             return Err(invalid_config("TurboQuant bit_width must be 2, 3, or 4"));
         }
         if self.rerank_multiplier == 0 {
@@ -66,7 +66,8 @@ impl TurboQuantizationConfig {
                 "TurboQuant rerank_multiplier must be positive",
             ));
         }
-        if !(MIN_DIMENSIONS..=MAX_DIMENSIONS).contains(&dimensions) || dimensions % 8 != 0 {
+        if !(MIN_DIMENSIONS..=MAX_DIMENSIONS).contains(&dimensions) || !dimensions.is_multiple_of(8)
+        {
             return Err(invalid_config(
                 "TurboQuant dimensions must be in 8..=16384 and divisible by eight",
             ));
@@ -267,122 +268,128 @@ where
             .map_err(|_| invalid_config("cannot create TurboQuant worker pool"))?;
         const ENCODE_BATCH_RECORDS: usize = 128;
         let mut batch = Vec::with_capacity(ENCODE_BATCH_RECORDS);
-        let mut commit_batch = |batch: Vec<(Vec<u8>, Vec<f32>)>| -> Result<(), Error> {
-            if batch.is_empty() {
-                return Ok(());
-            }
-            let batch_input_bytes = batch.iter().try_fold(0usize, |total, (key, vector)| {
-                total
-                    .checked_add(key.len())
-                    .and_then(|value| value.checked_add(vector.len().checked_mul(4)?))
+        {
+            let mut commit_batch = |batch: Vec<(Vec<u8>, Vec<f32>)>| -> Result<(), Error> {
+                if batch.is_empty() {
+                    return Ok(());
+                }
+                let batch_input_bytes = batch.iter().try_fold(0usize, |total, (key, vector)| {
+                    total
+                        .checked_add(key.len())
+                        .and_then(|value| value.checked_add(vector.len().checked_mul(4)?))
+                        .ok_or_else(|| {
+                            resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+                        })
+                })?;
+                let batch_output_bytes =
+                    batch.len().checked_mul(8 + packed_len).ok_or_else(|| {
+                        resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+                    })?;
+                let physical_peak = plan
+                    .owned_bytes()
+                    .checked_add(batch_input_bytes)
+                    .and_then(|value| value.checked_add(batch_output_bytes))
+                    .and_then(|value| {
+                        value.checked_add(per_worker_buffers.checked_mul(parallelism.threads())?)
+                    })
                     .ok_or_else(|| {
                         resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-                    })
-            })?;
-            let batch_output_bytes = batch.len().checked_mul(8 + packed_len).ok_or_else(|| {
-                resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-            })?;
-            let physical_peak = plan
-                .owned_bytes()
-                .checked_add(batch_input_bytes)
-                .and_then(|value| value.checked_add(batch_output_bytes))
-                .and_then(|value| {
-                    value.checked_add(per_worker_buffers.checked_mul(parallelism.threads())?)
-                })
-                .ok_or_else(|| {
-                    resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-                })?;
-            enforce_resource(
-                "TurboQuant temporary bytes",
-                limits.max_temporary_bytes,
-                physical_peak,
-            )?;
-            let logical_peak = plan
-                .owned_bytes()
-                .checked_add(batch_input_bytes)
-                .and_then(|value| value.checked_add(batch_output_bytes))
-                .and_then(|value| value.checked_add(per_worker_buffers))
-                .ok_or_else(|| {
-                    resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
-                })?;
-            peak_temporary_bytes = peak_temporary_bytes.max(logical_peak);
-
-            let compute = || {
-                batch
-                    .into_par_iter()
-                    .map(|(key, vector)| {
-                        let encoded = encode_vector(
-                            &vector,
-                            &plan,
-                            codebook,
-                            config.bit_width,
-                            sqrt_dimensions,
-                        );
-                        (key, encoded)
-                    })
-                    .collect::<Vec<_>>()
-            };
-            let encoded = if let Some(pool) = &pool {
-                pool.install(compute)
-            } else {
-                compute()
-            };
-            // Rayon indexed collection preserves input order. Errors are
-            // inspected only here so the earliest source key wins.
-            for (key, encoded) in encoded {
-                let encoded = encoded?;
-                if encoded.zero {
-                    zero_vectors = zero_vectors.saturating_add(1);
-                } else {
-                    transformed_components = transformed_components
-                        .checked_add(dimensions_usize)
-                        .ok_or_else(|| {
-                        resource_limit("TurboQuant transform operations", usize::MAX, usize::MAX)
                     })?;
-                    butterfly_operations = butterfly_operations
-                        .checked_add(plan.butterfly_operations_per_vector())
-                        .ok_or_else(|| {
-                            resource_limit(
-                                "TurboQuant transform operations",
-                                usize::MAX,
-                                usize::MAX,
-                            )
-                        })?;
-                    transform_operations = transform_operations
-                        .checked_add(plan.operations_per_vector())
-                        .ok_or_else(|| {
-                            resource_limit(
-                                "TurboQuant transform operations",
-                                usize::MAX,
-                                usize::MAX,
-                            )
-                        })?;
-                    enforce_resource(
-                        "TurboQuant transform operations",
-                        limits.max_transform_operations,
-                        transform_operations,
-                    )?;
+                enforce_resource(
+                    "TurboQuant temporary bytes",
+                    limits.max_temporary_bytes,
+                    physical_peak,
+                )?;
+                let logical_peak = plan
+                    .owned_bytes()
+                    .checked_add(batch_input_bytes)
+                    .and_then(|value| value.checked_add(batch_output_bytes))
+                    .and_then(|value| value.checked_add(per_worker_buffers))
+                    .ok_or_else(|| {
+                        resource_limit("TurboQuant temporary bytes", usize::MAX, usize::MAX)
+                    })?;
+                peak_temporary_bytes = peak_temporary_bytes.max(logical_peak);
+
+                let compute = || {
+                    batch
+                        .into_par_iter()
+                        .map(|(key, vector)| {
+                            let encoded = encode_vector(
+                                &vector,
+                                &plan,
+                                codebook,
+                                config.bit_width,
+                                sqrt_dimensions,
+                            );
+                            (key, encoded)
+                        })
+                        .collect::<Vec<_>>()
+                };
+                let encoded = if let Some(pool) = &pool {
+                    pool.install(compute)
+                } else {
+                    compute()
+                };
+                // Rayon indexed collection preserves input order. Errors are
+                // inspected only here so the earliest source key wins.
+                for (key, encoded) in encoded {
+                    let encoded = encoded?;
+                    if encoded.zero {
+                        zero_vectors = zero_vectors.saturating_add(1);
+                    } else {
+                        transformed_components = transformed_components
+                            .checked_add(dimensions_usize)
+                            .ok_or_else(|| {
+                                resource_limit(
+                                    "TurboQuant transform operations",
+                                    usize::MAX,
+                                    usize::MAX,
+                                )
+                            })?;
+                        butterfly_operations = butterfly_operations
+                            .checked_add(plan.butterfly_operations_per_vector())
+                            .ok_or_else(|| {
+                                resource_limit(
+                                    "TurboQuant transform operations",
+                                    usize::MAX,
+                                    usize::MAX,
+                                )
+                            })?;
+                        transform_operations = transform_operations
+                            .checked_add(plan.operations_per_vector())
+                            .ok_or_else(|| {
+                                resource_limit(
+                                    "TurboQuant transform operations",
+                                    usize::MAX,
+                                    usize::MAX,
+                                )
+                            })?;
+                        enforce_resource(
+                            "TurboQuant transform operations",
+                            limits.max_transform_operations,
+                            transform_operations,
+                        )?;
+                    }
+                    quality_sum += encoded.error;
+                    quality_maximum = quality_maximum.max(encoded.error);
+                    builder.add(key, encoded.bytes)?;
+                    encoded_vectors += 1;
                 }
-                quality_sum += encoded.error;
-                quality_maximum = quality_maximum.max(encoded.error);
-                builder.add(key, encoded.bytes)?;
-                encoded_vectors += 1;
+                Ok(())
+            };
+            for entry in map
+                .directory_manager()
+                .range(&map.tree().directory, &[], None)?
+            {
+                let (key, bytes) = entry?;
+                let stored = StoredRecord::decode(&bytes, dimensions)?;
+                batch.push((key, stored.vector));
+                if batch.len() == ENCODE_BATCH_RECORDS {
+                    commit_batch(std::mem::take(&mut batch))?;
+                }
             }
-            Ok(())
-        };
-        for entry in map
-            .directory_manager()
-            .range(&map.tree().directory, &[], None)?
-        {
-            let (key, bytes) = entry?;
-            let stored = StoredRecord::decode(&bytes, dimensions)?;
-            batch.push((key, stored.vector));
-            if batch.len() == ENCODE_BATCH_RECORDS {
-                commit_batch(std::mem::take(&mut batch))?;
-            }
+            commit_batch(batch)?;
         }
-        commit_batch(batch)?;
-        drop(commit_batch);
         if encoded_vectors != records {
             return Err(invalid_object(
                 "TurboQuant source count changed during build",
@@ -807,7 +814,7 @@ where
 }
 
 #[derive(Clone, Debug)]
-struct StructuredRotation {
+pub(crate) struct StructuredRotation {
     dimensions: usize,
     block_width: usize,
     rounds: Vec<RotationRound>,
@@ -821,7 +828,7 @@ struct RotationRound {
 }
 
 impl StructuredRotation {
-    fn derive(dimensions: usize, seed: u64) -> Result<Self, Error> {
+    pub(crate) fn derive(dimensions: usize, seed: u64) -> Result<Self, Error> {
         let dimensions_u32 = u32::try_from(dimensions)
             .map_err(|_| invalid_config("TurboQuant dimensions exceed u32"))?;
         TurboQuantizationConfig {
@@ -904,7 +911,7 @@ impl StructuredRotation {
         self.dimensions * (ROTATION_ROUNDS * (3 + self.block_width.ilog2() as usize) + 1)
     }
 
-    fn owned_bytes(&self) -> usize {
+    pub(crate) fn owned_bytes(&self) -> usize {
         self.rounds.len()
             * self.dimensions
             * (std::mem::size_of::<usize>() + std::mem::size_of::<i8>())
@@ -1240,15 +1247,19 @@ pub(crate) struct TurboQuantPreparedQuery {
     norm_squared: f64,
 }
 
-pub(crate) fn prepare_query(
+pub(crate) fn prepare_query_with_plan(
     metric: DistanceMetric,
     query: &[f32],
     dimensions: u32,
-    seed: u64,
+    plan: &StructuredRotation,
 ) -> Result<(Vec<f32>, TurboQuantPreparedQuery), Error> {
+    if plan.dimensions != dimensions as usize {
+        return Err(invalid_search(
+            "TurboQuant transform plan dimensions do not match the query",
+        ));
+    }
     let query = prepare_vector(metric, query, dimensions)?;
-    let plan = StructuredRotation::derive(dimensions as usize, seed)?;
-    let prepared = prepare_query_from_prepared(&query, &plan, dimensions);
+    let prepared = prepare_query_from_prepared(&query, plan, dimensions);
     Ok((query, prepared))
 }
 

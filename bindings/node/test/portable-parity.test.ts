@@ -186,6 +186,58 @@ test("product quantizer lifecycle is portable and bounded", async () => {
   }
 });
 
+test("TurboQuant lifecycle is portable, verifiable, and cancellable", async () => {
+  const engine = await Engine.memory();
+  try {
+    const proximity = await engine.buildProximity(8, Array.from({ length: 32 }, (_, index) => ({
+      key: bytes(`turbo-${index.toString().padStart(2, "0")}`),
+      vector: new Float32Array([index, index % 3, 0, 1, 2, 3, 4, 5]),
+      value: bytes(`value-${index.toString().padStart(2, "0")}`),
+    })));
+    const config = { bitWidth: 4 as const, rerankMultiplier: 4, seed: (1n << 64n) - 1n };
+    const built = await proximity.buildTurboQuant({ config, workerThreads: 2n });
+    const index = built.index;
+    assert.equal(built.stats.encodedVectors, 32n);
+    assert.deepEqual(index.config(), config);
+    assert.deepEqual(index.sourceDescriptor(), proximity.descriptor());
+    assert.equal(index.verify(proximity).encodedVectors, 32n);
+    const request = {
+      ...exactSearch(new Float32Array([0, 0, 0, 1, 2, 3, 4, 5]), 3),
+      policy: "fixed_budget" as const,
+      backend: "turbo_quantized" as const,
+    };
+    const result = await index.search(proximity, request);
+    assert.equal(result.backend, "turbo_quantized");
+    assert.equal(Buffer.from(result.neighbors[0].key).toString(), "turbo-00");
+    const runtime = engine.proximitySearchRuntime();
+    try {
+      assert.equal((await index.searchWithRuntime(proximity, request, runtime)).backend, "turbo_quantized");
+    } finally {
+      runtime.close();
+    }
+    const cancellation = proximity.cancellationToken();
+    try {
+      cancellation.cancel();
+      const cancelled = await index.searchCancellable(proximity, request, cancellation);
+      assert.equal(cancelled.completion, "cancelled");
+      assert.deepEqual(cancelled.neighbors, []);
+    } finally {
+      cancellation.close();
+    }
+    const manifest = index.manifest();
+    const proof = index.proveSearch(proximity, request);
+    assert.equal(proof.verify(proximity.descriptor()).result.backend, "turbo_quantized");
+    proof.close();
+    index.close();
+    const loaded = proximity.loadTurboQuant(manifest);
+    assert.deepEqual(loaded.manifest(), manifest);
+    loaded.close();
+    proximity.close();
+  } finally {
+    engine.close();
+  }
+});
+
 test("HNSW accelerator lifecycle is portable", async () => {
   const engine = await Engine.memory();
   try {

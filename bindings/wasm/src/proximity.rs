@@ -4,18 +4,20 @@ use js_sys::{Array, BigInt, Float32Array, Function, Object, Reflect, Uint8Array}
 use prolly::{
     AcceleratorCatalog, AcceleratorSet, AdaptiveQuality, AsyncAcceleratorCatalog,
     AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex, AsyncProductQuantizer,
-    AsyncProximityMap, AsyncSearchControl, BuildParallelism, CancellationToken,
-    CatalogAcceleratorKind, Cid, CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase,
-    CompositeBaseKind, CompositeBuildLimits, CompositeBuildOrRebuildOutcome, CompositeBuildOutcome,
-    CompositeBuildStats, CompositeRebuildOptions, ContentGraphLimits, DistanceMetric,
-    FullRebuildReason, HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex,
-    HnswRoutingVectorEncoding, HnswSearchOptions, PlannerPolicy, PqSearchOptions,
-    ProductQuantizationBuildLimits, ProductQuantizationBuildStats, ProductQuantizationConfig,
-    ProductQuantizationQuality, ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap,
-    ProximityMembershipProof, ProximityMutation, ProximityRecord, ProximitySearchClaim,
-    ProximitySearchProof, ProximityStructuralProof, ProximityVerification, QueryKernel,
-    SearchBackend, SearchBudget, SearchCompletion, SearchIo, SearchOptions, SearchPolicy,
-    SearchRequest, SearchRuntime, SearchRuntimePolicy,
+    AsyncProximityMap, AsyncSearchControl, AsyncTurboQuantizer, BuildParallelism,
+    CancellationToken, CatalogAcceleratorKind, Cid, CompositeAccelerator,
+    CompositeAcceleratorConfig, CompositeBase, CompositeBaseKind, CompositeBuildLimits,
+    CompositeBuildOrRebuildOutcome, CompositeBuildOutcome, CompositeBuildStats,
+    CompositeRebuildOptions, ContentGraphLimits, DistanceMetric, FullRebuildReason,
+    HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex, HnswRoutingVectorEncoding,
+    HnswSearchOptions, PlannerPolicy, PqSearchOptions, ProductQuantizationBuildLimits,
+    ProductQuantizationBuildStats, ProductQuantizationConfig, ProductQuantizationQuality,
+    ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
+    ProximityMutation, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
+    ProximityStructuralProof, ProximityVerification, QueryKernel, SearchBackend, SearchBudget,
+    SearchCompletion, SearchIo, SearchOptions, SearchPolicy, SearchRequest, SearchRuntime,
+    SearchRuntimePolicy, TurboQuantSearchOptions, TurboQuantizationBuildLimits,
+    TurboQuantizationBuildStats, TurboQuantizationConfig, TurboQuantizationQuality, TurboQuantizer,
 };
 use std::future::Future;
 use std::sync::Arc;
@@ -203,6 +205,7 @@ fn cancellable_map_search(
 enum WasmAsyncAcceleratorKind {
     Hnsw,
     ProductQuantized,
+    TurboQuantized,
     Composite,
     Catalog,
 }
@@ -232,6 +235,11 @@ fn cancellable_accelerated_search(
                 async_map.tree(),
                 AsyncProductQuantizer::load(&store, manifest).await?,
             )?,
+            WasmAsyncAcceleratorKind::TurboQuantized => AsyncAcceleratorSet::empty()
+                .with_turboquant(
+                    async_map.tree(),
+                    AsyncTurboQuantizer::load(&store, manifest).await?,
+                )?,
             WasmAsyncAcceleratorKind::Composite => AsyncAcceleratorSet::empty().with_composite(
                 async_map.tree(),
                 AsyncCompositeAccelerator::load(&store, manifest).await?,
@@ -310,6 +318,7 @@ fn search_runtime_policy_from_js(value: &JsValue) -> Result<SearchRuntimePolicy,
         authoritative_max_bytes: required_string_usize(value, "authoritativeMaxBytes")?,
         hnsw_max_bytes: required_string_usize(value, "hnswMaxBytes")?,
         pq_max_bytes: required_string_usize(value, "pqMaxBytes")?,
+        turboquant_max_bytes: required_string_usize(value, "turboquantMaxBytes")?,
     })
 }
 
@@ -339,6 +348,11 @@ fn search_runtime_policy_object(policy: &SearchRuntimePolicy) -> Result<Object, 
         &object,
         &"pqMaxBytes".into(),
         &BigInt::from(policy.pq_max_bytes as u64).into(),
+    )?;
+    Reflect::set(
+        &object,
+        &"turboquantMaxBytes".into(),
+        &BigInt::from(policy.turboquant_max_bytes as u64).into(),
     )?;
     Ok(object)
 }
@@ -554,6 +568,81 @@ fn pq_quality_object(quality: ProductQuantizationQuality) -> Result<Object, JsVa
     Ok(object)
 }
 
+fn turboquant_config_from_js(value: &JsValue) -> Result<TurboQuantizationConfig, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(TurboQuantizationConfig::default());
+    }
+    Ok(TurboQuantizationConfig {
+        bit_width: u8::try_from(required_u32(value, "bitWidth")?)
+            .map_err(|_| JsValue::from_str("bitWidth must fit u8"))?,
+        rerank_multiplier: required_u32(value, "rerankMultiplier")?,
+        seed: required_string_u64(value, "seed")?,
+    })
+}
+
+fn turboquant_build_limits_from_js(
+    value: &JsValue,
+) -> Result<TurboQuantizationBuildLimits, JsValue> {
+    if value.is_null() || value.is_undefined() {
+        return Ok(TurboQuantizationBuildLimits::default());
+    }
+    Ok(TurboQuantizationBuildLimits {
+        max_records: optional_string_usize(value, "maxRecords")?,
+        max_input_bytes: optional_string_usize(value, "maxInputBytes")?,
+        max_temporary_bytes: optional_string_usize(value, "maxTemporaryBytes")?,
+        max_transform_operations: optional_string_usize(value, "maxTransformOperations")?,
+        max_encoded_output_bytes: optional_string_usize(value, "maxEncodedOutputBytes")?,
+        max_worker_threads: optional_string_usize(value, "maxWorkerThreads")?,
+    })
+}
+
+fn turboquant_config_object(config: &TurboQuantizationConfig) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"bitWidth".into(),
+        &JsValue::from_f64(f64::from(config.bit_width)),
+    )?;
+    Reflect::set(
+        &object,
+        &"rerankMultiplier".into(),
+        &JsValue::from_f64(f64::from(config.rerank_multiplier)),
+    )?;
+    Reflect::set(&object, &"seed".into(), &BigInt::from(config.seed))?;
+    Ok(object)
+}
+
+fn turboquant_build_stats_object(stats: TurboQuantizationBuildStats) -> Result<Object, JsValue> {
+    let object = Object::new();
+    for (name, value) in [
+        ("encodedVectors", stats.encoded_vectors),
+        ("zeroVectors", stats.zero_vectors),
+        ("transformedComponents", stats.transformed_components),
+        ("butterflyOperations", stats.butterfly_operations),
+        ("inputBytes", stats.input_bytes),
+        ("encodedOutputBytes", stats.encoded_output_bytes),
+        ("peakTemporaryBytes", stats.peak_temporary_bytes),
+    ] {
+        Reflect::set(&object, &name.into(), &BigInt::from(value as u64))?;
+    }
+    Ok(object)
+}
+
+fn turboquant_quality_object(quality: TurboQuantizationQuality) -> Result<Object, JsValue> {
+    let object = Object::new();
+    Reflect::set(
+        &object,
+        &"meanSquaredError".into(),
+        &JsValue::from_f64(quality.mean_squared_error),
+    )?;
+    Reflect::set(
+        &object,
+        &"maximumSquaredError".into(),
+        &JsValue::from_f64(quality.maximum_squared_error),
+    )?;
+    Ok(object)
+}
+
 fn composite_config_from_js(value: &JsValue) -> Result<CompositeAcceleratorConfig, JsValue> {
     if value.is_null() || value.is_undefined() {
         return Ok(CompositeAcceleratorConfig::default());
@@ -674,6 +763,8 @@ fn composite_rebuild_options_from_js(value: &JsValue) -> Result<CompositeRebuild
     }
     let hnsw = optional_field(value, "hnswLimits")?.unwrap_or(JsValue::UNDEFINED);
     let pq_limits = optional_field(value, "pqLimits")?.unwrap_or(JsValue::UNDEFINED);
+    let turboquant_limits =
+        optional_field(value, "turboquantLimits")?.unwrap_or(JsValue::UNDEFINED);
     let threads = optional_field(value, "pqWorkerThreads")?
         .map(|value| {
             value
@@ -691,10 +782,31 @@ fn composite_rebuild_options_from_js(value: &JsValue) -> Result<CompositeRebuild
             "browser-safe WASM composite PQ rebuild requires pqWorkerThreads = 1",
         ));
     }
+    let turboquant_threads = optional_field(value, "turboquantWorkerThreads")?
+        .map(|value| {
+            value
+                .as_string()
+                .ok_or_else(|| {
+                    JsValue::from_str("turboquantWorkerThreads must be an unsigned integer string")
+                })?
+                .parse::<usize>()
+                .map_err(|error| {
+                    JsValue::from_str(&format!("invalid turboquantWorkerThreads: {error}"))
+                })
+        })
+        .transpose()?
+        .unwrap_or(1);
+    if turboquant_threads != 1 {
+        return Err(JsValue::from_str(
+            "browser-safe WASM composite TurboQuant rebuild requires turboquantWorkerThreads = 1",
+        ));
+    }
     Ok(CompositeRebuildOptions {
         hnsw_limits: hnsw_build_limits_from_js(&hnsw)?,
         pq_parallelism: BuildParallelism::serial(),
         pq_limits: pq_build_limits_from_js(&pq_limits)?,
+        turboquant_parallelism: BuildParallelism::serial(),
+        turboquant_limits: turboquant_build_limits_from_js(&turboquant_limits)?,
     })
 }
 
@@ -837,6 +949,37 @@ fn composite_rebuild_outcome_object(
                 &pq_build_stats_object(rebuild_stats)?.into(),
             )?;
         }
+        CompositeBuildOrRebuildOutcome::TurboQuantizedRebuilt {
+            accelerator,
+            reasons,
+            composite_stats,
+            rebuild_stats,
+        } => {
+            Reflect::set(&object, &"kind".into(), &"turboquant_rebuilt".into())?;
+            Reflect::set(
+                &object,
+                &"turboquant".into(),
+                &JsValue::from(WasmTurboQuantizer {
+                    engine,
+                    inner: *accelerator,
+                }),
+            )?;
+            Reflect::set(
+                &object,
+                &"reasons".into(),
+                &rebuild_reasons_array(&reasons)?.into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"compositeStats".into(),
+                &composite_stats_object(&composite_stats)?.into(),
+            )?;
+            Reflect::set(
+                &object,
+                &"turboquantStats".into(),
+                &turboquant_build_stats_object(rebuild_stats)?.into(),
+            )?;
+        }
     }
     Ok(object)
 }
@@ -968,6 +1111,7 @@ fn owned_search_request(value: JsValue) -> Result<OwnedSearchRequest, JsValue> {
         "hnsw" => SearchBackend::Hnsw,
         "composite" => SearchBackend::Composite,
         "auto" => SearchBackend::Auto,
+        "turbo_quantized" | "turboquant" => SearchBackend::TurboQuantized,
         other => {
             return Err(JsValue::from_str(&format!(
                 "unknown search backend: {other}"
@@ -989,6 +1133,9 @@ fn owned_search_request(value: JsValue) -> Result<OwnedSearchRequest, JsValue> {
             },
             pq: PqSearchOptions {
                 rerank_multiplier: optional_u16(&value, "pqRerankMultiplier")?,
+            },
+            turboquant: TurboQuantSearchOptions {
+                rerank_multiplier: optional_u16(&value, "turboquantRerankMultiplier")?,
             },
         },
     })
@@ -1199,6 +1346,61 @@ impl WasmProximityMap {
             inner: index,
         })
     }
+    #[wasm_bindgen(js_name = buildTurboQuant)]
+    pub fn build_turboquant(
+        &self,
+        config: JsValue,
+        worker_threads: String,
+        limits: JsValue,
+    ) -> Result<Object, JsValue> {
+        let config = turboquant_config_from_js(&config)?;
+        let worker_threads = worker_threads
+            .parse::<usize>()
+            .map_err(|error| JsValue::from_str(&format!("invalid workerThreads: {error}")))?;
+        if worker_threads != 1 {
+            return Err(JsValue::from_str(
+                "browser-safe WASM TurboQuant requires workerThreads = 1",
+            ));
+        }
+        let limits = turboquant_build_limits_from_js(&limits)?;
+        let map = self.load()?;
+        let (index, stats) =
+            TurboQuantizer::build_with_limits(&map, config, BuildParallelism::serial(), limits)
+                .map_err(js_error)?;
+        let result = Object::new();
+        Reflect::set(
+            &result,
+            &"index".into(),
+            &JsValue::from(WasmTurboQuantizer {
+                engine: Arc::clone(&self.engine),
+                inner: index,
+            }),
+        )?;
+        Reflect::set(
+            &result,
+            &"stats".into(),
+            &turboquant_build_stats_object(stats)?.into(),
+        )?;
+        Ok(result)
+    }
+    #[wasm_bindgen(js_name = loadTurboQuant)]
+    pub fn load_turboquant(&self, manifest: Uint8Array) -> Result<WasmTurboQuantizer, JsValue> {
+        let raw: [u8; 32] = manifest
+            .to_vec()
+            .try_into()
+            .map_err(|_| JsValue::from_str("TurboQuant manifest CID must be 32 bytes"))?;
+        let index =
+            TurboQuantizer::load(self.engine.store().clone(), Cid(raw)).map_err(js_error)?;
+        if index.source_descriptor() != &self.descriptor {
+            return Err(JsValue::from_str(
+                "TurboQuantizer is bound to a different source descriptor",
+            ));
+        }
+        Ok(WasmTurboQuantizer {
+            engine: Arc::clone(&self.engine),
+            inner: index,
+        })
+    }
     #[wasm_bindgen(js_name = buildCompositeHnsw)]
     pub fn build_composite_hnsw(
         &self,
@@ -1243,6 +1445,31 @@ impl WasmProximityMap {
             &base_map,
             &current,
             CompositeBase::ProductQuantized(base),
+            composite_config_from_js(&config)?,
+            composite_limits_from_js(&limits)?,
+        )
+        .map_err(js_error)?;
+        composite_build_outcome_object(Arc::clone(&self.engine), outcome)
+    }
+    #[wasm_bindgen(js_name = buildCompositeTurboQuant)]
+    pub fn build_composite_turboquant(
+        &self,
+        base_map: &WasmProximityMap,
+        base: &WasmTurboQuantizer,
+        config: JsValue,
+        limits: JsValue,
+    ) -> Result<Object, JsValue> {
+        let current = self.load()?;
+        let base_map = base_map.load()?;
+        let base = TurboQuantizer::load(
+            self.engine.store().clone(),
+            base.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let outcome = CompositeAccelerator::build(
+            &base_map,
+            &current,
+            CompositeBase::TurboQuantized(base),
             composite_config_from_js(&config)?,
             composite_limits_from_js(&limits)?,
         )
@@ -1303,6 +1530,33 @@ impl WasmProximityMap {
         .map_err(js_error)?;
         composite_rebuild_outcome_object(Arc::clone(&self.engine), outcome)
     }
+    #[wasm_bindgen(js_name = buildOrRebuildCompositeTurboQuant)]
+    pub fn build_or_rebuild_composite_turboquant(
+        &self,
+        base_map: &WasmProximityMap,
+        base: &WasmTurboQuantizer,
+        config: JsValue,
+        limits: JsValue,
+        rebuild: JsValue,
+    ) -> Result<Object, JsValue> {
+        let current = self.load()?;
+        let base_map = base_map.load()?;
+        let base = TurboQuantizer::load(
+            self.engine.store().clone(),
+            base.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let outcome = CompositeAccelerator::build_or_rebuild(
+            &base_map,
+            &current,
+            CompositeBase::TurboQuantized(base),
+            composite_config_from_js(&config)?,
+            composite_limits_from_js(&limits)?,
+            composite_rebuild_options_from_js(&rebuild)?,
+        )
+        .map_err(js_error)?;
+        composite_rebuild_outcome_object(Arc::clone(&self.engine), outcome)
+    }
     #[wasm_bindgen(js_name = loadComposite)]
     pub fn load_composite(
         &self,
@@ -1329,6 +1583,7 @@ impl WasmProximityMap {
         &self,
         hnsw: Option<Uint8Array>,
         pq: Option<Uint8Array>,
+        turboquant: Option<Uint8Array>,
         composite: Option<Uint8Array>,
     ) -> Result<WasmAcceleratorCatalog, JsValue> {
         let map = self.load()?;
@@ -1357,6 +1612,20 @@ impl WasmProximityMap {
                             .to_vec()
                             .try_into()
                             .map_err(|_| JsValue::from_str("PQ manifest CID must be 32 bytes"))?),
+                    )
+                    .map_err(js_error)?,
+                )
+                .map_err(js_error)?;
+        }
+        if let Some(value) = turboquant {
+            set = set
+                .with_turboquant(
+                    map.tree(),
+                    TurboQuantizer::load(
+                        self.engine.store().clone(),
+                        Cid(value.to_vec().try_into().map_err(|_| {
+                            JsValue::from_str("TurboQuant manifest CID must be 32 bytes")
+                        })?),
                     )
                     .map_err(js_error)?,
                 )
@@ -1748,6 +2017,143 @@ impl WasmProductQuantizer {
     }
 }
 
+#[wasm_bindgen(js_name = WasmTurboQuantizer)]
+pub struct WasmTurboQuantizer {
+    engine: Arc<super::WasmEngine>,
+    inner: TurboQuantizer<Arc<prolly::MemStore>>,
+}
+
+#[wasm_bindgen(js_class = WasmTurboQuantizer)]
+impl WasmTurboQuantizer {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.inner.manifest_cid().as_bytes().to_vec()
+    }
+
+    #[wasm_bindgen(js_name = sourceDescriptor)]
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.inner.source_descriptor().as_bytes().to_vec()
+    }
+
+    pub fn config(&self) -> Result<Object, JsValue> {
+        turboquant_config_object(self.inner.config())
+    }
+
+    pub fn quality(&self) -> Result<Object, JsValue> {
+        turboquant_quality_object(self.inner.quality())
+    }
+
+    pub fn verify(&self, map: &WasmProximityMap) -> Result<Object, JsValue> {
+        let verification = self.inner.verify(&map.load()?).map_err(js_error)?;
+        let object = Object::new();
+        Reflect::set(
+            &object,
+            &"encodedVectors".into(),
+            &BigInt::from(verification.encoded_vectors).into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"zeroVectors".into(),
+            &BigInt::from(verification.zero_vectors).into(),
+        )?;
+        Reflect::set(
+            &object,
+            &"quality".into(),
+            &turboquant_quality_object(verification.quality)?.into(),
+        )?;
+        Ok(object)
+    }
+
+    pub fn search(&self, map: &WasmProximityMap, request: JsValue) -> Result<Object, JsValue> {
+        let request = owned_search_request(request)?;
+        self.inner
+            .search(&map.load()?, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
+
+    #[wasm_bindgen(js_name = searchWithRuntime)]
+    pub fn search_with_runtime(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        let request = owned_search_request(request)?;
+        let map = map.load()?;
+        let index = TurboQuantizer::load(
+            runtime.io.store().clone(),
+            self.inner.manifest_cid().clone(),
+        )
+        .map_err(js_error)?;
+        let accelerators = AcceleratorSet::empty()
+            .with_turboquant(map.tree(), index)
+            .map_err(js_error)?;
+        map.search_with(&accelerators, &runtime.io, request.as_request())
+            .map_err(js_error)
+            .and_then(search_result_object)
+    }
+
+    #[wasm_bindgen(js_name = searchCancellable)]
+    pub fn search_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        let io = SearchIo::new(
+            self.engine.store().clone(),
+            Arc::new(SearchRuntime::default()),
+        );
+        cancellable_accelerated_search(
+            &map.load()?,
+            &io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::TurboQuantized,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    #[wasm_bindgen(js_name = searchWithRuntimeCancellable)]
+    pub fn search_with_runtime_cancellable(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+        runtime: &WasmProximitySearchRuntime,
+        cancellation: &WasmProximityCancellationToken,
+    ) -> Result<Object, JsValue> {
+        runtime.ensure_engine(&self.engine)?;
+        runtime.ensure_engine(&map.engine)?;
+        cancellable_accelerated_search(
+            &map.load()?,
+            &runtime.io,
+            self.inner.manifest_cid().clone(),
+            WasmAsyncAcceleratorKind::TurboQuantized,
+            &owned_search_request(request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    #[wasm_bindgen(js_name = proveSearch)]
+    pub fn prove_search(
+        &self,
+        map: &WasmProximityMap,
+        request: JsValue,
+    ) -> Result<WasmProximitySearchProof, JsValue> {
+        let request = owned_search_request(request)?;
+        self.inner
+            .prove_search(
+                &map.load()?,
+                request.as_request(),
+                &ContentGraphLimits::default(),
+            )
+            .map(|inner| WasmProximitySearchProof { inner })
+            .map_err(js_error)
+    }
+}
+
 #[wasm_bindgen(js_name = WasmCompositeAccelerator)]
 pub struct WasmCompositeAccelerator {
     engine: Arc<super::WasmEngine>,
@@ -1772,6 +2178,7 @@ impl WasmCompositeAccelerator {
         match self.inner.base_kind() {
             CompositeBaseKind::Hnsw => "hnsw",
             CompositeBaseKind::ProductQuantized => "product_quantized",
+            CompositeBaseKind::TurboQuantized => "turbo_quantized",
         }
         .to_string()
     }
@@ -1911,6 +2318,7 @@ impl WasmAcceleratorCatalog {
                 CatalogAcceleratorKind::Hnsw => "hnsw",
                 CatalogAcceleratorKind::ProductQuantized => "product_quantized",
                 CatalogAcceleratorKind::Composite => "composite",
+                CatalogAcceleratorKind::TurboQuantized => "turbo_quantized",
             };
             Reflect::set(&object, &"kind".into(), &kind.into())?;
             set_bytes(
@@ -2722,6 +3130,7 @@ fn search_result_object(result: prolly::SearchResult) -> Result<Object, JsValue>
         SearchBackend::Hnsw => "hnsw",
         SearchBackend::Composite => "composite",
         SearchBackend::Auto => "auto",
+        SearchBackend::TurboQuantized => "turbo_quantized",
     };
     Reflect::set(&object, &"completion".into(), &completion.into())?;
     Reflect::set(&object, &"backend".into(), &backend.into())?;

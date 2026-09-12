@@ -8,7 +8,7 @@ use crate::prolly::error::Error;
 use crate::prolly::proximity::accelerator::hnsw::storage::GraphNode;
 use crate::prolly::proximity::accelerator::pq::{build_lookup, score_code, validate_code};
 use crate::prolly::proximity::accelerator::turboquant::{
-    prepare_query as prepare_turboquant_query, score_code_value as score_turboquant_code,
+    prepare_query_with_plan as prepare_turboquant_query, score_code_value as score_turboquant_code,
     TurboQuantPreparedQuery,
 };
 use crate::prolly::proximity::accelerator::{
@@ -1022,11 +1022,14 @@ where
             "TurboQuant executor requires a TurboQuant plan",
         ));
     };
+    let transform_plan = store
+        .runtime()
+        .turboquant_transform_plan(index.dimensions, index.config.seed)?;
     let (query, prepared) = prepare_turboquant_query(
         index.metric,
         request.query,
         index.dimensions,
-        index.config.seed,
+        &transform_plan,
     )?;
     let code_store =
         store.for_kind(crate::prolly::content_graph::ContentObjectKind::TurboQuantization);

@@ -406,6 +406,150 @@ func DefaultPQBuildLimits() (ProductQuantizationBuildLimits, error) {
 	return decodeProductQuantizationBuildLimits(raw)
 }
 
+type TurboQuantizationConfig struct {
+	BitWidth         uint8
+	RerankMultiplier uint32
+	Seed             uint64
+}
+
+type TurboQuantizationBuildLimits struct {
+	MaxRecords             *uint64
+	MaxInputBytes          *uint64
+	MaxTemporaryBytes      *uint64
+	MaxTransformOperations *uint64
+	MaxEncodedOutputBytes  *uint64
+	MaxWorkerThreads       *uint64
+}
+
+type TurboQuantizationBuildStats struct {
+	EncodedVectors        uint64
+	ZeroVectors           uint64
+	TransformedComponents uint64
+	ButterflyOperations   uint64
+	InputBytes            uint64
+	EncodedOutputBytes    uint64
+	PeakTemporaryBytes    uint64
+}
+
+type TurboQuantizationQuality struct {
+	MeanSquaredError    float64
+	MaximumSquaredError float64
+}
+
+type TurboQuantizationVerification struct {
+	EncodedVectors uint64
+	ZeroVectors    uint64
+	Quality        TurboQuantizationQuality
+}
+
+type TurboQuantizationBuildResult struct {
+	Index *TurboQuantizer
+	Stats TurboQuantizationBuildStats
+}
+
+func decodeTurboQuantizationConfig(raw []byte) (TurboQuantizationConfig, error) {
+	d := byteDecoder{data: raw}
+	bitWidth, err := d.readByte()
+	if err != nil {
+		return TurboQuantizationConfig{}, err
+	}
+	rerankMultiplier, err := d.readUint32()
+	if err != nil {
+		return TurboQuantizationConfig{}, err
+	}
+	seed, err := d.readUint64()
+	if err != nil {
+		return TurboQuantizationConfig{}, err
+	}
+	if err := d.done(); err != nil {
+		return TurboQuantizationConfig{}, err
+	}
+	return TurboQuantizationConfig{BitWidth: bitWidth, RerankMultiplier: rerankMultiplier, Seed: seed}, nil
+}
+
+func encodeTurboQuantizationConfig(config TurboQuantizationConfig) []byte {
+	var out bytes.Buffer
+	out.WriteByte(config.BitWidth)
+	writeU32(&out, config.RerankMultiplier)
+	writeU64(&out, config.Seed)
+	return out.Bytes()
+}
+
+func decodeTurboQuantizationBuildLimits(raw []byte) (TurboQuantizationBuildLimits, error) {
+	d := byteDecoder{data: raw}
+	var result TurboQuantizationBuildLimits
+	targets := []**uint64{
+		&result.MaxRecords, &result.MaxInputBytes, &result.MaxTemporaryBytes,
+		&result.MaxTransformOperations, &result.MaxEncodedOutputBytes, &result.MaxWorkerThreads,
+	}
+	for _, target := range targets {
+		value, err := d.readOptionalUint64()
+		if err != nil {
+			return TurboQuantizationBuildLimits{}, err
+		}
+		*target = value
+	}
+	return result, d.done()
+}
+
+func encodeTurboQuantizationBuildLimits(limits TurboQuantizationBuildLimits) []byte {
+	var out bytes.Buffer
+	encodeOptionalU64(&out, limits.MaxRecords)
+	encodeOptionalU64(&out, limits.MaxInputBytes)
+	encodeOptionalU64(&out, limits.MaxTemporaryBytes)
+	encodeOptionalU64(&out, limits.MaxTransformOperations)
+	encodeOptionalU64(&out, limits.MaxEncodedOutputBytes)
+	encodeOptionalU64(&out, limits.MaxWorkerThreads)
+	return out.Bytes()
+}
+
+func decodeTurboQuantizationBuildStats(d *byteDecoder) (TurboQuantizationBuildStats, error) {
+	var result TurboQuantizationBuildStats
+	targets := []*uint64{
+		&result.EncodedVectors, &result.ZeroVectors, &result.TransformedComponents,
+		&result.ButterflyOperations, &result.InputBytes, &result.EncodedOutputBytes,
+		&result.PeakTemporaryBytes,
+	}
+	for _, target := range targets {
+		value, err := d.readUint64()
+		if err != nil {
+			return TurboQuantizationBuildStats{}, err
+		}
+		*target = value
+	}
+	return result, nil
+}
+
+func decodeTurboQuantizationQuality(d *byteDecoder) (TurboQuantizationQuality, error) {
+	mean, err := d.readUint64()
+	if err != nil {
+		return TurboQuantizationQuality{}, err
+	}
+	maximum, err := d.readUint64()
+	if err != nil {
+		return TurboQuantizationQuality{}, err
+	}
+	return TurboQuantizationQuality{
+		MeanSquaredError: math.Float64frombits(mean), MaximumSquaredError: math.Float64frombits(maximum),
+	}, nil
+}
+
+func DefaultTurboQuantConfig() (TurboQuantizationConfig, error) {
+	raw, err := ffiDefaultTurboQuantConfig()
+	if err != nil {
+		return TurboQuantizationConfig{}, err
+	}
+	return decodeTurboQuantizationConfig(raw)
+}
+
+func DefaultTurboQuantBuildLimits() (TurboQuantizationBuildLimits, error) {
+	raw, err := ffiDefaultTurboQuantBuildLimits()
+	if err != nil {
+		return TurboQuantizationBuildLimits{}, err
+	}
+	return decodeTurboQuantizationBuildLimits(raw)
+}
+
 type ProximityMutation struct {
 	Key    []byte
 	Vector []float32
@@ -522,6 +666,7 @@ const (
 	SearchBackendHNSW             SearchBackend = 3
 	SearchBackendComposite        SearchBackend = 4
 	SearchBackendAuto             SearchBackend = 5
+	SearchBackendTurboQuantized   SearchBackend = 6
 )
 
 type ProximityFilterKind int32
@@ -560,16 +705,17 @@ func EligibleKeysFilter(keys [][]byte) ProximityFilter {
 }
 
 type SearchRequest struct {
-	Query              []float32
-	K                  uint32
-	Policy             SearchPolicy
-	AdaptiveQuality    *AdaptiveQuality
-	Budget             SearchBudget
-	Filter             ProximityFilter
-	Kernel             QueryKernel
-	Backend            SearchBackend
-	HNSWEFSearch       *uint32
-	PQRerankMultiplier *uint16
+	Query                      []float32
+	K                          uint32
+	Policy                     SearchPolicy
+	AdaptiveQuality            *AdaptiveQuality
+	Budget                     SearchBudget
+	Filter                     ProximityFilter
+	Kernel                     QueryKernel
+	Backend                    SearchBackend
+	HNSWEFSearch               *uint32
+	PQRerankMultiplier         *uint16
+	TurboQuantRerankMultiplier *uint16
 }
 
 func ExactSearch(query []float32, k uint32) SearchRequest {
@@ -608,6 +754,10 @@ func cloneSearchRequest(request SearchRequest) SearchRequest {
 		value := *request.PQRerankMultiplier
 		request.PQRerankMultiplier = &value
 	}
+	if request.TurboQuantRerankMultiplier != nil {
+		value := *request.TurboQuantRerankMultiplier
+		request.TurboQuantRerankMultiplier = &value
+	}
 	return request
 }
 
@@ -633,7 +783,7 @@ func (request SearchRequest) validate() error {
 	if request.Kernel < QueryKernelScalarDeterministic || request.Kernel > QueryKernelAutoDeterministic {
 		return errors.New("invalid query kernel")
 	}
-	if request.Backend < SearchBackendNative || request.Backend > SearchBackendAuto {
+	if request.Backend < SearchBackendNative || request.Backend > SearchBackendTurboQuantized {
 		return errors.New("invalid search backend")
 	}
 	return nil
@@ -644,7 +794,8 @@ func (request SearchRequest) usesPackedExactPath() bool {
 		request.Budget.MaxNodes == nil && request.Budget.MaxCommittedBytes == nil &&
 		request.Budget.MaxDistanceEvaluations == nil && request.Budget.MaxFrontierEntries == nil &&
 		request.Filter.Kind == ProximityFilterAll && request.Kernel == QueryKernelAutoDeterministic &&
-		request.Backend == SearchBackendNative && request.HNSWEFSearch == nil && request.PQRerankMultiplier == nil
+		request.Backend == SearchBackendNative && request.HNSWEFSearch == nil &&
+		request.PQRerankMultiplier == nil && request.TurboQuantRerankMultiplier == nil
 }
 
 type Neighbor struct {
@@ -683,6 +834,7 @@ type ProximitySearchRuntimePolicy struct {
 	AuthoritativeMaxBytes uint64
 	HNSWMaxBytes          uint64
 	PQMaxBytes            uint64
+	TurboQuantMaxBytes    uint64
 }
 
 type ProximitySearchRuntimeStats struct {
@@ -705,12 +857,13 @@ func encodeProximitySearchRuntimePolicy(policy ProximitySearchRuntimePolicy) []b
 	writeU64(&out, policy.AuthoritativeMaxBytes)
 	writeU64(&out, policy.HNSWMaxBytes)
 	writeU64(&out, policy.PQMaxBytes)
+	writeU64(&out, policy.TurboQuantMaxBytes)
 	return out.Bytes()
 }
 
 func decodeProximitySearchRuntimePolicy(raw []byte) (ProximitySearchRuntimePolicy, error) {
 	d := byteDecoder{data: raw}
-	values := [5]uint64{}
+	values := [6]uint64{}
 	for index := range values {
 		value, err := d.readUint64()
 		if err != nil {
@@ -723,7 +876,7 @@ func decodeProximitySearchRuntimePolicy(raw []byte) (ProximitySearchRuntimePolic
 	}
 	return ProximitySearchRuntimePolicy{
 		MaxEntries: values[0], MaxBytes: values[1], AuthoritativeMaxBytes: values[2],
-		HNSWMaxBytes: values[3], PQMaxBytes: values[4],
+		HNSWMaxBytes: values[3], PQMaxBytes: values[4], TurboQuantMaxBytes: values[5],
 	}, nil
 }
 
@@ -1497,6 +1650,307 @@ func (i *ProductQuantizer) ProveSearch(proximity *ProximityMap, request SearchRe
 	return proof, nil
 }
 
+type TurboQuantizer struct {
+	handle uint64
+	closed atomic.Bool
+	mu     sync.RWMutex
+}
+
+func newTurboQuantizer(handle uint64) *TurboQuantizer {
+	index := &TurboQuantizer{handle: handle}
+	runtime.SetFinalizer(index, (*TurboQuantizer).Close)
+	return index
+}
+
+func (i *TurboQuantizer) Close() {
+	if i == nil || i.closed.Swap(true) {
+		return
+	}
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	runtime.SetFinalizer(i, nil)
+	if i.handle != 0 {
+		ffiFreeTurboQuantizer(i.handle)
+		i.handle = 0
+	}
+}
+
+func (i *TurboQuantizer) withHandle() (uint64, func(), error) {
+	if i == nil || i.closed.Load() {
+		return 0, nil, errors.New("TurboQuantizer is closed")
+	}
+	i.mu.RLock()
+	if i.closed.Load() || i.handle == 0 {
+		i.mu.RUnlock()
+		return 0, nil, errors.New("TurboQuantizer is closed")
+	}
+	return i.handle, i.mu.RUnlock, nil
+}
+
+func (m *ProximityMap) BuildTurboQuant(
+	config TurboQuantizationConfig,
+	workerThreads uint64,
+	limits TurboQuantizationBuildLimits,
+) (TurboQuantizationBuildResult, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return TurboQuantizationBuildResult{}, err
+	}
+	defer unlock()
+	raw, err := ffiProximityBuildTurboQuant(
+		handle, encodeTurboQuantizationConfig(config), workerThreads,
+		encodeTurboQuantizationBuildLimits(limits),
+	)
+	if err != nil {
+		return TurboQuantizationBuildResult{}, err
+	}
+	d := byteDecoder{data: raw}
+	indexHandle, err := d.readUint64()
+	if err != nil {
+		return TurboQuantizationBuildResult{}, err
+	}
+	stats, err := decodeTurboQuantizationBuildStats(&d)
+	if err != nil {
+		ffiFreeTurboQuantizer(indexHandle)
+		return TurboQuantizationBuildResult{}, err
+	}
+	if err := d.done(); err != nil {
+		ffiFreeTurboQuantizer(indexHandle)
+		return TurboQuantizationBuildResult{}, err
+	}
+	return TurboQuantizationBuildResult{Index: newTurboQuantizer(indexHandle), Stats: stats}, nil
+}
+
+func (m *ProximityMap) LoadTurboQuant(manifest []byte) (*TurboQuantizer, error) {
+	handle, _, unlock, err := m.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	indexHandle, err := ffiProximityLoadTurboQuant(handle, bytes.Clone(manifest))
+	if err != nil {
+		return nil, err
+	}
+	return newTurboQuantizer(indexHandle), nil
+}
+
+func (i *TurboQuantizer) Manifest() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiTurboQuantizerManifest(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *TurboQuantizer) SourceDescriptor() ([]byte, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	raw, err := ffiTurboQuantizerSourceDescriptor(handle)
+	if err != nil {
+		return nil, err
+	}
+	return decodeHNSWByteArray(raw)
+}
+
+func (i *TurboQuantizer) Config() (TurboQuantizationConfig, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return TurboQuantizationConfig{}, err
+	}
+	defer unlock()
+	raw, err := ffiTurboQuantizerConfig(handle)
+	if err != nil {
+		return TurboQuantizationConfig{}, err
+	}
+	return decodeTurboQuantizationConfig(raw)
+}
+
+func (i *TurboQuantizer) Quality() (TurboQuantizationQuality, error) {
+	handle, unlock, err := i.withHandle()
+	if err != nil {
+		return TurboQuantizationQuality{}, err
+	}
+	defer unlock()
+	raw, err := ffiTurboQuantizerQuality(handle)
+	if err != nil {
+		return TurboQuantizationQuality{}, err
+	}
+	d := byteDecoder{data: raw}
+	quality, err := decodeTurboQuantizationQuality(&d)
+	if err != nil {
+		return TurboQuantizationQuality{}, err
+	}
+	return quality, d.done()
+}
+
+func (i *TurboQuantizer) Verify(proximity *ProximityMap) (TurboQuantizationVerification, error) {
+	indexHandle, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return TurboQuantizationVerification{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return TurboQuantizationVerification{}, err
+	}
+	defer mapUnlock()
+	raw, err := ffiTurboQuantizerVerify(indexHandle, mapHandle)
+	if err != nil {
+		return TurboQuantizationVerification{}, err
+	}
+	d := byteDecoder{data: raw}
+	encodedVectors, err := d.readUint64()
+	if err != nil {
+		return TurboQuantizationVerification{}, err
+	}
+	zeroVectors, err := d.readUint64()
+	if err != nil {
+		return TurboQuantizationVerification{}, err
+	}
+	quality, err := decodeTurboQuantizationQuality(&d)
+	if err != nil {
+		return TurboQuantizationVerification{}, err
+	}
+	if err := d.done(); err != nil {
+		return TurboQuantizationVerification{}, err
+	}
+	return TurboQuantizationVerification{
+		EncodedVectors: encodedVectors, ZeroVectors: zeroVectors, Quality: quality,
+	}, nil
+}
+
+func (i *TurboQuantizer) Search(ctx context.Context, proximity *ProximityMap, request SearchRequest) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	raw, err := ffiTurboQuantizerSearch(index, mapHandle, encoded)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *TurboQuantizer) SearchWithRuntime(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest, searchRuntime *ProximitySearchRuntime,
+) (SearchResult, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return SearchResult{}, err
+	}
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	runtimeHandle, runtimeUnlock, err := searchRuntime.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer runtimeUnlock()
+	raw, err := ffiTurboQuantizerSearchWithRuntime(index, mapHandle, encoded, runtimeHandle)
+	if err != nil {
+		return SearchResult{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return SearchResult{}, err
+	}
+	return decodeProximitySearchResultBytes(raw)
+}
+
+func (i *TurboQuantizer) SearchCancellable(
+	ctx context.Context,
+	proximity *ProximityMap,
+	request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+	cancellation *ProximityCancellationToken,
+) (SearchResult, error) {
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return SearchResult{}, err
+	}
+	defer mapUnlock()
+	return runPortableCancellableSearch(
+		ctx, request, searchRuntime, cancellation,
+		func(encoded []byte, runtimeHandle *uint64, cancellationHandle uint64) ([]byte, error) {
+			return ffiTurboQuantizerSearchCancellable(
+				index, mapHandle, encoded, runtimeHandle, cancellationHandle,
+			)
+		},
+	)
+}
+
+func (i *TurboQuantizer) ProveSearch(proximity *ProximityMap, request SearchRequest) (*ProximitySearchProof, error) {
+	encoded, err := encodeProximitySearchRequest(cloneSearchRequest(request))
+	if err != nil {
+		return nil, err
+	}
+	limits, err := ffiDefaultContentGraphLimits()
+	if err != nil {
+		return nil, err
+	}
+	index, indexUnlock, err := i.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer indexUnlock()
+	mapHandle, _, mapUnlock, err := proximity.withHandle()
+	if err != nil {
+		return nil, err
+	}
+	defer mapUnlock()
+	proofHandle, err := ffiTurboQuantizerProveSearch(index, mapHandle, encoded, limits)
+	if err != nil {
+		return nil, err
+	}
+	proof := &ProximitySearchProof{handle: proofHandle}
+	runtime.SetFinalizer(proof, (*ProximitySearchProof).Close)
+	return proof, nil
+}
+
 func encodeProximityRecords(dimensions uint32, records []ProximityRecord) ([]byte, error) {
 	var out bytes.Buffer
 	writeI32(&out, int32(len(records)))
@@ -1561,6 +2015,13 @@ func encodeProximitySearchRequest(request SearchRequest) ([]byte, error) {
 		out.WriteByte(1)
 		out.WriteByte(byte(*request.PQRerankMultiplier >> 8))
 		out.WriteByte(byte(*request.PQRerankMultiplier))
+	}
+	if request.TurboQuantRerankMultiplier == nil {
+		out.WriteByte(0)
+	} else {
+		out.WriteByte(1)
+		out.WriteByte(byte(*request.TurboQuantRerankMultiplier >> 8))
+		out.WriteByte(byte(*request.TurboQuantRerankMultiplier))
 	}
 	return out.Bytes(), nil
 }
@@ -2534,6 +2995,7 @@ func decodeProximitySearchResult(d *byteDecoder) (SearchResult, error) {
 	}
 	result.Backend = map[int32]string{
 		1: "native", 2: "product-quantized", 3: "hnsw", 4: "composite", 5: "auto",
+		6: "turbo-quantized",
 	}[backend]
 	if result.Backend == "" {
 		return SearchResult{}, errors.New("unknown proximity search backend")

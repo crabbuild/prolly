@@ -555,6 +555,110 @@ func TestProductQuantizerLifecycleIsPortableAndBounded(t *testing.T) {
 	}
 }
 
+func TestTurboQuantizerLifecycleIsPortableVerifiableAndBounded(t *testing.T) {
+	config, err := DefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewMemoryEngine(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Close)
+	records := make([]ProximityRecord, 32)
+	for index := range records {
+		records[index] = ProximityRecord{
+			Key: []byte(fmt.Sprintf("turbo-vector-%02d", index)),
+			Vector: []float32{
+				float32(index), float32(index % 3), 0, 1, 2, 3, 4, 5,
+			},
+			Value: []byte(fmt.Sprintf("turbo-value-%02d", index)),
+		}
+	}
+	proximity, err := engine.BuildProximity(8, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proximity.Close)
+	limits, err := DefaultTurboQuantBuildLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	turboConfig := TurboQuantizationConfig{BitWidth: 4, RerankMultiplier: 4, Seed: ^uint64(0)}
+	built, err := proximity.BuildTurboQuant(turboConfig, 2, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if built.Stats.EncodedVectors != 32 {
+		t.Fatalf("TurboQuant build stats = %#v", built.Stats)
+	}
+	index := built.Index
+	manifest, err := index.Manifest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor, err := proximity.Descriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := index.SourceDescriptor()
+	if err != nil || !bytes.Equal(source, descriptor) {
+		t.Fatalf("TurboQuant source = %x, %v", source, err)
+	}
+	actualConfig, err := index.Config()
+	if err != nil || actualConfig != turboConfig {
+		t.Fatalf("TurboQuant config = %#v, %v", actualConfig, err)
+	}
+	verification, err := index.Verify(proximity)
+	if err != nil || verification.EncodedVectors != 32 {
+		t.Fatalf("TurboQuant verification = %#v, %v", verification, err)
+	}
+	request := ExactSearch([]float32{0, 0, 0, 1, 2, 3, 4, 5}, 3)
+	request.Policy = SearchPolicyFixedBudget
+	request.Backend = SearchBackendTurboQuantized
+	result, err := index.Search(context.Background(), proximity, request)
+	if err != nil || result.Backend != "turbo-quantized" || !bytes.Equal(result.Neighbors[0].Key, []byte("turbo-vector-00")) {
+		t.Fatalf("TurboQuant search = %#v, %v", result, err)
+	}
+	runtimeCache, err := engine.NewProximitySearchRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(runtimeCache.Close)
+	if cached, err := index.SearchWithRuntime(context.Background(), proximity, request, runtimeCache); err != nil || cached.Backend != "turbo-quantized" {
+		t.Fatalf("TurboQuant runtime search = %#v, %v", cached, err)
+	}
+	cancellation, err := NewProximityCancellationToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(cancellation.Close)
+	cancellation.Cancel()
+	cancelled, err := index.SearchCancellable(context.Background(), proximity, request, nil, cancellation)
+	if err != nil || cancelled.Completion != "cancelled" || len(cancelled.Neighbors) != 0 {
+		t.Fatalf("TurboQuant cancellation = %#v, %v", cancelled, err)
+	}
+	proof, err := index.ProveSearch(proximity, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(proof.Close)
+	verified, err := proof.Verify(descriptor)
+	if err != nil || verified.Result.Backend != "turbo-quantized" {
+		t.Fatalf("TurboQuant proof = %#v, %v", verified, err)
+	}
+	index.Close()
+	loaded, err := proximity.LoadTurboQuant(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(loaded.Close)
+	loadedManifest, err := loaded.Manifest()
+	if err != nil || !bytes.Equal(loadedManifest, manifest) {
+		t.Fatalf("loaded TurboQuant manifest = %x, %v", loadedManifest, err)
+	}
+}
+
 func TestCompositeAndCatalogLifecycleIsPortableAndBounded(t *testing.T) {
 	config, err := DefaultConfig()
 	if err != nil {
@@ -663,7 +767,7 @@ func TestCompositeAndCatalogLifecycleIsPortableAndBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	catalog, err := current.BuildAcceleratorCatalog(nil, nil, composite)
+	catalog, err := current.BuildAcceleratorCatalog(nil, nil, nil, composite)
 	if err != nil {
 		t.Fatal(err)
 	}
