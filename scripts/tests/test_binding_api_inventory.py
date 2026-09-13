@@ -444,6 +444,18 @@ class ManifestCheckTests(unittest.TestCase):
 
     def test_abstraction_review_classifies_without_claiming_implementation(self) -> None:
         items = {
+            "prolly::AsyncIndexedStore": ApiItem(
+                rust="prolly::AsyncIndexedStore",
+                kind="trait",
+                owner=None,
+                member_kind=None,
+            ),
+            "prolly::IndexedStore": ApiItem(
+                rust="prolly::IndexedStore",
+                kind="trait",
+                owner=None,
+                member_kind=None,
+            ),
             "prolly::Store": ApiItem(
                 rust="prolly::Store",
                 kind="trait",
@@ -489,6 +501,12 @@ class ManifestCheckTests(unittest.TestCase):
         self.assertEqual(entries["prolly::Store"]["equivalence"], "store-trait")
         self.assertEqual(entries["prolly::Store"]["classification"], "idiomatic")
         self.assertEqual(entries["prolly::Store"]["audience"], "rust-extension")
+        self.assertEqual(
+            entries["prolly::AsyncIndexedStore"]["equivalence"], "store-trait"
+        )
+        self.assertEqual(
+            entries["prolly::IndexedStore"]["equivalence"], "store-trait"
+        )
         self.assertEqual(
             entries["prolly::Store::Error"]["equivalence"],
             "marker-and-associated-type",

@@ -4,9 +4,8 @@ use std::sync::Arc;
 use prolly::{ProllyCacheUsage, RemoteProllyStore, RemoteStoreConfig};
 use prolly_dynamodb_core::{
     BulkImportOptions, BulkImportResult, Clock, Database, IdGenerator, ImportAuditRecord,
-    ImportPlanId, KeyAttribute, LargeValueConfig,
-    MaintenanceContext, MaintenanceLease, MaintenanceLeaseId, MaintenanceLeaseRelease,
-    StoragePublicationMode,
+    ImportPlanId, KeyAttribute, LargeValueConfig, MaintenanceContext, MaintenanceLease,
+    MaintenanceLeaseId, MaintenanceLeaseRelease, StoragePublicationMode,
 };
 use prolly_store_dynamodb::{
     dynamodb_safe_config, DynamoDbBackend, DynamoDbStore, TransactionPublicationMode,

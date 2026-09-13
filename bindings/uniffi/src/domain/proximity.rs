@@ -239,6 +239,85 @@ mod tests {
     }
 
     #[test]
+    fn turboquant_accelerator_lifecycle_is_portable_bounded_and_source_bound() {
+        let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
+        let records = (0..24)
+            .map(|index| ProximityRecordRecord {
+                key: format!("vector-{index:02}").into_bytes(),
+                vector: (0..8)
+                    .map(|dimension| (index * 8 + dimension) as f32 / 31.0)
+                    .collect(),
+                value: format!("value-{index:02}").into_bytes(),
+            })
+            .collect();
+        let map = engine
+            .build_proximity_map(ProximityConfigRecord::new(8), records, None)
+            .unwrap();
+        let config = TurboQuantizationConfigRecord {
+            bit_width: 4,
+            rerank_multiplier: 8,
+            seed: u64::MAX,
+        };
+        let built = map
+            .build_turboquant(config.clone(), 2, default_turboquant_build_limits())
+            .unwrap();
+        assert_eq!(built.stats.encoded_vectors, 24);
+        assert_eq!(built.index.config(), config);
+        assert_eq!(built.index.source_descriptor(), map.descriptor());
+        assert!(built.index.quality().mean_squared_error.is_finite());
+        assert_eq!(built.index.verify(map.clone()).unwrap().encoded_vectors, 24);
+
+        let mut request =
+            ProximitySearchRequestRecord::exact(vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], 3);
+        request.policy = SearchPolicyKind::FixedBudget;
+        request.backend = SearchBackendRecord::TurboQuantized;
+        let result = built.index.search(map.clone(), request.clone()).unwrap();
+        assert_eq!(result.backend, SearchBackendRecord::TurboQuantized);
+        let runtime = engine
+            .proximity_search_runtime(default_proximity_search_runtime_policy())
+            .unwrap();
+        assert_eq!(
+            built
+                .index
+                .search_with_runtime(map.clone(), request.clone(), runtime.clone())
+                .unwrap()
+                .neighbors,
+            result.neighbors
+        );
+        let cancellation = Arc::new(BindingProximityCancellationToken::new());
+        cancellation.cancel();
+        assert_eq!(
+            built
+                .index
+                .search_cancellable(map.clone(), request.clone(), Some(runtime), cancellation)
+                .unwrap()
+                .completion,
+            SearchCompletionRecord::Cancelled
+        );
+        let proof = built
+            .index
+            .prove_search(map.clone(), request, ContentGraphLimitsRecord::defaults())
+            .unwrap();
+        assert_eq!(
+            proof
+                .verify(Some(map.descriptor()), ContentGraphLimitsRecord::defaults())
+                .unwrap()
+                .result
+                .backend,
+            SearchBackendRecord::TurboQuantized
+        );
+        let loaded = map.load_turboquant(built.index.manifest()).unwrap();
+        assert_eq!(loaded.manifest(), built.index.manifest());
+        let catalog = map
+            .build_accelerator_catalog(None, None, Some(loaded), None)
+            .unwrap();
+        assert_eq!(
+            catalog.entries()[0].kind,
+            CatalogAcceleratorKindRecord::TurboQuantized
+        );
+    }
+
+    #[test]
     fn retained_search_runtime_reuses_validated_content_and_is_engine_bound() {
         let engine = Arc::new(ProllyEngine::memory(default_config()).unwrap());
         let records = (0..16)
@@ -452,7 +531,7 @@ mod tests {
         assert_eq!(loaded_composite.manifest(), composite.manifest());
 
         let catalog = current
-            .build_accelerator_catalog(None, None, Some(composite.clone()))
+            .build_accelerator_catalog(None, None, None, Some(composite.clone()))
             .unwrap();
         assert_eq!(catalog.source_descriptor(), current.descriptor());
         assert_eq!(catalog.entries().len(), 1);
@@ -533,20 +612,24 @@ use std::task::{Context, Poll, Wake, Waker};
 use prolly::{
     AcceleratorCatalog, AcceleratorCatalogEntry, AcceleratorSet, AdaptiveQuality,
     AsyncAcceleratorCatalog, AsyncAcceleratorSet, AsyncCompositeAccelerator, AsyncHnswIndex,
-    AsyncProductQuantizer, AsyncProximityMap, AsyncSearchControl, BuildParallelism,
-    CancellationToken, CatalogAcceleratorKind, CompositeAccelerator, CompositeAcceleratorConfig,
-    CompositeBase, CompositeBaseKind, CompositeBuildLimits, CompositeBuildOrRebuildOutcome,
-    CompositeBuildOutcome, CompositeBuildStats, CompositeRebuildOptions, ContentGraphLimits,
-    ContentObjectKind, DistanceMetric, FullRebuildReason, HierarchyConfig, HnswBuildLimits,
-    HnswBuildStats, HnswConfig, HnswIndex, HnswRoutingVectorEncoding, HnswSearchOptions, Neighbor,
-    OverflowConfig, PlannerPolicy, PqSearchOptions, ProductQuantizationBuildLimits,
-    ProductQuantizationBuildStats, ProductQuantizationConfig, ProductQuantizationQuality,
-    ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap, ProximityMembershipProof,
-    ProximityMutation, ProximityMutationStats, ProximityRecord, ProximitySearchClaim,
-    ProximitySearchProof, ProximitySearchStats, ProximityStructuralProof, ProximityVerification,
-    QueryKernel, ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchIo,
+    AsyncProductQuantizer, AsyncProximityMap, AsyncSearchControl, AsyncTurboQuantizer,
+    BuildParallelism, CancellationToken, CatalogAcceleratorKind, CompositeAccelerator,
+    CompositeAcceleratorConfig, CompositeBase, CompositeBaseKind, CompositeBuildLimits,
+    CompositeBuildOrRebuildOutcome, CompositeBuildOutcome, CompositeBuildStats,
+    CompositeRebuildOptions, ContentGraphLimits, ContentObjectKind, DistanceMetric,
+    FullRebuildReason, HierarchyConfig, HnswBuildLimits, HnswBuildStats, HnswConfig, HnswIndex,
+    HnswRoutingVectorEncoding, HnswSearchOptions, Neighbor, OverflowConfig, PlannerPolicy,
+    PqSearchOptions, ProductQuantizationBuildLimits, ProductQuantizationBuildStats,
+    ProductQuantizationConfig, ProductQuantizationQuality, ProductQuantizer, ProximityConfig,
+    ProximityFilter, ProximityMap, ProximityMembershipProof, ProximityMutation,
+    ProximityMutationStats, ProximityRecord, ProximitySearchClaim, ProximitySearchProof,
+    ProximitySearchStats, ProximityStructuralProof, ProximityVerification, QueryKernel,
+    ScalarQuantizationConfig, SearchBackend, SearchBudget, SearchCompletion, SearchIo,
     SearchOptions, SearchPolicy, SearchRequest, SearchResult, SearchRuntime, SearchRuntimePolicy,
-    Store, SyncStoreAsAsync, TypedContentObject, TypedContentRoot, VectorStorageConfig,
+    Store, SyncStoreAsAsync, TurboQuantSearchOptions, TurboQuantizationBuildLimits,
+    TurboQuantizationBuildStats, TurboQuantizationConfig, TurboQuantizationQuality,
+    TurboQuantizationVerification, TurboQuantizer, TypedContentObject, TypedContentRoot,
+    VectorStorageConfig,
 };
 
 use crate::{BindingEngine, KeyProofRecord, ProllyBindingError, ProllyEngine};
@@ -567,6 +650,7 @@ pub enum ContentObjectKindRecord {
     HnswPage,
     CompositeAccelerator,
     AcceleratorCatalog,
+    TurboQuantization,
 }
 
 impl From<ContentObjectKind> for ContentObjectKindRecord {
@@ -584,6 +668,7 @@ impl From<ContentObjectKind> for ContentObjectKindRecord {
             ContentObjectKind::HnswPage => Self::HnswPage,
             ContentObjectKind::CompositeAccelerator => Self::CompositeAccelerator,
             ContentObjectKind::AcceleratorCatalog => Self::AcceleratorCatalog,
+            ContentObjectKind::TurboQuantization => Self::TurboQuantization,
         }
     }
 }
@@ -603,6 +688,7 @@ impl From<ContentObjectKindRecord> for ContentObjectKind {
             ContentObjectKindRecord::HnswPage => Self::HnswPage,
             ContentObjectKindRecord::CompositeAccelerator => Self::CompositeAccelerator,
             ContentObjectKindRecord::AcceleratorCatalog => Self::AcceleratorCatalog,
+            ContentObjectKindRecord::TurboQuantization => Self::TurboQuantization,
         }
     }
 }
@@ -919,6 +1005,7 @@ pub enum SearchBackendRecord {
     Hnsw,
     Composite,
     Auto,
+    TurboQuantized,
 }
 
 impl From<SearchBackendRecord> for SearchBackend {
@@ -929,6 +1016,7 @@ impl From<SearchBackendRecord> for SearchBackend {
             SearchBackendRecord::Hnsw => Self::Hnsw,
             SearchBackendRecord::Composite => Self::Composite,
             SearchBackendRecord::Auto => Self::Auto,
+            SearchBackendRecord::TurboQuantized => Self::TurboQuantized,
         }
     }
 }
@@ -941,6 +1029,7 @@ impl From<SearchBackend> for SearchBackendRecord {
             SearchBackend::Hnsw => Self::Hnsw,
             SearchBackend::Composite => Self::Composite,
             SearchBackend::Auto => Self::Auto,
+            SearchBackend::TurboQuantized => Self::TurboQuantized,
         }
     }
 }
@@ -1001,6 +1090,7 @@ pub struct ProximitySearchRequestRecord {
     pub backend: SearchBackendRecord,
     pub hnsw_ef_search: Option<u32>,
     pub pq_rerank_multiplier: Option<u16>,
+    pub turboquant_rerank_multiplier: Option<u16>,
 }
 
 impl ProximitySearchRequestRecord {
@@ -1016,6 +1106,7 @@ impl ProximitySearchRequestRecord {
             backend: SearchBackendRecord::Native,
             hnsw_ef_search: None,
             pq_rerank_multiplier: None,
+            turboquant_rerank_multiplier: None,
         }
     }
 }
@@ -1102,6 +1193,9 @@ fn proximity_search_request(
             pq: PqSearchOptions {
                 rerank_multiplier: request.pq_rerank_multiplier,
             },
+            turboquant: TurboQuantSearchOptions {
+                rerank_multiplier: request.turboquant_rerank_multiplier,
+            },
         },
     })
 }
@@ -1120,6 +1214,7 @@ pub struct ProximitySearchRuntimePolicyRecord {
     pub authoritative_max_bytes: u64,
     pub hnsw_max_bytes: u64,
     pub pq_max_bytes: u64,
+    pub turboquant_max_bytes: u64,
 }
 
 impl From<SearchRuntimePolicy> for ProximitySearchRuntimePolicyRecord {
@@ -1130,6 +1225,7 @@ impl From<SearchRuntimePolicy> for ProximitySearchRuntimePolicyRecord {
             authoritative_max_bytes: value.authoritative_max_bytes as u64,
             hnsw_max_bytes: value.hnsw_max_bytes as u64,
             pq_max_bytes: value.pq_max_bytes as u64,
+            turboquant_max_bytes: value.turboquant_max_bytes as u64,
         }
     }
 }
@@ -1147,6 +1243,7 @@ impl TryFrom<ProximitySearchRuntimePolicyRecord> for SearchRuntimePolicy {
             )?,
             hnsw_max_bytes: to_usize(value.hnsw_max_bytes, "hnsw_max_bytes")?,
             pq_max_bytes: to_usize(value.pq_max_bytes, "pq_max_bytes")?,
+            turboquant_max_bytes: to_usize(value.turboquant_max_bytes, "turboquant_max_bytes")?,
         })
     }
 }
@@ -1477,10 +1574,144 @@ pub fn default_pq_build_limits() -> ProductQuantizationBuildLimitsRecord {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct TurboQuantizationConfigRecord {
+    pub bit_width: u8,
+    pub rerank_multiplier: u32,
+    pub seed: u64,
+}
+
+impl From<TurboQuantizationConfig> for TurboQuantizationConfigRecord {
+    fn from(value: TurboQuantizationConfig) -> Self {
+        Self {
+            bit_width: value.bit_width,
+            rerank_multiplier: value.rerank_multiplier,
+            seed: value.seed,
+        }
+    }
+}
+
+impl From<TurboQuantizationConfigRecord> for TurboQuantizationConfig {
+    fn from(value: TurboQuantizationConfigRecord) -> Self {
+        Self {
+            bit_width: value.bit_width,
+            rerank_multiplier: value.rerank_multiplier,
+            seed: value.seed,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct TurboQuantizationBuildLimitsRecord {
+    pub max_records: Option<u64>,
+    pub max_input_bytes: Option<u64>,
+    pub max_temporary_bytes: Option<u64>,
+    pub max_transform_operations: Option<u64>,
+    pub max_encoded_output_bytes: Option<u64>,
+    pub max_worker_threads: Option<u64>,
+}
+
+impl TryFrom<TurboQuantizationBuildLimitsRecord> for TurboQuantizationBuildLimits {
+    type Error = ProllyBindingError;
+
+    fn try_from(value: TurboQuantizationBuildLimitsRecord) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_records: optional_usize(value.max_records, "max_records")?,
+            max_input_bytes: optional_usize(value.max_input_bytes, "max_input_bytes")?,
+            max_temporary_bytes: optional_usize(value.max_temporary_bytes, "max_temporary_bytes")?,
+            max_transform_operations: optional_usize(
+                value.max_transform_operations,
+                "max_transform_operations",
+            )?,
+            max_encoded_output_bytes: optional_usize(
+                value.max_encoded_output_bytes,
+                "max_encoded_output_bytes",
+            )?,
+            max_worker_threads: optional_usize(value.max_worker_threads, "max_worker_threads")?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, uniffi::Record)]
+pub struct TurboQuantizationBuildStatsRecord {
+    pub encoded_vectors: u64,
+    pub zero_vectors: u64,
+    pub transformed_components: u64,
+    pub butterfly_operations: u64,
+    pub input_bytes: u64,
+    pub encoded_output_bytes: u64,
+    pub peak_temporary_bytes: u64,
+}
+
+impl From<TurboQuantizationBuildStats> for TurboQuantizationBuildStatsRecord {
+    fn from(value: TurboQuantizationBuildStats) -> Self {
+        Self {
+            encoded_vectors: value.encoded_vectors as u64,
+            zero_vectors: value.zero_vectors as u64,
+            transformed_components: value.transformed_components as u64,
+            butterfly_operations: value.butterfly_operations as u64,
+            input_bytes: value.input_bytes as u64,
+            encoded_output_bytes: value.encoded_output_bytes as u64,
+            peak_temporary_bytes: value.peak_temporary_bytes as u64,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, uniffi::Record)]
+pub struct TurboQuantizationQualityRecord {
+    pub mean_squared_error: f64,
+    pub maximum_squared_error: f64,
+}
+
+impl From<TurboQuantizationQuality> for TurboQuantizationQualityRecord {
+    fn from(value: TurboQuantizationQuality) -> Self {
+        Self {
+            mean_squared_error: value.mean_squared_error,
+            maximum_squared_error: value.maximum_squared_error,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, uniffi::Record)]
+pub struct TurboQuantizationVerificationRecord {
+    pub encoded_vectors: u64,
+    pub zero_vectors: u64,
+    pub quality: TurboQuantizationQualityRecord,
+}
+
+impl From<TurboQuantizationVerification> for TurboQuantizationVerificationRecord {
+    fn from(value: TurboQuantizationVerification) -> Self {
+        Self {
+            encoded_vectors: value.encoded_vectors,
+            zero_vectors: value.zero_vectors,
+            quality: value.quality.into(),
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn default_turboquant_config() -> TurboQuantizationConfigRecord {
+    TurboQuantizationConfig::default().into()
+}
+
+#[uniffi::export]
+pub fn default_turboquant_build_limits() -> TurboQuantizationBuildLimitsRecord {
+    let value = TurboQuantizationBuildLimits::default();
+    TurboQuantizationBuildLimitsRecord {
+        max_records: value.max_records.map(|value| value as u64),
+        max_input_bytes: value.max_input_bytes.map(|value| value as u64),
+        max_temporary_bytes: value.max_temporary_bytes.map(|value| value as u64),
+        max_transform_operations: value.max_transform_operations.map(|value| value as u64),
+        max_encoded_output_bytes: value.max_encoded_output_bytes.map(|value| value as u64),
+        max_worker_threads: value.max_worker_threads.map(|value| value as u64),
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
 pub enum CompositeBaseKindRecord {
     Hnsw,
     ProductQuantized,
+    TurboQuantized,
 }
 
 impl From<CompositeBaseKind> for CompositeBaseKindRecord {
@@ -1488,6 +1719,7 @@ impl From<CompositeBaseKind> for CompositeBaseKindRecord {
         match value {
             CompositeBaseKind::Hnsw => Self::Hnsw,
             CompositeBaseKind::ProductQuantized => Self::ProductQuantized,
+            CompositeBaseKind::TurboQuantized => Self::TurboQuantized,
         }
     }
 }
@@ -1638,6 +1870,8 @@ pub struct CompositeRebuildOptionsRecord {
     pub hnsw_limits: HnswBuildLimitsRecord,
     pub pq_worker_threads: u64,
     pub pq_limits: ProductQuantizationBuildLimitsRecord,
+    pub turboquant_worker_threads: u64,
+    pub turboquant_limits: TurboQuantizationBuildLimitsRecord,
 }
 
 impl TryFrom<CompositeRebuildOptionsRecord> for CompositeRebuildOptions {
@@ -1651,6 +1885,11 @@ impl TryFrom<CompositeRebuildOptionsRecord> for CompositeRebuildOptions {
                 "pq_worker_threads",
             )?)?,
             pq_limits: value.pq_limits.try_into()?,
+            turboquant_parallelism: BuildParallelism::new(to_usize(
+                value.turboquant_worker_threads,
+                "turboquant_worker_threads",
+            )?)?,
+            turboquant_limits: value.turboquant_limits.try_into()?,
         })
     }
 }
@@ -1676,6 +1915,8 @@ pub fn default_composite_rebuild_options() -> CompositeRebuildOptionsRecord {
         hnsw_limits: default_hnsw_build_limits(),
         pq_worker_threads: 1,
         pq_limits: default_pq_build_limits(),
+        turboquant_worker_threads: 1,
+        turboquant_limits: default_turboquant_build_limits(),
     }
 }
 
@@ -2237,6 +2478,7 @@ where
 enum BindingAsyncAcceleratorKind {
     Hnsw,
     ProductQuantized,
+    TurboQuantized,
     Composite,
     Catalog,
 }
@@ -2270,6 +2512,11 @@ where
                 async_map.tree(),
                 AsyncProductQuantizer::load(&store, manifest).await?,
             )?,
+            BindingAsyncAcceleratorKind::TurboQuantized => AsyncAcceleratorSet::empty()
+                .with_turboquant(
+                    async_map.tree(),
+                    AsyncTurboQuantizer::load(&store, manifest).await?,
+                )?,
             BindingAsyncAcceleratorKind::Composite => AsyncAcceleratorSet::empty().with_composite(
                 async_map.tree(),
                 AsyncCompositeAccelerator::load(&store, manifest).await?,
@@ -2501,6 +2748,15 @@ pub struct BindingProductQuantizer {
 }
 
 #[derive(uniffi::Object)]
+pub struct BindingTurboQuantizer {
+    engine: Arc<ProllyEngine>,
+    manifest: Vec<u8>,
+    source_descriptor: Vec<u8>,
+    config: TurboQuantizationConfigRecord,
+    quality: TurboQuantizationQualityRecord,
+}
+
+#[derive(uniffi::Object)]
 pub struct BindingCompositeAccelerator {
     engine: Arc<ProllyEngine>,
     manifest: Vec<u8>,
@@ -2526,6 +2782,7 @@ pub enum CompositeBuildOrRebuildKindRecord {
     NoAcceleratorRequired,
     HnswRebuilt,
     ProductQuantizedRebuilt,
+    TurboQuantizedRebuilt,
 }
 
 #[derive(Clone, uniffi::Record)]
@@ -2534,10 +2791,12 @@ pub struct CompositeBuildOrRebuildOutcomeRecord {
     pub composite: Option<Arc<BindingCompositeAccelerator>>,
     pub hnsw: Option<Arc<BindingHnswIndex>>,
     pub pq: Option<Arc<BindingProductQuantizer>>,
+    pub turboquant: Option<Arc<BindingTurboQuantizer>>,
     pub reasons: Vec<FullRebuildReasonRecord>,
     pub composite_stats: CompositeBuildStatsRecord,
     pub hnsw_stats: Option<HnswBuildStatsRecord>,
     pub pq_stats: Option<ProductQuantizationBuildStatsRecord>,
+    pub turboquant_stats: Option<TurboQuantizationBuildStatsRecord>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
@@ -2545,6 +2804,7 @@ pub enum CatalogAcceleratorKindRecord {
     Hnsw,
     ProductQuantized,
     Composite,
+    TurboQuantized,
 }
 
 impl From<CatalogAcceleratorKind> for CatalogAcceleratorKindRecord {
@@ -2553,6 +2813,7 @@ impl From<CatalogAcceleratorKind> for CatalogAcceleratorKindRecord {
             CatalogAcceleratorKind::Hnsw => Self::Hnsw,
             CatalogAcceleratorKind::ProductQuantized => Self::ProductQuantized,
             CatalogAcceleratorKind::Composite => Self::Composite,
+            CatalogAcceleratorKind::TurboQuantized => Self::TurboQuantized,
         }
     }
 }
@@ -2605,6 +2866,23 @@ where
     S::Error: Send + Sync,
 {
     Arc::new(BindingProductQuantizer {
+        engine,
+        manifest: index.manifest_cid().0.to_vec(),
+        source_descriptor: index.source_descriptor().0.to_vec(),
+        config: index.config().clone().into(),
+        quality: index.quality().into(),
+    })
+}
+
+fn binding_turboquantizer<S>(
+    engine: Arc<ProllyEngine>,
+    index: &TurboQuantizer<S>,
+) -> Arc<BindingTurboQuantizer>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    Arc::new(BindingTurboQuantizer {
         engine,
         manifest: index.manifest_cid().0.to_vec(),
         source_descriptor: index.source_descriptor().0.to_vec(),
@@ -2673,10 +2951,12 @@ where
                 composite: Some(binding_composite_accelerator(engine, &accelerator)),
                 hnsw: None,
                 pq: None,
+                turboquant: None,
                 reasons: Vec::new(),
                 composite_stats: stats.into(),
                 hnsw_stats: None,
                 pq_stats: None,
+                turboquant_stats: None,
             }
         }
         CompositeBuildOrRebuildOutcome::NoAcceleratorRequired {
@@ -2687,10 +2967,12 @@ where
             composite: None,
             hnsw: None,
             pq: None,
+            turboquant: None,
             reasons: reasons.into_iter().map(Into::into).collect(),
             composite_stats: composite_stats.into(),
             hnsw_stats: None,
             pq_stats: None,
+            turboquant_stats: None,
         },
         CompositeBuildOrRebuildOutcome::HnswRebuilt {
             accelerator,
@@ -2702,10 +2984,12 @@ where
             composite: None,
             hnsw: Some(binding_hnsw_index(engine, &accelerator)),
             pq: None,
+            turboquant: None,
             reasons: reasons.into_iter().map(Into::into).collect(),
             composite_stats: composite_stats.into(),
             hnsw_stats: Some(rebuild_stats.into()),
             pq_stats: None,
+            turboquant_stats: None,
         },
         CompositeBuildOrRebuildOutcome::ProductQuantizedRebuilt {
             accelerator,
@@ -2717,10 +3001,29 @@ where
             composite: None,
             hnsw: None,
             pq: Some(binding_product_quantizer(engine, &accelerator)),
+            turboquant: None,
             reasons: reasons.into_iter().map(Into::into).collect(),
             composite_stats: composite_stats.into(),
             hnsw_stats: None,
             pq_stats: Some(rebuild_stats.into()),
+            turboquant_stats: None,
+        },
+        CompositeBuildOrRebuildOutcome::TurboQuantizedRebuilt {
+            accelerator,
+            reasons,
+            composite_stats,
+            rebuild_stats,
+        } => CompositeBuildOrRebuildOutcomeRecord {
+            kind: CompositeBuildOrRebuildKindRecord::TurboQuantizedRebuilt,
+            composite: None,
+            hnsw: None,
+            pq: None,
+            turboquant: Some(binding_turboquantizer(engine, &accelerator)),
+            reasons: reasons.into_iter().map(Into::into).collect(),
+            composite_stats: composite_stats.into(),
+            hnsw_stats: None,
+            pq_stats: None,
+            turboquant_stats: Some(rebuild_stats.into()),
         },
     }
 }
@@ -2763,6 +3066,28 @@ where
     let base_map = ProximityMap::load(store.clone(), base_source)?;
     let current_map = ProximityMap::load(store.clone(), current_source)?;
     let base = CompositeBase::ProductQuantized(ProductQuantizer::load(store, base_manifest)?);
+    Ok(composite_build_outcome(
+        engine,
+        CompositeAccelerator::build(&base_map, &current_map, base, config, limits)?,
+    ))
+}
+
+fn build_composite_turboquant<S>(
+    engine: Arc<ProllyEngine>,
+    store: S,
+    base_source: prolly::Cid,
+    current_source: prolly::Cid,
+    base_manifest: prolly::Cid,
+    config: CompositeAcceleratorConfig,
+    limits: CompositeBuildLimits,
+) -> Result<CompositeBuildOutcomeRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let base_map = ProximityMap::load(store.clone(), base_source)?;
+    let current_map = ProximityMap::load(store.clone(), current_source)?;
+    let base = CompositeBase::TurboQuantized(TurboQuantizer::load(store, base_manifest)?);
     Ok(composite_build_outcome(
         engine,
         CompositeAccelerator::build(&base_map, &current_map, base, config, limits)?,
@@ -2816,6 +3141,36 @@ where
     let base_map = ProximityMap::load(store.clone(), base_source)?;
     let current_map = ProximityMap::load(store.clone(), current_source)?;
     let base = CompositeBase::ProductQuantized(ProductQuantizer::load(store, base_manifest)?);
+    Ok(composite_rebuild_outcome(
+        engine,
+        CompositeAccelerator::build_or_rebuild(
+            &base_map,
+            &current_map,
+            base,
+            config,
+            limits,
+            rebuild,
+        )?,
+    ))
+}
+
+fn rebuild_composite_turboquant<S>(
+    engine: Arc<ProllyEngine>,
+    store: S,
+    base_source: prolly::Cid,
+    current_source: prolly::Cid,
+    base_manifest: prolly::Cid,
+    config: CompositeAcceleratorConfig,
+    limits: CompositeBuildLimits,
+    rebuild: CompositeRebuildOptions,
+) -> Result<CompositeBuildOrRebuildOutcomeRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let base_map = ProximityMap::load(store.clone(), base_source)?;
+    let current_map = ProximityMap::load(store.clone(), current_source)?;
+    let base = CompositeBase::TurboQuantized(TurboQuantizer::load(store, base_manifest)?);
     Ok(composite_rebuild_outcome(
         engine,
         CompositeAccelerator::build_or_rebuild(
@@ -2895,6 +3250,56 @@ where
     S::Error: Send + Sync,
 {
     let index = ProductQuantizer::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .prove_search(&map, request, limits)
+        .map_err(Into::into)
+}
+
+fn search_turboquant<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+) -> Result<ProximitySearchResultRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = TurboQuantizer::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index
+        .search(&map, request)
+        .map(Into::into)
+        .map_err(Into::into)
+}
+
+fn verify_turboquant<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+) -> Result<TurboQuantizationVerificationRecord, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = TurboQuantizer::load(store.clone(), manifest.clone())?;
+    let map = ProximityMap::load(store, source.clone())?;
+    index.verify(&map).map(Into::into).map_err(Into::into)
+}
+
+fn prove_turboquant_search<S>(
+    store: S,
+    manifest: &prolly::Cid,
+    source: &prolly::Cid,
+    request: SearchRequest<'_>,
+    limits: &ContentGraphLimits,
+) -> Result<ProximitySearchProof, ProllyBindingError>
+where
+    S: Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let index = TurboQuantizer::load(store.clone(), manifest.clone())?;
     let map = ProximityMap::load(store, source.clone())?;
     index
         .prove_search(&map, request, limits)
@@ -2996,6 +3401,7 @@ fn build_catalog<S>(
     source: prolly::Cid,
     hnsw: Option<prolly::Cid>,
     pq: Option<prolly::Cid>,
+    turboquant: Option<prolly::Cid>,
     composite: Option<prolly::Cid>,
 ) -> Result<Arc<BindingAcceleratorCatalog>, ProllyBindingError>
 where
@@ -3011,6 +3417,10 @@ where
     if let Some(manifest) = pq {
         accelerators =
             accelerators.with_pq(map.tree(), ProductQuantizer::load(store.clone(), manifest)?)?;
+    }
+    if let Some(manifest) = turboquant {
+        accelerators = accelerators
+            .with_turboquant(map.tree(), TurboQuantizer::load(store.clone(), manifest)?)?;
     }
     if let Some(manifest) = composite {
         accelerators = accelerators.with_composite(
@@ -3274,6 +3684,176 @@ impl BindingProductQuantizer {
             BindingEngine::Host(engine) => {
                 prove_pq_search(engine.store().clone(), &manifest, &source, request, &limits)
             }
+        }?;
+        Ok(Arc::new(BindingProximitySearchProof { inner: proof }))
+    }
+}
+
+#[uniffi::export]
+impl BindingTurboQuantizer {
+    pub fn manifest(&self) -> Vec<u8> {
+        self.manifest.clone()
+    }
+
+    pub fn source_descriptor(&self) -> Vec<u8> {
+        self.source_descriptor.clone()
+    }
+
+    pub fn config(&self) -> TurboQuantizationConfigRecord {
+        self.config.clone()
+    }
+
+    pub fn quality(&self) -> TurboQuantizationQualityRecord {
+        self.quality
+    }
+
+    pub fn verify(
+        &self,
+        map: Arc<BindingProximityMap>,
+    ) -> Result<TurboQuantizationVerificationRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "TurboQuantizer and proximity map belong to different engines".to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                verify_turboquant(engine.store().clone(), &manifest, &source)
+            }
+            BindingEngine::File(engine) => {
+                verify_turboquant(engine.store().clone(), &manifest, &source)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                verify_turboquant(engine.store().clone(), &manifest, &source)
+            }
+            BindingEngine::Host(engine) => {
+                verify_turboquant(engine.store().clone(), &manifest, &source)
+            }
+        }
+    }
+
+    pub fn search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "TurboQuantizer and proximity map belong to different engines".to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => {
+                search_turboquant(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::File(engine) => {
+                search_turboquant(engine.store().clone(), &manifest, &source, request)
+            }
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => {
+                search_turboquant(engine.store().clone(), &manifest, &source, request)
+            }
+            BindingEngine::Host(engine) => {
+                search_turboquant(engine.store().clone(), &manifest, &source, request)
+            }
+        }
+    }
+
+    pub fn search_with_runtime(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Arc<BindingProximitySearchRuntime>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) || !runtime.belongs_to(&self.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "TurboQuantizer, proximity map, and search runtime must belong to the same engine".to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        with_proximity_search_io!(runtime, io, {
+            let store = io.store().clone();
+            let map = ProximityMap::load(store.clone(), source)?;
+            let index = TurboQuantizer::load(store, manifest)?;
+            let accelerators = AcceleratorSet::empty().with_turboquant(map.tree(), index)?;
+            map.search_with(&accelerators, io, request)
+                .map(Into::into)
+                .map_err(Into::into)
+        })
+    }
+
+    pub fn search_cancellable(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        runtime: Option<Arc<BindingProximitySearchRuntime>>,
+        cancellation: Arc<BindingProximityCancellationToken>,
+    ) -> Result<ProximitySearchResultRecord, ProllyBindingError> {
+        let runtime = binding_search_runtime(&self.engine, runtime)?;
+        search_binding_accelerator_cancellable(
+            &self.engine,
+            &map,
+            &runtime,
+            crate::cid_from_vec(self.manifest.clone())?,
+            BindingAsyncAcceleratorKind::TurboQuantized,
+            proximity_search_request(&request)?,
+            cancellation.inner.clone(),
+        )
+    }
+
+    pub fn prove_search(
+        &self,
+        map: Arc<BindingProximityMap>,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord,
+    ) -> Result<Arc<BindingProximitySearchProof>, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &map.engine) {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "TurboQuantizer and proximity map belong to different engines".to_string(),
+            });
+        }
+        let manifest = crate::cid_from_vec(self.manifest.clone())?;
+        let source = crate::cid_from_vec(map.descriptor())?;
+        let request = proximity_search_request(&request)?;
+        let limits = ContentGraphLimits::try_from(limits)?;
+        let proof = match &self.engine.inner {
+            BindingEngine::Memory(engine) => prove_turboquant_search(
+                engine.store().clone(),
+                &manifest,
+                &source,
+                request,
+                &limits,
+            ),
+            BindingEngine::File(engine) => prove_turboquant_search(
+                engine.store().clone(),
+                &manifest,
+                &source,
+                request,
+                &limits,
+            ),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => prove_turboquant_search(
+                engine.store().clone(),
+                &manifest,
+                &source,
+                request,
+                &limits,
+            ),
+            BindingEngine::Host(engine) => prove_turboquant_search(
+                engine.store().clone(),
+                &manifest,
+                &source,
+                request,
+                &limits,
+            ),
         }?;
         Ok(Arc::new(BindingProximitySearchProof { inner: proof }))
     }
@@ -3560,6 +4140,12 @@ pub struct ProductQuantizationBuildResultRecord {
     pub stats: ProductQuantizationBuildStatsRecord,
 }
 
+#[derive(Clone, uniffi::Record)]
+pub struct TurboQuantizationBuildResultRecord {
+    pub index: Arc<BindingTurboQuantizer>,
+    pub stats: TurboQuantizationBuildStatsRecord,
+}
+
 impl BindingProximityMap {
     fn from_descriptor(engine: Arc<ProllyEngine>, descriptor: prolly::Cid) -> Arc<Self> {
         let map = Arc::new(Self {
@@ -3756,6 +4342,40 @@ impl BindingProximityMap {
         })
     }
 
+    pub fn build_turboquant(
+        &self,
+        config: TurboQuantizationConfigRecord,
+        worker_threads: u64,
+        limits: TurboQuantizationBuildLimitsRecord,
+    ) -> Result<TurboQuantizationBuildResultRecord, ProllyBindingError> {
+        let parallelism = BuildParallelism::new(to_usize(worker_threads, "worker_threads")?)?;
+        let limits = TurboQuantizationBuildLimits::try_from(limits)?;
+        with_proximity_map!(self, map, {
+            let (index, stats) =
+                TurboQuantizer::build_with_limits(&map, config.into(), parallelism, limits)?;
+            Ok(TurboQuantizationBuildResultRecord {
+                index: binding_turboquantizer(self.engine.clone(), &index),
+                stats: stats.into(),
+            })
+        })
+    }
+
+    pub fn load_turboquant(
+        &self,
+        manifest: Vec<u8>,
+    ) -> Result<Arc<BindingTurboQuantizer>, ProllyBindingError> {
+        let manifest = crate::cid_from_vec(manifest)?;
+        with_proximity_store_map!(self, store, map, {
+            let index = TurboQuantizer::load(store, manifest)?;
+            if index.source_descriptor() != &map.tree().descriptor {
+                return Err(ProllyBindingError::InvalidArgument {
+                    reason: "TurboQuantizer is bound to a different source descriptor".to_string(),
+                });
+            }
+            Ok(binding_turboquantizer(self.engine.clone(), &index))
+        })
+    }
+
     pub fn build_composite_hnsw(
         &self,
         base_map: Arc<BindingProximityMap>,
@@ -3863,6 +4483,65 @@ impl BindingProximityMap {
                 limits,
             ),
             BindingEngine::Host(engine) => build_composite_pq(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+        }
+    }
+
+    pub fn build_composite_turboquant(
+        &self,
+        base_map: Arc<BindingProximityMap>,
+        base: Arc<BindingTurboQuantizer>,
+        config: CompositeAcceleratorConfigRecord,
+        limits: CompositeBuildLimitsRecord,
+    ) -> Result<CompositeBuildOutcomeRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &base_map.engine) || !Arc::ptr_eq(&self.engine, &base.engine)
+        {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite inputs belong to different engines".to_string(),
+            });
+        }
+        let base_source = crate::cid_from_vec(base_map.descriptor())?;
+        let current_source = crate::cid_from_vec(self.descriptor())?;
+        let base_manifest = crate::cid_from_vec(base.manifest())?;
+        let config = config.try_into()?;
+        let limits = limits.try_into()?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => build_composite_turboquant(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+            BindingEngine::File(engine) => build_composite_turboquant(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => build_composite_turboquant(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+            ),
+            BindingEngine::Host(engine) => build_composite_turboquant(
                 self.engine.clone(),
                 engine.store().clone(),
                 base_source,
@@ -4004,6 +4683,71 @@ impl BindingProximityMap {
         }
     }
 
+    pub fn build_or_rebuild_composite_turboquant(
+        &self,
+        base_map: Arc<BindingProximityMap>,
+        base: Arc<BindingTurboQuantizer>,
+        config: CompositeAcceleratorConfigRecord,
+        limits: CompositeBuildLimitsRecord,
+        rebuild: CompositeRebuildOptionsRecord,
+    ) -> Result<CompositeBuildOrRebuildOutcomeRecord, ProllyBindingError> {
+        if !Arc::ptr_eq(&self.engine, &base_map.engine) || !Arc::ptr_eq(&self.engine, &base.engine)
+        {
+            return Err(ProllyBindingError::InvalidArgument {
+                reason: "composite inputs belong to different engines".to_string(),
+            });
+        }
+        let base_source = crate::cid_from_vec(base_map.descriptor())?;
+        let current_source = crate::cid_from_vec(self.descriptor())?;
+        let base_manifest = crate::cid_from_vec(base.manifest())?;
+        let config = config.try_into()?;
+        let limits = limits.try_into()?;
+        let rebuild = rebuild.try_into()?;
+        match &self.engine.inner {
+            BindingEngine::Memory(engine) => rebuild_composite_turboquant(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+            BindingEngine::File(engine) => rebuild_composite_turboquant(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+            #[cfg(feature = "sqlite")]
+            BindingEngine::Sqlite(engine) => rebuild_composite_turboquant(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+            BindingEngine::Host(engine) => rebuild_composite_turboquant(
+                self.engine.clone(),
+                engine.store().clone(),
+                base_source,
+                current_source,
+                base_manifest,
+                config,
+                limits,
+                rebuild,
+            ),
+        }
+    }
+
     pub fn load_composite(
         &self,
         manifest: Vec<u8>,
@@ -4025,12 +4769,16 @@ impl BindingProximityMap {
         &self,
         hnsw: Option<Arc<BindingHnswIndex>>,
         pq: Option<Arc<BindingProductQuantizer>>,
+        turboquant: Option<Arc<BindingTurboQuantizer>>,
         composite: Option<Arc<BindingCompositeAccelerator>>,
     ) -> Result<Arc<BindingAcceleratorCatalog>, ProllyBindingError> {
         for belongs in [
             hnsw.as_ref()
                 .map(|value| Arc::ptr_eq(&self.engine, &value.engine)),
             pq.as_ref()
+                .map(|value| Arc::ptr_eq(&self.engine, &value.engine)),
+            turboquant
+                .as_ref()
                 .map(|value| Arc::ptr_eq(&self.engine, &value.engine)),
             composite
                 .as_ref()
@@ -4052,6 +4800,9 @@ impl BindingProximityMap {
         let pq = pq
             .map(|value| crate::cid_from_vec(value.manifest()))
             .transpose()?;
+        let turboquant = turboquant
+            .map(|value| crate::cid_from_vec(value.manifest()))
+            .transpose()?;
         let composite = composite
             .map(|value| crate::cid_from_vec(value.manifest()))
             .transpose()?;
@@ -4062,6 +4813,7 @@ impl BindingProximityMap {
                 source,
                 hnsw,
                 pq,
+                turboquant,
                 composite,
             ),
             BindingEngine::File(engine) => build_catalog(
@@ -4070,6 +4822,7 @@ impl BindingProximityMap {
                 source,
                 hnsw,
                 pq,
+                turboquant,
                 composite,
             ),
             #[cfg(feature = "sqlite")]
@@ -4079,6 +4832,7 @@ impl BindingProximityMap {
                 source,
                 hnsw,
                 pq,
+                turboquant,
                 composite,
             ),
             BindingEngine::Host(engine) => build_catalog(
@@ -4087,6 +4841,7 @@ impl BindingProximityMap {
                 source,
                 hnsw,
                 pq,
+                turboquant,
                 composite,
             ),
         }

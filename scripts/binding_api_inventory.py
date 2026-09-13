@@ -361,12 +361,14 @@ _RUST_ABSTRACTION_KINDS = {
 
 _STORE_TRAIT_OWNERS = {
     "prolly::AsyncBlobStore",
+    "prolly::AsyncIndexedStore",
     "prolly::AsyncManifestStore",
     "prolly::AsyncManifestStoreScan",
     "prolly::AsyncStore",
     "prolly::AsyncTransactionalStore",
     "prolly::BlobStore",
     "prolly::BlobStoreScan",
+    "prolly::IndexedStore",
     "prolly::ManifestStore",
     "prolly::ManifestStoreScan",
     "prolly::NodeStoreScan",

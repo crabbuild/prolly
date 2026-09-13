@@ -1450,7 +1450,7 @@ dependencies = [
 
 [[package]]
 name = "prolly-map"
-version = "0.7.0"
+version = "0.7.2"
 dependencies = [
  "futures-util",
  "js-sys",
@@ -1466,7 +1466,7 @@ dependencies = [
 
 [[package]]
 name = "prolly-store-dynamodb"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "aws-credential-types",
  "aws-lc-rs",

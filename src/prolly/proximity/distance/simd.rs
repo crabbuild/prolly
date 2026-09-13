@@ -5,9 +5,11 @@ use std::sync::OnceLock;
 const PRODUCT_SLOTS: usize = 64;
 
 type FillProducts = unsafe fn(&[f32], &[f32], &mut [f64]);
+type FillProductsF64 = unsafe fn(&[f64], &[f64], &mut [f64]);
 
 static FILL_L2: OnceLock<Option<FillProducts>> = OnceLock::new();
 static FILL_DOT: OnceLock<Option<FillProducts>> = OnceLock::new();
+static FILL_DOT_F64: OnceLock<Option<FillProductsF64>> = OnceLock::new();
 
 #[cfg(test)]
 thread_local! {
@@ -43,6 +45,45 @@ pub(crate) fn query_score_encoded(
             simd_score_encoded(metric, left, right)
                 .unwrap_or_else(|| score_encoded_scalar(metric, left, right))
         }
+    }
+}
+
+/// Fill independent `f64` products for a deterministic scalar-ordered
+/// reduction. TurboQuant uses this after unpacking one bounded code chunk.
+pub(crate) fn fill_query_products_f64(
+    kernel: QueryKernel,
+    left: &[f64],
+    right: &[f64],
+    output: &mut [f64],
+) {
+    debug_assert_eq!(left.len(), right.len());
+    debug_assert_eq!(left.len(), output.len());
+    let fill = match kernel {
+        QueryKernel::ScalarDeterministic => None,
+        QueryKernel::SimdDeterministic => *FILL_DOT_F64.get_or_init(detect_fill_f64),
+        // Two-lane f64 SIMD does not repay dispatch and load/store overhead in
+        // TurboQuant's 64-coordinate chunks on NEON or wasm32. Keep the
+        // explicit SIMD kernel available for conformance and callers, while
+        // selecting the measured scalar fill for the automatic kernel there.
+        QueryKernel::AutoDeterministic => auto_fill_f64(),
+    };
+    if let Some(fill) = fill {
+        // SAFETY: feature detection selects only a compatible target-specific
+        // function, and every implementation is bounded by the equal slices.
+        unsafe { fill(left, right, output) };
+    } else {
+        fill_tail_f64(left, right, output, 0);
+    }
+}
+
+fn auto_fill_f64() -> Option<FillProductsF64> {
+    #[cfg(any(target_arch = "aarch64", target_arch = "wasm32"))]
+    {
+        None
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "wasm32")))]
+    {
+        *FILL_DOT_F64.get_or_init(detect_fill_f64)
     }
 }
 
@@ -171,6 +212,110 @@ fn detect_encoded_fill<const L2: bool>() -> Option<FillEncoded> {
     }
     #[allow(unreachable_code)]
     None
+}
+
+fn detect_fill_f64() -> Option<FillProductsF64> {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if std::arch::is_x86_feature_detected!("avx512f")
+            && std::arch::is_x86_feature_detected!("avx2")
+        {
+            return Some(fill_f64_x86_avx512);
+        }
+        if std::arch::is_x86_feature_detected!("avx2") {
+            return Some(fill_f64_x86_avx2);
+        }
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        return Some(fill_f64_aarch64_neon);
+    }
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        return Some(fill_f64_wasm_simd128);
+    }
+    #[allow(unreachable_code)]
+    None
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn fill_f64_x86_avx2(left: &[f64], right: &[f64], output: &mut [f64]) {
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
+
+    let mut index = 0usize;
+    while index + 4 <= left.len() {
+        let product = _mm256_mul_pd(
+            _mm256_loadu_pd(left.as_ptr().add(index)),
+            _mm256_loadu_pd(right.as_ptr().add(index)),
+        );
+        _mm256_storeu_pd(output.as_mut_ptr().add(index), product);
+        index += 4;
+    }
+    fill_tail_f64(left, right, output, index);
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2,avx512f")]
+unsafe fn fill_f64_x86_avx512(left: &[f64], right: &[f64], output: &mut [f64]) {
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
+
+    let mut index = 0usize;
+    while index + 8 <= left.len() {
+        let product = _mm512_mul_pd(
+            _mm512_loadu_pd(left.as_ptr().add(index)),
+            _mm512_loadu_pd(right.as_ptr().add(index)),
+        );
+        _mm512_storeu_pd(output.as_mut_ptr().add(index), product);
+        index += 8;
+    }
+    fill_tail_f64(left, right, output, index);
+}
+
+#[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
+unsafe fn fill_f64_aarch64_neon(left: &[f64], right: &[f64], output: &mut [f64]) {
+    use std::arch::aarch64::*;
+
+    let mut index = 0usize;
+    while index + 2 <= left.len() {
+        let product = vmulq_f64(
+            vld1q_f64(left.as_ptr().add(index)),
+            vld1q_f64(right.as_ptr().add(index)),
+        );
+        vst1q_f64(output.as_mut_ptr().add(index), product);
+        index += 2;
+    }
+    fill_tail_f64(left, right, output, index);
+}
+
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[target_feature(enable = "simd128")]
+unsafe fn fill_f64_wasm_simd128(left: &[f64], right: &[f64], output: &mut [f64]) {
+    use std::arch::wasm32::*;
+
+    let mut index = 0usize;
+    while index + 2 <= left.len() {
+        let product = f64x2_mul(
+            v128_load(left.as_ptr().add(index).cast()),
+            v128_load(right.as_ptr().add(index).cast()),
+        );
+        v128_store(output.as_mut_ptr().add(index).cast(), product);
+        index += 2;
+    }
+    fill_tail_f64(left, right, output, index);
+}
+
+fn fill_tail_f64(left: &[f64], right: &[f64], output: &mut [f64], start: usize) {
+    for index in start..left.len() {
+        output[index] = left[index] * right[index];
+    }
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

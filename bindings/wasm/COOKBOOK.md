@@ -32,6 +32,48 @@ Browser-safe application files include `batch-build.ts`,
 `vector-sidecar.ts`, `provenance-values.ts`, `materialized-view.ts`, and
 `browser-storage.ts`.
 
+## Build And Force A TurboQuant RAG Sidecar
+
+The high-level browser facade builds and searches TurboQuant entirely in WASM;
+it has no native-library or filesystem dependency. Browser construction is
+single-worker, candidates are reranked from the authoritative proximity map,
+and `Auto` remains disabled pending qualification.
+
+```ts
+import { Engine, loadProllyWasm } from "prollydb-wasm";
+
+const wasm = await loadProllyWasm();
+const text = new TextEncoder();
+const engine = Engine.memory(wasm);
+try {
+  const records = Array.from({ length: 32 }, (_, index) => ({
+    key: text.encode(`chunk/${index.toString().padStart(2, "0")}`),
+    vector: new Float32Array([index, index % 3, 0, 1, 2, 3, 4, 5]),
+    value: text.encode(`document-${index.toString().padStart(2, "0")}`),
+  }));
+  const proximity = await engine.buildProximity(8, records);
+  const built = await proximity.buildTurboQuant({ workerThreads: 1n });
+  const request = {
+    vector: new Float32Array([0, 0, 0, 1, 2, 3, 4, 5]),
+    topK: 3,
+    policy: "fixed_budget" as const,
+    backend: "turbo_quantized" as const,
+  };
+  const manifest = built.index.manifest();
+  if (built.index.verify(proximity).encodedVectors !== BigInt(records.length)) {
+    throw new Error("incomplete TurboQuant sidecar");
+  }
+  if ((await built.index.search(proximity, request)).backend !== "turbo_quantized") {
+    throw new Error("unexpected backend");
+  }
+  built.index.close();
+  proximity.loadTurboQuant(manifest).close();
+  proximity.close();
+} finally {
+  engine.close();
+}
+```
+
 ## Create A Browser Snapshot
 
 ```ts

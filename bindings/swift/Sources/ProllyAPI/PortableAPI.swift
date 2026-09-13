@@ -28,6 +28,11 @@ public struct ProductQuantizationBuildResult {
     public let stats: ProductQuantizationBuildStatsRecord
 }
 
+public struct TurboQuantizationBuildResult {
+    public let index: TurboQuantizer
+    public let stats: TurboQuantizationBuildStatsRecord
+}
+
 public struct CompositeBuildOutcome {
     public let accelerator: CompositeAccelerator?
     public let reasons: [FullRebuildReasonRecord]
@@ -39,10 +44,12 @@ public struct CompositeBuildOrRebuildOutcome {
     public let composite: CompositeAccelerator?
     public let hnsw: HnswIndex?
     public let pq: ProductQuantizer?
+    public let turboquant: TurboQuantizer?
     public let reasons: [FullRebuildReasonRecord]
     public let compositeStats: CompositeBuildStatsRecord
     public let hnswStats: HnswBuildStatsRecord?
     public let pqStats: ProductQuantizationBuildStatsRecord?
+    public let turboquantStats: TurboQuantizationBuildStatsRecord?
 }
 
 private func portableCompositeOutcome(_ result: CompositeBuildOutcomeRecord) -> CompositeBuildOutcome {
@@ -61,10 +68,12 @@ private func portableCompositeRebuildOutcome(
         composite: result.composite.map { CompositeAccelerator(native: $0) },
         hnsw: result.hnsw.map { HnswIndex(native: $0) },
         pq: result.pq.map { ProductQuantizer(native: $0) },
+        turboquant: result.turboquant.map { TurboQuantizer(native: $0) },
         reasons: result.reasons,
         compositeStats: result.compositeStats,
         hnswStats: result.hnswStats,
-        pqStats: result.pqStats
+        pqStats: result.pqStats,
+        turboquantStats: result.turboquantStats
     )
 }
 
@@ -1750,7 +1759,8 @@ private func ownedSearchRequest(_ request: ProximitySearchRequestRecord) -> Prox
         kernel: request.kernel,
         backend: request.backend,
         hnswEfSearch: request.hnswEfSearch,
-        pqRerankMultiplier: request.pqRerankMultiplier
+        pqRerankMultiplier: request.pqRerankMultiplier,
+        turboquantRerankMultiplier: request.turboquantRerankMultiplier
     )
 }
 
@@ -1789,6 +1799,21 @@ public final class ProximityMap: @unchecked Sendable {
     public func loadPq(_ manifest: Data) throws -> ProductQuantizer {
         ProductQuantizer(native: try native.loadPq(manifest: Data(manifest)))
     }
+    public func buildTurboquant(
+        config: TurboQuantizationConfigRecord = defaultTurboquantConfig(),
+        workerThreads: UInt64 = 1,
+        limits: TurboQuantizationBuildLimitsRecord = defaultTurboquantBuildLimits()
+    ) throws -> TurboQuantizationBuildResult {
+        let result = try native.buildTurboquant(
+            config: config, workerThreads: workerThreads, limits: limits
+        )
+        return TurboQuantizationBuildResult(
+            index: TurboQuantizer(native: result.index), stats: result.stats
+        )
+    }
+    public func loadTurboquant(_ manifest: Data) throws -> TurboQuantizer {
+        TurboQuantizer(native: try native.loadTurboquant(manifest: Data(manifest)))
+    }
     public func buildCompositeHnsw(
         baseMap: ProximityMap,
         base: HnswIndex,
@@ -1806,6 +1831,16 @@ public final class ProximityMap: @unchecked Sendable {
         limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits()
     ) throws -> CompositeBuildOutcome {
         portableCompositeOutcome(try native.buildCompositePq(
+            baseMap: baseMap.native, base: base.native, config: config, limits: limits
+        ))
+    }
+    public func buildCompositeTurboquant(
+        baseMap: ProximityMap,
+        base: TurboQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits()
+    ) throws -> CompositeBuildOutcome {
+        portableCompositeOutcome(try native.buildCompositeTurboquant(
             baseMap: baseMap.native, base: base.native, config: config, limits: limits
         ))
     }
@@ -1833,16 +1868,30 @@ public final class ProximityMap: @unchecked Sendable {
             limits: limits, rebuild: rebuild
         ))
     }
+    public func buildOrRebuildCompositeTurboquant(
+        baseMap: ProximityMap,
+        base: TurboQuantizer,
+        config: CompositeAcceleratorConfigRecord = defaultCompositeAcceleratorConfig(),
+        limits: CompositeBuildLimitsRecord = defaultCompositeBuildLimits(),
+        rebuild: CompositeRebuildOptionsRecord = defaultCompositeRebuildOptions()
+    ) throws -> CompositeBuildOrRebuildOutcome {
+        portableCompositeRebuildOutcome(try native.buildOrRebuildCompositeTurboquant(
+            baseMap: baseMap.native, base: base.native, config: config,
+            limits: limits, rebuild: rebuild
+        ))
+    }
     public func loadComposite(_ manifest: Data) throws -> CompositeAccelerator {
         CompositeAccelerator(native: try native.loadComposite(manifest: Data(manifest)))
     }
     public func buildAcceleratorCatalog(
         hnsw: HnswIndex? = nil,
         pq: ProductQuantizer? = nil,
+        turboquant: TurboQuantizer? = nil,
         composite: CompositeAccelerator? = nil
     ) throws -> AcceleratorCatalog {
         AcceleratorCatalog(native: try native.buildAcceleratorCatalog(
-            hnsw: hnsw?.native, pq: pq?.native, composite: composite?.native
+            hnsw: hnsw?.native, pq: pq?.native, turboquant: turboquant?.native,
+            composite: composite?.native
         ))
     }
     public func loadAcceleratorCatalog(_ manifest: Data) throws -> AcceleratorCatalog {
@@ -2115,6 +2164,93 @@ public final class ProductQuantizer: @unchecked Sendable {
         limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
     ) throws -> ProximitySearchProof {
         guard !closed else { throw PortableAPIError.closed("product quantizer") }
+        return ProximitySearchProof(
+            native: try native.proveSearch(
+                map: map.native,
+                request: ownedSearchRequest(request),
+                limits: limits
+            )
+        )
+    }
+    public func close() { closed = true }
+}
+
+public final class TurboQuantizer: @unchecked Sendable {
+    let native: BindingTurboQuantizer
+    private var closed = false
+    init(native: BindingTurboQuantizer) { self.native = native }
+
+    public var manifest: Data {
+        precondition(!closed, "TurboQuantizer is closed")
+        return Data(native.manifest())
+    }
+    public var sourceDescriptor: Data {
+        precondition(!closed, "TurboQuantizer is closed")
+        return Data(native.sourceDescriptor())
+    }
+    public var config: TurboQuantizationConfigRecord {
+        precondition(!closed, "TurboQuantizer is closed")
+        return native.config()
+    }
+    public var quality: TurboQuantizationQualityRecord {
+        precondition(!closed, "TurboQuantizer is closed")
+        return native.quality()
+    }
+    public func verify(_ map: ProximityMap) throws -> TurboQuantizationVerificationRecord {
+        guard !closed else { throw PortableAPIError.closed("TurboQuantizer") }
+        return try native.verify(map: map.native)
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("TurboQuantizer") }
+        return try native.search(map: map.native, request: ownedSearchRequest(request))
+    }
+    public func search(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("TurboQuantizer") }
+        return try native.searchWithRuntime(
+            map: map.native, request: ownedSearchRequest(request), runtime: runtime.checkedNative()
+        )
+    }
+    public func searchCancellable(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken
+    ) throws -> ProximitySearchResultRecord {
+        guard !closed else { throw PortableAPIError.closed("TurboQuantizer") }
+        return try native.searchCancellable(
+            map: map.native,
+            request: ownedSearchRequest(request),
+            runtime: try runtime?.checkedNative(),
+            cancellation: cancellation.checkedNative()
+        )
+    }
+    public func searchAsync(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        runtime: ProximitySearchRuntime? = nil,
+        cancellation: ProximityCancellationToken? = nil
+    ) -> Task<ProximitySearchResultRecord, Error> {
+        let owned = ownedSearchRequest(request)
+        let token = cancellation ?? ProximityCancellationToken()
+        return Task {
+            try await withTaskCancellationHandler {
+                try searchCancellable(map, request: owned, runtime: runtime, cancellation: token)
+            } onCancel: { token.cancel() }
+        }
+    }
+    public func proveSearch(
+        _ map: ProximityMap,
+        request: ProximitySearchRequestRecord,
+        limits: ContentGraphLimitsRecord = defaultContentGraphLimits()
+    ) throws -> ProximitySearchProof {
+        guard !closed else { throw PortableAPIError.closed("TurboQuantizer") }
         return ProximitySearchProof(
             native: try native.proveSearch(
                 map: map.native,

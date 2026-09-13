@@ -388,5 +388,6 @@ See [`proximity-map.md`](proximity-map.md) for the public API, algorithms,
 mutation rules, resource budgets, and operational limitations. See
 [`wire-format.md`](wire-format.md) for the hard-cut object family. This map adds
 canonical directory splicing, all three metrics, overflow/PRXV storage, SQ8,
-deterministic parallel and async execution, source-bound PQ/HNSW, typed content
-replication/GC, and descriptor-bound proofs.
+deterministic parallel and async execution, source-bound PQ/TurboQuant/HNSW,
+catalog and composite accelerators, typed content replication/GC, and
+descriptor-bound proofs.

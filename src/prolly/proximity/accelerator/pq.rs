@@ -3,10 +3,11 @@ use crate::prolly::cid::Cid;
 use crate::prolly::config::Config;
 use crate::prolly::encoding::Encoding;
 use crate::prolly::error::Error;
-use crate::prolly::proximity::distance::prepare_vector;
-use crate::prolly::proximity::search::{
-    retained_candidate_bytes, EligibilityCardinality, PreparedFilter, RerankCandidate,
+use crate::prolly::proximity::accelerator::quantized::{
+    admit_quantized, rerank_authoritative, QuantizedRanked,
 };
+use crate::prolly::proximity::distance::prepare_vector;
+use crate::prolly::proximity::search::{EligibilityCardinality, PreparedFilter};
 use crate::prolly::proximity::storage::codec::{
     put_cid, put_f32, put_f64, put_varint, Reader, MAX_OBJECT_ENTRIES,
 };
@@ -524,7 +525,7 @@ where
         let filter = PreparedFilter::new(request.filter.clone(), &map.tree().directory)?;
         let lookup = build_lookup(&query, self.metric, &self.codebooks);
         let mut stats = ProximitySearchStats::default();
-        let mut approximate = BinaryHeap::<PqRanked>::new();
+        let mut approximate = BinaryHeap::<QuantizedRanked>::new();
         let mut completion = SearchCompletion::ApproximatePolicySatisfied;
         if *direct_lookup {
             let Some((keys, source_bound)) = filter.sorted_keys() else {
@@ -543,16 +544,17 @@ where
                     }
                     continue;
                 };
-                if !admit_code(
-                    key.clone(),
-                    code,
-                    &lookup,
-                    self.metric,
-                    &self.codebooks,
+                if !admit_quantized(
+                    key.as_slice(),
+                    &code,
                     *rerank_target,
                     &request,
                     &mut stats,
                     &mut approximate,
+                    |code| {
+                        validate_code(code, &self.codebooks)?;
+                        Ok(score_code(self.metric, &lookup, code))
+                    },
                 )? {
                     completion = SearchCompletion::BudgetExhausted;
                     break;
@@ -564,76 +566,33 @@ where
                 if !filter.contains(&key) || excluded(&key)? {
                     continue;
                 }
-                if !admit_code(
+                if !admit_quantized(
                     key,
-                    code,
-                    &lookup,
-                    self.metric,
-                    &self.codebooks,
+                    &code,
                     *rerank_target,
                     &request,
                     &mut stats,
                     &mut approximate,
+                    |code| {
+                        validate_code(code, &self.codebooks)?;
+                        Ok(score_code(self.metric, &lookup, code))
+                    },
                 )? {
                     completion = SearchCompletion::BudgetExhausted;
                     break;
                 }
             }
         }
-        let mut approximate = approximate.into_vec();
-        approximate.sort();
-        let shortlist = approximate.len();
-
-        let mut reranked = Vec::<RerankCandidate>::with_capacity(shortlist);
-        let mut directory = map.directory_manager().read(&map.tree().directory)?;
-        for candidate in approximate {
-            if budget_exhausted(&request, &stats)
-                || request
-                    .budget
-                    .max_nodes
-                    .is_some_and(|limit| stats.nodes_read >= limit)
-            {
-                completion = SearchCompletion::BudgetExhausted;
-                break;
-            }
-            let Some(handle) = directory.get_handle(&candidate.key)? else {
-                return Err(invalid_object(
-                    "PQ code key is absent from authoritative directory",
-                ));
-            };
-            let bytes = handle.value()?.len();
-            if request
-                .budget
-                .max_committed_bytes
-                .is_some_and(|limit| stats.committed_bytes.saturating_add(bytes) > limit)
-            {
-                completion = SearchCompletion::BudgetExhausted;
-                break;
-            }
-            let record = crate::prolly::proximity::storage::StoredRecordRef::decode(
-                handle.value()?,
-                map.tree().config.dimensions,
-            )?;
-            let distance = record.vector.score(request.kernel, self.metric, &query);
-            stats.nodes_read += 1;
-            stats.bytes_read = stats.bytes_read.saturating_add(bytes);
-            stats.committed_bytes = stats.committed_bytes.saturating_add(bytes);
-            stats.distance_evaluations += 1;
-            reranked.push(RerankCandidate::new(handle, &candidate.key, distance)?);
-        }
-        stats.reranked_candidates = reranked.len();
-        stats.candidate_handles_peak = reranked.len();
-        stats.candidate_retained_bytes_peak = retained_candidate_bytes(&reranked);
-        reranked.sort_by(|left, right| {
-            left.distance
-                .total_cmp(&right.distance)
-                .then_with(|| left.key().cmp(right.key()))
-        });
-        let neighbors = reranked
-            .into_iter()
-            .take(request.k)
-            .map(|candidate| candidate.into_neighbor(map.tree().config.dimensions))
-            .collect::<Result<Vec<_>, Error>>()?;
+        let neighbors = rerank_authoritative(
+            map,
+            &request,
+            &query,
+            self.dimensions,
+            approximate,
+            &mut stats,
+            &mut completion,
+            "PQ code key is absent from authoritative directory",
+        )?;
         Ok(SearchResult {
             neighbors,
             stats,
@@ -641,86 +600,6 @@ where
             plan: plan.summary(),
         })
     }
-}
-
-#[derive(Clone, Debug)]
-struct PqRanked {
-    distance: f64,
-    key: Vec<u8>,
-}
-
-impl PartialEq for PqRanked {
-    fn eq(&self, other: &Self) -> bool {
-        self.distance.to_bits() == other.distance.to_bits() && self.key == other.key
-    }
-}
-
-impl Eq for PqRanked {}
-
-impl PartialOrd for PqRanked {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for PqRanked {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.distance
-            .total_cmp(&other.distance)
-            .then_with(|| self.key.cmp(&other.key))
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn admit_code(
-    key: Vec<u8>,
-    code: Vec<u8>,
-    lookup: &[Vec<f64>],
-    metric: DistanceMetric,
-    codebooks: &Codebooks,
-    target: usize,
-    request: &SearchRequest<'_>,
-    stats: &mut ProximitySearchStats,
-    approximate: &mut BinaryHeap<PqRanked>,
-) -> Result<bool, Error> {
-    if request
-        .budget
-        .max_nodes
-        .is_some_and(|limit| stats.nodes_read >= limit)
-        || request
-            .budget
-            .max_committed_bytes
-            .is_some_and(|limit| stats.committed_bytes.saturating_add(code.len()) > limit)
-        || request
-            .budget
-            .max_distance_evaluations
-            .is_some_and(|limit| {
-                stats
-                    .distance_evaluations
-                    .saturating_add(stats.quantized_distance_evaluations)
-                    >= limit
-            })
-        || request
-            .budget
-            .max_frontier_entries
-            .is_some_and(|limit| approximate.len().saturating_add(1) > limit)
-    {
-        return Ok(false);
-    }
-    validate_code(&code, codebooks)?;
-    stats.nodes_read += 1;
-    stats.bytes_read = stats.bytes_read.saturating_add(code.len());
-    stats.committed_bytes = stats.committed_bytes.saturating_add(code.len());
-    stats.quantized_distance_evaluations += 1;
-    approximate.push(PqRanked {
-        distance: score_code(metric, lookup, &code),
-        key,
-    });
-    if approximate.len() > target {
-        approximate.pop();
-    }
-    stats.frontier_peak = stats.frontier_peak.max(approximate.len());
-    Ok(true)
 }
 
 #[derive(Clone)]
@@ -1116,18 +995,6 @@ pub(crate) fn validate_code(code: &[u8], codebooks: &[Vec<Vec<f32>>]) -> Result<
         return Err(invalid_object("invalid PQ vector code"));
     }
     Ok(())
-}
-
-fn budget_exhausted(request: &SearchRequest<'_>, stats: &ProximitySearchStats) -> bool {
-    request
-        .budget
-        .max_distance_evaluations
-        .is_some_and(|maximum| {
-            stats
-                .distance_evaluations
-                .saturating_add(stats.quantized_distance_evaluations)
-                >= maximum
-        })
 }
 
 fn encode_config(config: &ProductQuantizationConfig, bytes: &mut Vec<u8>) {

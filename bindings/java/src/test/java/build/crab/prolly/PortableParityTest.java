@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import build.crab.prolly.javaapi.AcceleratorCatalogEntry;
 import build.crab.prolly.javaapi.Engine;
 import build.crab.prolly.javaapi.CompositeAcceleratorConfig;
 import build.crab.prolly.javaapi.HnswBuildLimits;
@@ -25,6 +26,7 @@ import build.crab.prolly.javaapi.ProximityScanRecordView;
 import build.crab.prolly.javaapi.ProximityCancellationToken;
 import build.crab.prolly.javaapi.ProximityMutation;
 import build.crab.prolly.javaapi.ProductQuantizationConfig;
+import build.crab.prolly.javaapi.TurboQuantizationConfig;
 import build.crab.prolly.javaapi.Proofs;
 import build.crab.prolly.javaapi.SearchRequest;
 import build.crab.prolly.javaapi.ScopedBytes;
@@ -199,6 +201,84 @@ class PortableParityTest {
                 }
             }
             try (var loaded = proximity.loadPq(manifest)) {
+                assertArrayEquals(manifest, loaded.manifest());
+            }
+        }
+    }
+
+    @Test
+    void turboQuantizerLifecycleIsPortableAndVerified() throws Exception {
+        Prolly.useLocalDebugLibrary();
+        var records = new ArrayList<ProximityRecord>();
+        for (int index = 0; index < 16; index++) {
+            records.add(new ProximityRecord(
+                    bytes(String.format("turbo-%02d", index)),
+                    new float[] {index, index % 3, 0, 1, 0, 0, 0, 0},
+                    bytes(String.format("value-%02d", index))));
+        }
+        try (Engine engine = Engine.memory(); var proximity = engine.buildProximity(8, records)) {
+            var config = new TurboQuantizationConfig(4, 4, -1L);
+            var built = proximity.buildTurboquant(config, 2);
+            assertEquals(16L, built.stats().encodedVectors());
+            var request = SearchRequest.fixedBudget(
+                    new float[] {0, 0, 0, 1, 0, 0, 0, 0},
+                    3,
+                    SearchRequest.SearchBudget.unlimited(),
+                    SearchRequest.SearchFilter.all(),
+                    SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                    SearchRequest.Backend.TURBO_QUANTIZED);
+            byte[] manifest;
+            try (var index = built.index()) {
+                assertEquals(config, index.config());
+                assertArrayEquals(proximity.descriptor(), index.sourceDescriptor());
+                assertEquals(16L, index.verify(proximity).encodedVectors());
+                var result = index.search(proximity, request);
+                assertEquals("turbo_quantized", result.backend());
+                assertArrayEquals(bytes("turbo-00"), result.neighbors().get(0).key());
+                assertTrue(result.stats().distanceEvaluations() > 0);
+                try (var cancellation = new ProximityCancellationToken()) {
+                    cancellation.cancel();
+                    var cancelled = index.searchCancellable(
+                            proximity, request, null, cancellation);
+                    assertEquals("cancelled", cancelled.completion());
+                    assertTrue(cancelled.neighbors().isEmpty());
+                }
+                manifest = index.manifest();
+                try (var proof = index.proveSearch(proximity, request)) {
+                    assertEquals(
+                            SearchBackendRecord.TURBO_QUANTIZED,
+                            proof.verify(proximity.descriptor()).getResult().getBackend());
+                }
+                try (var catalog = proximity.buildAcceleratorCatalog(null, null, index, null)) {
+                    assertEquals(1, catalog.entries().size());
+                    assertEquals(
+                            AcceleratorCatalogEntry.Kind.TURBO_QUANTIZED,
+                            catalog.entries().get(0).kind());
+                    assertEquals("turbo_quantized", catalog.search(proximity, request).backend());
+                }
+                var mutation = proximity.mutate(List.of(ProximityMutation.upsert(
+                        bytes("turbo-00"),
+                        new float[] {0.25f, 0, 0, 1, 0, 0, 0, 0},
+                        bytes("updated"))));
+                try (var current = mutation.map()) {
+                    var compositeBuilt = current.buildCompositeTurboquant(proximity, index);
+                    assertNotNull(compositeBuilt.accelerator());
+                    try (var composite = compositeBuilt.accelerator()) {
+                        assertEquals("TURBO_QUANTIZED", composite.baseKind());
+                        var compositeRequest = SearchRequest.fixedBudget(
+                                new float[] {0, 0, 0, 1, 0, 0, 0, 0},
+                                3,
+                                SearchRequest.SearchBudget.unlimited(),
+                                SearchRequest.SearchFilter.all(),
+                                SearchRequest.Kernel.AUTO_DETERMINISTIC,
+                                SearchRequest.Backend.COMPOSITE);
+                        assertEquals(
+                                "composite",
+                                composite.search(current, compositeRequest).backend());
+                    }
+                }
+            }
+            try (var loaded = proximity.loadTurboquant(manifest)) {
                 assertArrayEquals(manifest, loaded.manifest());
             }
         }

@@ -552,7 +552,10 @@ where
     ) -> Result<ProximitySearchProof, Error> {
         if matches!(
             request.options.backend,
-            SearchBackend::ProductQuantized | SearchBackend::Hnsw | SearchBackend::Composite
+            SearchBackend::ProductQuantized
+                | SearchBackend::TurboQuantized
+                | SearchBackend::Hnsw
+                | SearchBackend::Composite
         ) {
             return Err(Error::InvalidProximityObject {
                 kind: "proximity proof",

@@ -1,6 +1,7 @@
 use super::hnsw::storage::config_fingerprint as hnsw_fingerprint;
 use super::pq::config_fingerprint as pq_fingerprint;
-use super::{HnswIndex, ProductQuantizer};
+use super::turboquant::config_fingerprint as turboquant_fingerprint;
+use super::{HnswIndex, ProductQuantizer, TurboQuantizer};
 use crate::prolly::builder::SortedBatchBuilder;
 use crate::prolly::cid::Cid;
 use crate::prolly::config::Config;
@@ -14,6 +15,7 @@ use crate::prolly::proximity::storage::StoredRecord;
 use crate::prolly::proximity::{
     BuildParallelism, DistanceMetric, HnswBuildLimits, HnswBuildStats,
     ProductQuantizationBuildLimits, ProductQuantizationBuildStats, ProximityMap, ProximityTree,
+    TurboQuantizationBuildLimits, TurboQuantizationBuildStats,
 };
 use crate::prolly::store::{NodePublication, PublicationOrigin, Store};
 use crate::prolly::tree::Tree;
@@ -25,6 +27,7 @@ const VERSION: u8 = 1;
 pub enum CompositeBaseKind {
     Hnsw,
     ProductQuantized,
+    TurboQuantized,
 }
 
 impl CompositeBaseKind {
@@ -32,6 +35,7 @@ impl CompositeBaseKind {
         match self {
             Self::Hnsw => 1,
             Self::ProductQuantized => 2,
+            Self::TurboQuantized => 3,
         }
     }
 
@@ -39,6 +43,7 @@ impl CompositeBaseKind {
         match id {
             1 => Ok(Self::Hnsw),
             2 => Ok(Self::ProductQuantized),
+            3 => Ok(Self::TurboQuantized),
             _ => Err(invalid_object("unknown composite base accelerator kind")),
         }
     }
@@ -47,6 +52,7 @@ impl CompositeBaseKind {
 pub enum CompositeBase<S: Store> {
     Hnsw(HnswIndex<S>),
     ProductQuantized(ProductQuantizer<S>),
+    TurboQuantized(TurboQuantizer<S>),
 }
 
 impl<S> CompositeBase<S>
@@ -58,6 +64,7 @@ where
         match self {
             Self::Hnsw(_) => CompositeBaseKind::Hnsw,
             Self::ProductQuantized(_) => CompositeBaseKind::ProductQuantized,
+            Self::TurboQuantized(_) => CompositeBaseKind::TurboQuantized,
         }
     }
 
@@ -65,6 +72,7 @@ where
         match self {
             Self::Hnsw(index) => index.manifest_cid(),
             Self::ProductQuantized(index) => index.manifest_cid(),
+            Self::TurboQuantized(index) => index.manifest_cid(),
         }
     }
 
@@ -72,6 +80,7 @@ where
         match self {
             Self::Hnsw(index) => index.source_descriptor(),
             Self::ProductQuantized(index) => index.source_descriptor(),
+            Self::TurboQuantized(index) => index.source_descriptor(),
         }
     }
 
@@ -79,6 +88,31 @@ where
         match self {
             Self::Hnsw(index) => hnsw_fingerprint(index.config()),
             Self::ProductQuantized(index) => pq_fingerprint(index.config()),
+            Self::TurboQuantized(index) => turboquant_fingerprint(index.config()),
+        }
+    }
+
+    fn dimensions(&self) -> u32 {
+        match self {
+            Self::Hnsw(index) => index.dimensions,
+            Self::ProductQuantized(index) => index.dimensions,
+            Self::TurboQuantized(index) => index.dimensions,
+        }
+    }
+
+    fn metric(&self) -> DistanceMetric {
+        match self {
+            Self::Hnsw(index) => index.metric,
+            Self::ProductQuantized(index) => index.metric,
+            Self::TurboQuantized(index) => index.metric,
+        }
+    }
+
+    fn count(&self) -> u64 {
+        match self {
+            Self::Hnsw(index) => index.count,
+            Self::ProductQuantized(index) => index.count,
+            Self::TurboQuantized(index) => index.count,
         }
     }
 
@@ -86,6 +120,7 @@ where
         match self {
             Self::Hnsw(index) => Some(index),
             Self::ProductQuantized(_) => None,
+            Self::TurboQuantized(_) => None,
         }
     }
 
@@ -93,6 +128,14 @@ where
         match self {
             Self::ProductQuantized(index) => Some(index),
             Self::Hnsw(_) => None,
+            Self::TurboQuantized(_) => None,
+        }
+    }
+
+    pub(crate) fn turboquant(&self) -> Option<&TurboQuantizer<S>> {
+        match self {
+            Self::TurboQuantized(index) => Some(index),
+            Self::Hnsw(_) | Self::ProductQuantized(_) => None,
         }
     }
 }
@@ -143,7 +186,7 @@ pub struct CompositeBuildLimits {
 }
 
 impl CompositeBuildLimits {
-    fn validate(&self) -> Result<(), Error> {
+    pub(crate) fn validate(&self) -> Result<(), Error> {
         for (resource, value) in [
             ("diff_entries", self.max_diff_entries),
             ("owned_bytes", self.max_owned_bytes),
@@ -199,6 +242,8 @@ pub struct CompositeRebuildOptions {
     pub hnsw_limits: HnswBuildLimits,
     pub pq_parallelism: BuildParallelism,
     pub pq_limits: ProductQuantizationBuildLimits,
+    pub turboquant_parallelism: BuildParallelism,
+    pub turboquant_limits: TurboQuantizationBuildLimits,
 }
 
 impl Default for CompositeRebuildOptions {
@@ -207,6 +252,8 @@ impl Default for CompositeRebuildOptions {
             hnsw_limits: HnswBuildLimits::default(),
             pq_parallelism: BuildParallelism::serial(),
             pq_limits: ProductQuantizationBuildLimits::default(),
+            turboquant_parallelism: BuildParallelism::serial(),
+            turboquant_limits: TurboQuantizationBuildLimits::default(),
         }
     }
 }
@@ -231,6 +278,12 @@ pub enum CompositeBuildOrRebuildOutcome<S: Store> {
         reasons: Vec<FullRebuildReason>,
         composite_stats: CompositeBuildStats,
         rebuild_stats: ProductQuantizationBuildStats,
+    },
+    TurboQuantizedRebuilt {
+        accelerator: Box<TurboQuantizer<S>>,
+        reasons: Vec<FullRebuildReason>,
+        composite_stats: CompositeBuildStats,
+        rebuild_stats: TurboQuantizationBuildStats,
     },
 }
 
@@ -269,11 +322,15 @@ where
         enum RebuildConfig {
             Hnsw(super::hnsw::HnswConfig),
             ProductQuantized(super::pq::ProductQuantizationConfig),
+            TurboQuantized(super::turboquant::TurboQuantizationConfig),
         }
         let rebuild_config = match &base {
             CompositeBase::Hnsw(index) => RebuildConfig::Hnsw(index.config().clone()),
             CompositeBase::ProductQuantized(index) => {
                 RebuildConfig::ProductQuantized(index.config().clone())
+            }
+            CompositeBase::TurboQuantized(index) => {
+                RebuildConfig::TurboQuantized(index.config().clone())
             }
         };
         match Self::build(base_map, current_map, base, config, limits)? {
@@ -305,6 +362,20 @@ where
                         rebuild.pq_limits,
                     )?;
                     Ok(CompositeBuildOrRebuildOutcome::ProductQuantizedRebuilt {
+                        accelerator: Box::new(accelerator),
+                        reasons,
+                        composite_stats: stats,
+                        rebuild_stats,
+                    })
+                }
+                RebuildConfig::TurboQuantized(config) => {
+                    let (accelerator, rebuild_stats) = TurboQuantizer::build_with_limits(
+                        current_map,
+                        config,
+                        rebuild.turboquant_parallelism,
+                        rebuild.turboquant_limits,
+                    )?;
+                    Ok(CompositeBuildOrRebuildOutcome::TurboQuantizedRebuilt {
                         accelerator: Box::new(accelerator),
                         reasons,
                         composite_stats: stats,
@@ -463,6 +534,9 @@ where
             )?),
             CompositeBaseKind::ProductQuantized => CompositeBase::ProductQuantized(
                 ProductQuantizer::load(store.clone(), object.base_manifest.clone())?,
+            ),
+            CompositeBaseKind::TurboQuantized => CompositeBase::TurboQuantized(
+                TurboQuantizer::load(store.clone(), object.base_manifest.clone())?,
             ),
         };
         validate_loaded_base(&object, &base)?;
@@ -719,6 +793,9 @@ where
     if base.config.dimensions != current.config.dimensions
         || base.config.metric != current.config.metric
         || accelerator.source_descriptor() != &base.descriptor
+        || accelerator.dimensions() != base.config.dimensions
+        || accelerator.metric() != base.config.metric
+        || accelerator.count() != base.count
     {
         return Err(Error::InvalidProximitySearch {
             reason: "composite base/current sources or accelerator configuration disagree"
@@ -737,13 +814,16 @@ where
         || base.manifest_cid() != &manifest.base_manifest
         || base.kind() != manifest.base_kind
         || base.config_fingerprint() != manifest.base_fingerprint
+        || base.dimensions() != manifest.dimensions
+        || base.metric() != manifest.metric
+        || base.count() != manifest.base_count
     {
         return Err(invalid_object("composite base manifest binding mismatch"));
     }
     Ok(())
 }
 
-fn account_delta(
+pub(crate) fn account_delta(
     stats: &mut CompositeBuildStats,
     key: &[u8],
     value: &[u8],
@@ -753,7 +833,7 @@ fn account_delta(
     account_bytes(stats, key.len().saturating_add(value.len()), limits)
 }
 
-fn account_shadow(
+pub(crate) fn account_shadow(
     stats: &mut CompositeBuildStats,
     key: &[u8],
     limits: &CompositeBuildLimits,
@@ -775,7 +855,7 @@ fn account_bytes(
     )
 }
 
-fn rebuild_reasons(
+pub(crate) fn rebuild_reasons(
     config: &CompositeAcceleratorConfig,
     delta: usize,
     shadow: usize,
@@ -825,7 +905,11 @@ fn ratio_ppm(numerator: u64, denominator: u64) -> u32 {
     value as u32
 }
 
-fn checked_add(value: usize, increment: usize, resource: &'static str) -> Result<usize, Error> {
+pub(crate) fn checked_add(
+    value: usize,
+    increment: usize,
+    resource: &'static str,
+) -> Result<usize, Error> {
     value
         .checked_add(increment)
         .ok_or(Error::ProximityResourceLimitExceeded {
@@ -835,7 +919,11 @@ fn checked_add(value: usize, increment: usize, resource: &'static str) -> Result
         })
 }
 
-fn enforce(resource: &'static str, limit: Option<usize>, actual: usize) -> Result<(), Error> {
+pub(crate) fn enforce(
+    resource: &'static str,
+    limit: Option<usize>,
+    actual: usize,
+) -> Result<(), Error> {
     if let Some(limit) = limit {
         if actual > limit {
             return Err(Error::ProximityResourceLimitExceeded {

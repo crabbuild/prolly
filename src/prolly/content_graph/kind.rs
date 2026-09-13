@@ -15,6 +15,7 @@ pub enum ContentObjectKind {
     HnswPage,
     CompositeAccelerator,
     AcceleratorCatalog,
+    TurboQuantization,
 }
 
 impl ContentObjectKind {
@@ -32,6 +33,7 @@ impl ContentObjectKind {
             Self::HnswPage => 10,
             Self::CompositeAccelerator => 11,
             Self::AcceleratorCatalog => 12,
+            Self::TurboQuantization => 13,
         }
     }
 
@@ -49,6 +51,7 @@ impl ContentObjectKind {
             10 => Self::HnswPage,
             11 => Self::CompositeAccelerator,
             12 => Self::AcceleratorCatalog,
+            13 => Self::TurboQuantization,
             _ => return None,
         })
     }

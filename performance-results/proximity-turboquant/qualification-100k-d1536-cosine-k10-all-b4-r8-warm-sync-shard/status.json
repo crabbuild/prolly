@@ -1,0 +1,11 @@
+{
+  "complete": true,
+  "completed_cells": 1,
+  "expected_cells": 1,
+  "failed": [],
+  "finished_at": "2026-09-12T18:25:58.104614+00:00",
+  "revision": "d5a24d63fd14a8fae454b16aee67050bdf0db8fc",
+  "schema": "prolly-turboquant-qualification-v2",
+  "typed_scalability_failures": 0,
+  "wasm_smoke": false
+}

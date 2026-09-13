@@ -3405,16 +3405,16 @@ impl<S: Store> Prolly<S> {
         }
 
         self.raw_metrics().add_cache_misses(1);
-        let bytes = self
+        let read = self
             .store()
-            .get_shared(cid.as_bytes())
+            .get_validated_shared(cid.as_bytes())
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
-        self.raw_metrics().record_point_read(bytes.len());
-        let node = Arc::new(engine::validation::decode_read(
+        self.raw_metrics().record_point_read(read.bytes().len());
+        let node = Arc::new(engine::validation::decode_validated_read(
             cid,
             &self.config().format,
-            bytes,
+            read,
         )?);
         if let Ok(mut cache) = self.node_cache().write() {
             let evictions = cache.insert_read(cid.clone(), node.clone());
@@ -3461,9 +3461,9 @@ impl<S: Store> Prolly<S> {
                         .collect::<Vec<_>>();
                     let loaded = self
                         .store()
-                        .batch_get_shared_ordered_unique(&keys)
+                        .batch_get_validated_shared_ordered_unique(&keys)
                         .map_err(|error| Error::Store(Box::new(error)))?;
-                    let loaded_bytes = loaded.iter().flatten().map(|bytes| bytes.len()).sum();
+                    let loaded_bytes = loaded.iter().flatten().map(|read| read.bytes().len()).sum();
                     let loaded_nodes = loaded.iter().flatten().count();
                     self.raw_metrics()
                         .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
@@ -3479,13 +3479,13 @@ impl<S: Store> Prolly<S> {
                                 .collect::<Vec<_>>();
                             let loaded = self
                                 .store()
-                                .batch_get_shared_ordered_unique(&keys)
+                                .batch_get_validated_shared_ordered_unique(&keys)
                                 .map_err(|error| Error::Store(Box::new(error)))?;
                             if loaded.len() != chunk.len() {
                                 return Err(Error::InvalidNode);
                             }
                             let loaded_bytes =
-                                loaded.iter().flatten().map(|bytes| bytes.len()).sum();
+                                loaded.iter().flatten().map(|read| read.bytes().len()).sum();
                             let loaded_nodes = loaded.iter().flatten().count();
                             self.raw_metrics().record_batch_read(
                                 keys.len(),
@@ -3505,12 +3505,12 @@ impl<S: Store> Prolly<S> {
                 let decoded = missing_cids
                     .into_iter()
                     .zip(loaded)
-                    .map(|(cid, bytes)| {
-                        let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
-                        let node = Arc::new(engine::validation::decode_read(
+                    .map(|(cid, read)| {
+                        let read = read.ok_or_else(|| Error::NotFound(cid.clone()))?;
+                        let node = Arc::new(engine::validation::decode_validated_read(
                             &cid,
                             &self.config().format,
-                            bytes,
+                            read,
                         )?);
                         Ok((node, cid))
                     })
@@ -4607,18 +4607,6 @@ where
             });
         }
         self.build_from_entries(entries).await
-    }
-
-    pub(crate) async fn publish_builder_nodes(
-        &self,
-        nodes: &[builder::DeferredNode],
-        origin: PublicationOrigin,
-    ) -> Result<(), Error> {
-        let nodes = nodes
-            .iter()
-            .map(|entry| (&entry.cid, entry.bytes.as_slice()))
-            .collect::<Vec<_>>();
-        self.publish_builder_node_refs(&nodes, origin).await
     }
 
     pub(crate) async fn publish_builder_node_refs(
@@ -6984,17 +6972,17 @@ where
         }
 
         self.metrics.add_cache_misses(1);
-        let bytes = self
+        let read = self
             .store
-            .get_shared(cid.as_bytes())
+            .get_validated_shared(cid.as_bytes())
             .await
             .map_err(|e| Error::Store(Box::new(e)))?
             .ok_or_else(|| Error::NotFound(cid.clone()))?;
-        self.metrics.record_point_read(bytes.len());
-        let node = Arc::new(engine::validation::decode_read(
+        self.metrics.record_point_read(read.bytes().len());
+        let node = Arc::new(engine::validation::decode_validated_read(
             cid,
             &self.config.format,
-            bytes,
+            read,
         )?);
         if admit {
             if let Ok(mut cache) = self.node_cache.write() {
@@ -7048,25 +7036,25 @@ where
             self.metrics.add_cache_misses(keys.len());
             let loaded = self
                 .store
-                .batch_get_shared_ordered_unique(&keys)
+                .batch_get_validated_shared_ordered_unique(&keys)
                 .await
                 .map_err(|error| Error::Store(Box::new(error)))?;
             if loaded.len() != missing_cids.len() {
                 return Err(Error::InvalidNode);
             }
-            let loaded_bytes = loaded.iter().flatten().map(|bytes| bytes.len()).sum();
+            let loaded_bytes = loaded.iter().flatten().map(|read| read.bytes().len()).sum();
             let loaded_nodes = loaded.iter().flatten().count();
             self.metrics
                 .record_batch_read(keys.len(), loaded_bytes, loaded_nodes);
             let decoded = missing_cids
                 .into_iter()
                 .zip(loaded)
-                .map(|(cid, bytes)| {
-                    let bytes = bytes.ok_or_else(|| Error::NotFound(cid.clone()))?;
-                    let node = Arc::new(engine::validation::decode_read(
+                .map(|(cid, read)| {
+                    let read = read.ok_or_else(|| Error::NotFound(cid.clone()))?;
+                    let node = Arc::new(engine::validation::decode_validated_read(
                         &cid,
                         &self.config.format,
-                        bytes,
+                        read,
                     )?);
                     Ok((node, cid))
                 })

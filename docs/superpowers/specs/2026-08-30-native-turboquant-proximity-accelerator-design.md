@@ -504,12 +504,29 @@ The transform is applied to the query once per search. Search precomputes
 order. It also computes L2 `query_norm_squared` from the prepared query with the
 canonical scalar accumulation.
 
-For one encoded vector:
+For one encoded vector, define the ordered reconstructed-direction dot product:
 
 ```text
-approx_dot = stored_norm *
-             sum_i(transformed_query_i * reconstructed_centroid[code_i]
-                   / sqrt(dimensions))
+reconstructed_unit_dot =
+    sum_i(transformed_query_i * reconstructed_centroid[code_i]
+          / sqrt(dimensions))
+```
+
+The scalar Lloyd–Max reconstruction is not exactly unit length. For cosine and
+inner product, project that reconstruction back onto the unit sphere before
+scoring. This is a Prolly routing correction layered on the unchanged
+TurboQuant-MSE encoding: the persisted `stored_norm` already carries the exact
+source magnitude, so allowing codebook norm drift to change magnitude twice is
+incorrect and measurably harms candidate recall. Cosine preparation normalizes
+both source and query and therefore omits `stored_norm`; inner product restores
+it after the direction correction:
+
+```text
+reconstructed_unit_norm_squared =
+    sum_i((reconstructed_centroid[code_i] / sqrt(dimensions))^2)
+approx_direction_dot =
+    reconstructed_unit_dot / sqrt(reconstructed_unit_norm_squared)
+approx_inner_product_dot = stored_norm * approx_direction_dot
 ```
 
 Products are generated in coordinate order and reduced in canonical scalar
@@ -517,13 +534,29 @@ Products are generated in coordinate order and reduced in canonical scalar
 reduction must remain scalar and ordered, matching the existing deterministic
 SIMD strategy.
 
+L2 retains the MSE reconstruction itself rather than the spherical projection.
 Metric scores are:
 
 ```text
-L2Squared   = query_norm_squared + stored_norm^2 - 2 * approx_dot
-Cosine      = 1 - clamp(approx_dot, -1, 1)
-InnerProduct = -approx_dot
+L2Squared   = query_norm_squared
+              + stored_norm^2 * reconstructed_unit_norm_squared
+              - 2 * stored_norm * reconstructed_unit_dot
+Cosine      = 1 - clamp(approx_direction_dot, -1, 1)
+InnerProduct = -approx_inner_product_dot
 ```
+
+The reconstruction norm is derived deterministically from the packed codes in
+the same traversal as the dot product. It cannot be replaced by one for L2: a
+particular Lloyd–Max reconstruction is not exactly unit length, and that
+substitution would no longer rank by squared
+distance to the reconstructed source vector. Implementations accumulate the
+dot product and this norm in the same coordinate-ordered packed-code traversal;
+they must not decode the complete code a second time.
+
+Cosine ignores the persisted original source norm, preserving invariance under
+positive source scaling, but it must normalize by the packed-code
+reconstruction norm. Quantization does not produce an exactly unit-length
+reconstruction, so omitting this divisor does not compute cosine distance.
 
 Small negative L2 estimates caused by approximation or rounding are clamped to
 positive zero for candidate ordering. This clamp affects routing only.
@@ -687,8 +720,21 @@ per coordinate per round, plus one standard-normal scaling multiplication.
 
 `max_temporary_bytes` includes the derived transform plan, every worker's two
 `dimensions * 8` transform buffers, bounded key/code batch output, ordered
-reassembly state, and statistics. The builder computes a conservative checked
-upper bound before starting workers and tracks the actual peak at or below it.
+reassembly state, and the code tree builder's current hierarchy, pending
+publication payload, and transient raw/encoded node overlap. The builder
+computes a conservative checked upper bound before starting workers and tracks
+the accounted peak at or below it. Payload accounting excludes allocator
+metadata and provider-owned publication buffers. A bounded build publishes
+completed code-tree nodes immediately so the pending publication payload
+cannot grow with source cardinality. Unbounded builds cap code-tree publication
+batches at 16 nodes so large-dimension leaves cannot turn a generic provider
+batch setting into excessive process memory.
+
+Build statistics normalize worker scratch to one worker so parallelism does
+not change their canonical logical counters. `peak_temporary_bytes` also
+reflects the build limit and node-publication batch, however, and may therefore
+differ between sync and async builds that use different publication batching;
+limit enforcement always accounts for every requested worker.
 
 Parallel construction assigns contiguous key-ordered batches to workers.
 Results are committed only in batch sequence order. If several records fail,
@@ -1004,6 +1050,14 @@ store, and WASM smoke coverage. Every row records:
 
 Raw rows are retained under `performance-results/proximity-turboquant/`.
 Absolute latency is evidence, not a portable correctness claim.
+
+The brute-force recall oracle is an authoritative exact ProximityMap search
+over the persisted canonical vectors, using the same deterministic scalar
+metric implementation, filter, `k`, and `(exact_score, key)` ordering as
+reranking. It must not independently rescore the pre-ingestion input vectors
+or use platform `sqrt`: cosine ingestion projects vectors to a canonical
+fixed point, and a mathematically equivalent raw-vector formula can produce a
+different order when exact distances are separated only by rounding noise.
 
 ## GA Acceptance Gates
 

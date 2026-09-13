@@ -1,37 +1,157 @@
 use prolly::{
-    copy_content_graph, plan_content_gc, AcceleratorSet, AdaptiveQuality, BuildParallelism,
+    copy_content_graph, plan_content_gc, AcceleratorSet, AdaptiveQuality, BuildParallelism, Cid,
     CompositeAccelerator, CompositeAcceleratorConfig, CompositeBase, CompositeBuildLimits,
-    CompositeBuildOutcome, ContentGraphLimits, DistanceMetric, HnswConfig, HnswIndex, MemStore,
-    ProductQuantizationConfig, ProductQuantizer, ProximityConfig, ProximityFilter, ProximityMap,
-    ProximityMutation, ProximityRecord, QueryKernel, ScalarQuantizationConfig, SearchBackend,
-    SearchIo, SearchPolicy, SearchRequest, SearchRuntime, TypedContentRoot,
+    CompositeBuildOutcome, ContentGraphLimits, ContentObjectKind, DistanceMetric, FileNodeStore,
+    HnswConfig, HnswIndex, MemStore, ProductQuantizationConfig, ProductQuantizer, ProximityConfig,
+    ProximityFilter, ProximityMap, ProximityMutation, ProximityRecord, QueryKernel,
+    ScalarQuantizationConfig, SearchBackend, SearchCompletion, SearchIo, SearchPolicy,
+    SearchRequest, SearchRuntime, TurboQuantizationConfig, TurboQuantizer, TypedContentRoot,
 };
 #[cfg(feature = "async-store")]
-use prolly::{AsyncProximityMap, AsyncSearchControl, SyncStoreAsAsync};
+use prolly::{
+    AsyncAcceleratorBuildOptions, AsyncAcceleratorCatalog, AsyncAcceleratorSet,
+    AsyncProductQuantizer, AsyncProductQuantizerBuild, AsyncProximityMap, AsyncSearchControl,
+    AsyncTurboQuantizer, AsyncTurboQuantizerBuild, SyncStoreAsAsync,
+};
 use std::collections::HashSet;
 #[cfg(feature = "async-store")]
 use std::future::Future;
 use std::hint::black_box;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 #[cfg(feature = "async-store")]
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+const BENCHMARK_DATASET_ID: &str = "linear-mod-2000003-v2";
+const BENCHMARK_VECTOR_PERIOD: u64 = 2_000_003;
 
 fn main() {
     let records = env_usize("PROLLY_PROXIMITY_BENCH_RECORDS").unwrap_or(1_000);
+    assert!(records > 0, "benchmark record count must be positive");
+    assert!(
+        u64::try_from(records).is_ok_and(|records| records <= BENCHMARK_VECTOR_PERIOD),
+        "benchmark record count exceeds the deterministic dataset's unique-vector period"
+    );
     let dimensions =
         env_list("PROLLY_PROXIMITY_BENCH_DIMENSIONS").unwrap_or_else(|| vec![8, 128, 768, 1_536]);
+    assert!(
+        dimensions.iter().all(|dimension| *dimension > 0),
+        "benchmark dimensions must be positive"
+    );
     let threads = env_list("PROLLY_PROXIMITY_BENCH_THREADS").unwrap_or_else(|| vec![1, 2, 4]);
     let scale_only = env_bool("PROLLY_PROXIMITY_BENCH_SCALE_ONLY");
-    let search_repeats = env_usize("PROLLY_PROXIMITY_BENCH_SEARCH_REPEATS")
-        .unwrap_or(1)
-        .max(1);
+    let quantizers_only = env_bool("PROLLY_PROXIMITY_BENCH_QUANTIZERS_ONLY");
+    let store_kind = BenchStoreKind::from_env();
+    let durable_root = match store_kind {
+        BenchStoreKind::Memory => {
+            assert!(
+                std::env::var_os("PROLLY_PROXIMITY_BENCH_STORE_PATH").is_none(),
+                "store path is only valid for the file benchmark store"
+            );
+            None
+        }
+        BenchStoreKind::File => Some(DurableRunRoot::create(
+            std::env::var_os("PROLLY_PROXIMITY_BENCH_STORE_PATH")
+                .map(PathBuf::from)
+                .expect("file benchmark store requires PROLLY_PROXIMITY_BENCH_STORE_PATH"),
+        )),
+    };
+    assert!(
+        !(scale_only && quantizers_only),
+        "scale-only and quantizers-only benchmark profiles are mutually exclusive"
+    );
+    assert_unique_positive_workers(&threads);
+    let search_repeats = env_usize("PROLLY_PROXIMITY_BENCH_SEARCH_REPEATS").unwrap_or(1);
+    assert!(
+        search_repeats > 0,
+        "benchmark search repetitions must be positive"
+    );
     let reset_search_cache = env_bool("PROLLY_PROXIMITY_BENCH_RESET_SEARCH_CACHE");
+    let async_quantizers = env_bool("PROLLY_PROXIMITY_BENCH_ASYNC_QUANTIZERS");
+    #[cfg(not(feature = "async-store"))]
+    assert!(
+        !async_quantizers,
+        "async quantizer benchmarks require the async-store feature"
+    );
     let simd_first = env_bool("PROLLY_PROXIMITY_BENCH_SIMD_FIRST");
+    let metric = env_metric("PROLLY_PROXIMITY_BENCH_METRIC").unwrap_or(DistanceMetric::L2Squared);
+    let k = env_usize("PROLLY_PROXIMITY_BENCH_K").unwrap_or(10);
+    assert!(k > 0, "benchmark k must be positive");
+    let eligibility_ppm = env_usize("PROLLY_PROXIMITY_BENCH_ELIGIBILITY_PPM").unwrap_or(1_000_000);
+    assert!(
+        (1..=1_000_000).contains(&eligibility_ppm),
+        "benchmark eligibility PPM must be between 1 and 1000000"
+    );
+    let turboquant_config = TurboQuantizationConfig {
+        bit_width: env_usize("PROLLY_PROXIMITY_BENCH_TURBOQUANT_BITS")
+            .map(|value| {
+                u8::try_from(value).expect("TurboQuant benchmark bit width must fit in u8")
+            })
+            .unwrap_or(4),
+        rerank_multiplier: env_usize("PROLLY_PROXIMITY_BENCH_RERANK_MULTIPLIER")
+            .map(|value| {
+                u32::try_from(value)
+                    .expect("TurboQuant benchmark rerank multiplier must fit in u32")
+            })
+            .unwrap_or(8),
+        seed: 0,
+    };
+    if quantizers_only {
+        assert!(
+            records >= 16,
+            "quantizers-only benchmark requires at least 16 records"
+        );
+        assert!(
+            dimensions
+                .iter()
+                .all(|dimension| *dimension >= 8 && dimension.is_multiple_of(8)),
+            "quantizers-only benchmark requires supported TurboQuant dimensions"
+        );
+    }
     println!("prolly proximity benchmark");
+    println!("schema_version=4");
+    println!("dataset={BENCHMARK_DATASET_ID}");
+    println!("revision={}", command_output("git", &["rev-parse", "HEAD"]));
+    println!(
+        "compiler={}",
+        command_output("rustc", &["--version", "--verbose"])
+    );
+    println!("target_arch={}", std::env::consts::ARCH);
+    println!("target_os={}", std::env::consts::OS);
+    println!("machine={}", command_output("hostname", &[]));
+    println!("store={}", store_kind.label());
+    if let Some(root) = &durable_root {
+        println!("store_path={}", root.path().display());
+    }
+    println!("seed={}", turboquant_config.seed);
     println!("records={records}");
-    println!("profile={}", if scale_only { "scale" } else { "complete" });
+    println!(
+        "profile={}",
+        if quantizers_only {
+            "quantizers"
+        } else if scale_only {
+            "scale"
+        } else {
+            "complete"
+        }
+    );
     println!("search_repeats={search_repeats}");
+    println!("metric={metric:?}");
+    println!("k={k}");
+    println!("eligibility_ppm={eligibility_ppm}");
+    println!(
+        "effective_k={}",
+        k.min(
+            records
+                .saturating_mul(eligibility_ppm)
+                .div_ceil(1_000_000)
+                .max(1)
+        )
+    );
+    println!("turboquant_bits={}", turboquant_config.bit_width);
+    println!("rerank_multiplier={}", turboquant_config.rerank_multiplier);
     println!(
         "search_cache={}",
         if reset_search_cache { "reset" } else { "warm" }
@@ -44,55 +164,234 @@ fn main() {
             "scalar-first"
         }
     );
+    println!("async_quantizers={async_quantizers}");
     println!("operation,dimensions,threads,micros,metric_a,metric_b");
-    for dimension in dimensions {
-        bench_case(
-            records,
-            dimension,
-            &threads,
-            scale_only,
-            search_repeats,
-            reset_search_cache,
-            simd_first,
-        );
+    let settings = BenchSettings {
+        threads: &threads,
+        scale_only,
+        quantizers_only,
+        search_repeats,
+        reset_search_cache,
+        async_quantizers,
+        simd_first,
+        metric,
+        requested_k: k,
+        eligibility_ppm,
+        turboquant_config: &turboquant_config,
+    };
+    match durable_root {
+        None => {
+            let mut make_store = || Arc::new(MemStore::new());
+            for dimension in dimensions {
+                bench_case(records, dimension, &settings, &mut make_store);
+            }
+        }
+        Some(root) => {
+            let mut store_id = 0usize;
+            let mut make_store = || {
+                store_id += 1;
+                Arc::new(
+                    FileNodeStore::open(root.path().join(format!("store-{store_id:06}"))).unwrap(),
+                )
+            };
+            for dimension in dimensions {
+                bench_case(records, dimension, &settings, &mut make_store);
+            }
+        }
     }
 }
 
-fn bench_case(
-    count: usize,
-    dimensions: usize,
-    threads: &[usize],
-    scale_only: bool,
-    search_repeats: usize,
-    reset_search_cache: bool,
-    simd_first: bool,
-) {
-    let records = make_records(count, dimensions);
-    for &workers in threads {
-        let store = Arc::new(MemStore::new());
-        let config = config(dimensions);
-        let started = Instant::now();
-        let (_, stats) = ProximityMap::build_with_parallelism(
-            store,
-            config,
-            black_box(records.clone()),
-            BuildParallelism::new(workers).unwrap(),
-        )
-        .unwrap();
-        row(
-            "build",
-            dimensions,
-            workers,
-            started.elapsed(),
-            stats.distance_evaluations,
-            stats.proximity_objects_written,
-        );
+#[derive(Clone, Copy)]
+enum BenchStoreKind {
+    Memory,
+    File,
+}
+
+impl BenchStoreKind {
+    fn from_env() -> Self {
+        match std::env::var("PROLLY_PROXIMITY_BENCH_STORE")
+            .unwrap_or_else(|_| "memory".to_owned())
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "memory" => Self::Memory,
+            "file" => Self::File,
+            _ => panic!("PROLLY_PROXIMITY_BENCH_STORE must be memory or file"),
+        }
     }
 
-    let store = Arc::new(MemStore::new());
-    let map = ProximityMap::build(store.clone(), config(dimensions), records.clone()).unwrap();
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Memory => "memory",
+            Self::File => "file",
+        }
+    }
+}
+
+struct DurableRunRoot {
+    path: PathBuf,
+}
+
+impl DurableRunRoot {
+    fn create(parent: PathBuf) -> Self {
+        assert!(
+            parent.is_dir(),
+            "file benchmark store path must be an existing directory"
+        );
+        let parent = parent
+            .canonicalize()
+            .expect("file benchmark store path must be canonicalizable");
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock must be after the Unix epoch")
+            .as_nanos();
+        let path = parent.join(format!("prolly-turboquant-{}-{nonce}", std::process::id()));
+        std::fs::create_dir(&path).expect("create unique file benchmark run directory");
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for DurableRunRoot {
+    fn drop(&mut self) {
+        if let Err(error) = std::fs::remove_dir_all(&self.path) {
+            eprintln!(
+                "warning: failed to remove benchmark run directory {}: {error}",
+                self.path.display()
+            );
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct BenchSettings<'a> {
+    threads: &'a [usize],
+    scale_only: bool,
+    quantizers_only: bool,
+    search_repeats: usize,
+    reset_search_cache: bool,
+    async_quantizers: bool,
+    simd_first: bool,
+    metric: DistanceMetric,
+    requested_k: usize,
+    eligibility_ppm: usize,
+    turboquant_config: &'a TurboQuantizationConfig,
+}
+
+fn bench_case<S, F>(
+    count: usize,
+    dimensions: usize,
+    settings: &BenchSettings<'_>,
+    make_store: &mut F,
+) where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+    F: FnMut() -> S,
+{
+    let BenchSettings {
+        threads,
+        scale_only,
+        quantizers_only,
+        search_repeats,
+        reset_search_cache,
+        async_quantizers,
+        simd_first,
+        metric,
+        requested_k,
+        eligibility_ppm,
+        turboquant_config,
+    } = *settings;
+    let records = make_records(count, dimensions);
+    if !quantizers_only {
+        for &workers in threads {
+            let store = make_store();
+            let config = config(dimensions, metric);
+            let started = Instant::now();
+            let (_, stats) = ProximityMap::build_with_parallelism(
+                store,
+                config,
+                black_box(records.clone()),
+                BuildParallelism::new(workers).unwrap(),
+            )
+            .unwrap();
+            row(
+                "build",
+                dimensions,
+                workers,
+                started.elapsed(),
+                stats.distance_evaluations,
+                stats.proximity_objects_written,
+            );
+        }
+    }
+
+    let store = make_store();
+    let started = Instant::now();
+    let map =
+        ProximityMap::build(store.clone(), config(dimensions, metric), records.clone()).unwrap();
+    if quantizers_only {
+        row("source_build", dimensions, 0, started.elapsed(), count, 0);
+    }
+    let source_walk = prolly::walk_content_graph(
+        &store,
+        &[TypedContentRoot::proximity_descriptor(
+            map.tree().descriptor.clone(),
+        )],
+        &ContentGraphLimits::default(),
+    )
+    .unwrap();
+    row(
+        "source_closure_bytes",
+        dimensions,
+        0,
+        Duration::ZERO,
+        source_walk.total_bytes,
+        source_walk.objects.len(),
+    );
     let query = make_vector(count / 3, dimensions);
-    let k = 10.min(count.max(1));
+    let eligible_count = count
+        .saturating_mul(eligibility_ppm)
+        .div_ceil(1_000_000)
+        .max(1)
+        .min(count.max(1));
+    let eligible_keys: Vec<_> = records
+        .iter()
+        .take(eligible_count)
+        .map(|record| record.key.clone())
+        .collect();
+    let k = requested_k.min(eligible_count);
+    let exact_oracle = (!scale_only)
+        .then(|| authoritative_exact_oracle(&map, &query, k, &eligible_keys, eligibility_ppm));
+
+    if quantizers_only {
+        bench_accelerators(
+            &map,
+            store,
+            AcceleratorBenchCase {
+                query: &query,
+                exact_oracle: exact_oracle
+                    .as_ref()
+                    .expect("quantizer benchmark requires an exact oracle"),
+                k,
+                dimensions,
+                workers: threads,
+                turboquant_config,
+            },
+            SearchBenchOptions {
+                repeats: search_repeats,
+                reset_cache: reset_search_cache,
+                async_quantizers,
+                eligible_keys: &eligible_keys,
+                eligibility_ppm,
+            },
+            false,
+        );
+        return;
+    }
 
     let search_specs = if simd_first {
         [
@@ -135,7 +434,7 @@ fn bench_case(
         let mut request = SearchRequest::exact(&query, k);
         request.policy = policy;
         request.kernel = kernel;
-        request.filter = ProximityFilter::Prefix(b"record-");
+        request.filter = benchmark_filter(&eligible_keys, eligibility_ppm);
         let started = Instant::now();
         let mut result = None;
         for _ in 0..search_repeats {
@@ -154,7 +453,13 @@ fn bench_case(
             result.stats.distance_evaluations + result.stats.quantized_distance_evaluations,
         );
         if name == "search_exact_scalar" && !scale_only {
-            let recall = recall_at_k(&records, &query, &result, k);
+            let recall = recall_at_k(
+                exact_oracle
+                    .as_ref()
+                    .expect("complete benchmark requires an exact oracle"),
+                &result,
+                k,
+            );
             println!("recall_exact,{dimensions},0,0,{:.6},0", recall);
         }
     }
@@ -182,7 +487,7 @@ fn bench_case(
 
     let limits = ContentGraphLimits::default();
     let root = TypedContentRoot::proximity_descriptor(map.tree().descriptor.clone());
-    let replica = MemStore::new();
+    let replica = make_store();
     let started = Instant::now();
     let copied = copy_content_graph(&store, &replica, root.clone(), &limits).unwrap();
     row(
@@ -234,58 +539,470 @@ fn bench_case(
         verified.result.neighbors.len(),
     );
 
-    if dimensions <= 128 && count >= 16 {
-        bench_accelerators(&map, store.clone(), &query, k, dimensions);
+    if count >= 16 {
+        bench_accelerators(
+            &map,
+            store.clone(),
+            AcceleratorBenchCase {
+                query: &query,
+                exact_oracle: exact_oracle
+                    .as_ref()
+                    .expect("complete benchmark requires an exact oracle"),
+                k,
+                dimensions,
+                workers: threads,
+                turboquant_config,
+            },
+            SearchBenchOptions {
+                repeats: search_repeats,
+                reset_cache: reset_search_cache,
+                async_quantizers,
+                eligible_keys: &eligible_keys,
+                eligibility_ppm,
+            },
+            true,
+        );
     }
     #[cfg(feature = "async-store")]
     bench_async(&map, store, &query, k, dimensions);
 }
 
+#[derive(Clone, Copy)]
+struct AcceleratorBenchCase<'a> {
+    query: &'a [f32],
+    exact_oracle: &'a prolly::SearchResult,
+    k: usize,
+    dimensions: usize,
+    workers: &'a [usize],
+    turboquant_config: &'a TurboQuantizationConfig,
+}
+
+#[derive(Clone, Copy)]
+struct SearchBenchOptions<'a> {
+    repeats: usize,
+    reset_cache: bool,
+    async_quantizers: bool,
+    eligible_keys: &'a [Vec<u8>],
+    eligibility_ppm: usize,
+}
+
 fn bench_accelerators<S>(
     map: &ProximityMap<S>,
     store: S,
-    query: &[f32],
-    k: usize,
-    dimensions: usize,
+    case: AcceleratorBenchCase<'_>,
+    options: SearchBenchOptions<'_>,
+    include_non_quantized: bool,
 ) where
     S: prolly::Store + Clone + Send + Sync,
     S::Error: Send + Sync,
 {
-    let started = Instant::now();
-    let (pq, stats) = ProductQuantizer::build(
-        map,
-        ProductQuantizationConfig {
-            subquantizers: (dimensions as u32).min(8),
-            centroids_per_subquantizer: 16,
-            training_iterations: 4,
-            rerank_multiplier: 8,
-            seed: 17,
-            max_training_vectors: 65_536,
-        },
-        BuildParallelism::new(2).unwrap(),
-    )
-    .unwrap();
-    row(
-        "pq_build",
+    #[cfg(not(feature = "async-store"))]
+    let _ = options.async_quantizers;
+    let AcceleratorBenchCase {
+        query,
+        exact_oracle,
+        k,
         dimensions,
-        2,
-        started.elapsed(),
-        stats.training_distance_evaluations,
+        workers,
+        turboquant_config,
+    } = case;
+    if dimensions >= 8 && dimensions.is_multiple_of(8) {
+        let mut selected = None;
+        let mut canonical = None;
+        for &worker_count in workers {
+            let started = Instant::now();
+            let (candidate, stats) = TurboQuantizer::build(
+                map,
+                turboquant_config.clone(),
+                BuildParallelism::new(worker_count).unwrap(),
+            )
+            .unwrap();
+            row(
+                "turboquant_build",
+                dimensions,
+                worker_count,
+                started.elapsed(),
+                stats.transformed_components,
+                stats.encoded_output_bytes,
+            );
+            row(
+                "turboquant_build_resources",
+                dimensions,
+                worker_count,
+                Duration::ZERO,
+                stats.peak_temporary_bytes,
+                stats.butterfly_operations,
+            );
+            if let Some((manifest, canonical_stats)) = &canonical {
+                assert_eq!(
+                    candidate.manifest_cid(),
+                    manifest,
+                    "TurboQuant manifest changed with worker count"
+                );
+                assert_eq!(
+                    &stats, canonical_stats,
+                    "TurboQuant logical build statistics changed with worker count"
+                );
+            } else {
+                canonical = Some((candidate.manifest_cid().clone(), stats.clone()));
+                selected = Some(candidate);
+            }
+        }
+        let (turboquant, stats) = selected
+            .zip(canonical.map(|(_, stats)| stats))
+            .expect("validated worker list is non-empty");
+        #[cfg(feature = "async-store")]
+        let turboquant_manifest = turboquant.manifest_cid().clone();
+        #[cfg(feature = "async-store")]
+        if options.async_quantizers {
+            bench_async_turboquant_builds(
+                map,
+                store.clone(),
+                workers,
+                turboquant_config,
+                &turboquant_manifest,
+                &stats,
+                dimensions,
+            );
+        }
+        let sidecar = derived_closure_size(
+            &store,
+            map.tree().descriptor.clone(),
+            TypedContentRoot::new(
+                ContentObjectKind::TurboQuantization,
+                turboquant.manifest_cid().clone(),
+            ),
+        );
+        row(
+            "turboquant_sidecar_bytes",
+            dimensions,
+            0,
+            Duration::ZERO,
+            sidecar.total_bytes,
+            stats.encoded_output_bytes,
+        );
+        row(
+            "turboquant_manifest_code_bytes",
+            dimensions,
+            0,
+            Duration::ZERO,
+            sidecar.manifest_bytes,
+            sidecar.code_tree_bytes,
+        );
+        let quality = turboquant.quality();
+        let accelerators = AcceleratorSet::empty()
+            .with_turboquant(map.tree(), turboquant)
+            .unwrap();
+        let mut scalar_result = None;
+        for (name, kernel) in [
+            ("turboquant_search_scalar", QueryKernel::ScalarDeterministic),
+            ("turboquant_search_simd", QueryKernel::SimdDeterministic),
+            ("turboquant_search_auto", QueryKernel::AutoDeterministic),
+        ] {
+            let mut request = SearchRequest::exact(query, k);
+            request.policy = SearchPolicy::FixedBudget;
+            request.kernel = kernel;
+            request.options.backend = SearchBackend::TurboQuantized;
+            request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
+            let mut result = None;
+            let mut samples = Vec::with_capacity(options.repeats);
+            let mut physical_reads = 0;
+            let warm_io = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()));
+            if !options.reset_cache {
+                map.search_with(&accelerators, &warm_io, request.clone())
+                    .unwrap();
+            }
+            for _ in 0..options.repeats {
+                let cold_io = if options.reset_cache {
+                    map.clear_content_cache().unwrap();
+                    Some(SearchIo::new(
+                        store.clone(),
+                        Arc::new(SearchRuntime::default()),
+                    ))
+                } else {
+                    None
+                };
+                let io = cold_io.as_ref().unwrap_or(&warm_io);
+                let reads_before = io.physical_reads();
+                let started = Instant::now();
+                result = Some(map.search_with(&accelerators, io, request.clone()).unwrap());
+                samples.push(started.elapsed());
+                physical_reads = io.physical_reads().saturating_sub(reads_before);
+            }
+            let result = result.expect("search repeats is positive");
+            let latency = LatencySummary::from_samples(samples);
+            row(
+                name,
+                dimensions,
+                0,
+                latency.median,
+                result.stats.quantized_distance_evaluations,
+                result.stats.distance_evaluations,
+            );
+            row(
+                &format!("{name}_p95"),
+                dimensions,
+                0,
+                latency.p95,
+                result.stats.bytes_read,
+                result.stats.physical_bytes_read,
+            );
+            row(
+                &format!("{name}_p99"),
+                dimensions,
+                0,
+                latency.p99,
+                result.stats.candidate_handles_peak,
+                result.stats.candidate_retained_bytes_peak,
+            );
+            row(
+                &format!("{name}_work"),
+                dimensions,
+                0,
+                Duration::ZERO,
+                result.stats.frontier_peak,
+                completion_id(result.completion),
+            );
+            row(
+                &format!("{name}_io"),
+                dimensions,
+                0,
+                Duration::ZERO,
+                result.stats.nodes_read,
+                physical_reads,
+            );
+            row(
+                &format!("{name}_rerank"),
+                dimensions,
+                0,
+                Duration::ZERO,
+                result.stats.reranked_candidates,
+                result.stats.committed_bytes,
+            );
+            if let Some(expected) = &scalar_result {
+                assert_search_logical_parity(expected, &result, name);
+            } else {
+                assert_eq!(
+                    kernel,
+                    QueryKernel::ScalarDeterministic,
+                    "TurboQuant scalar result must establish the parity baseline"
+                );
+                scalar_result = Some(result.clone());
+            }
+            if kernel == QueryKernel::ScalarDeterministic {
+                println!(
+                    "turboquant_recall,{dimensions},0,0,{:.6},{}",
+                    recall_at_k(exact_oracle, &result, k),
+                    quality.mean_squared_error,
+                );
+            }
+        }
+        #[cfg(feature = "async-store")]
+        if options.async_quantizers {
+            bench_async_turboquant(
+                map,
+                store.clone(),
+                turboquant_manifest,
+                AsyncQuantizerBenchCase {
+                    query,
+                    exact_oracle,
+                    k,
+                    dimensions,
+                    options,
+                    expected: scalar_result
+                        .as_ref()
+                        .expect("TurboQuant scalar result establishes parity"),
+                },
+            );
+        }
+    }
+
+    let pq_config = ProductQuantizationConfig {
+        subquantizers: (dimensions as u32).min(8),
+        centroids_per_subquantizer: 16,
+        training_iterations: 4,
+        rerank_multiplier: turboquant_config.rerank_multiplier,
+        seed: 17,
+        max_training_vectors: 65_536,
+    };
+    let mut selected = None;
+    let mut canonical = None;
+    for &worker_count in workers {
+        let started = Instant::now();
+        let (candidate, stats) = ProductQuantizer::build(
+            map,
+            pq_config.clone(),
+            BuildParallelism::new(worker_count).unwrap(),
+        )
+        .unwrap();
+        row(
+            "pq_build",
+            dimensions,
+            worker_count,
+            started.elapsed(),
+            stats.training_distance_evaluations,
+            stats.encoded_vectors,
+        );
+        if let Some((manifest, canonical_stats)) = &canonical {
+            assert_eq!(
+                candidate.manifest_cid(),
+                manifest,
+                "PQ manifest changed with worker count"
+            );
+            assert_eq!(
+                &stats, canonical_stats,
+                "PQ logical build statistics changed with worker count"
+            );
+        } else {
+            canonical = Some((candidate.manifest_cid().clone(), stats.clone()));
+            selected = Some(candidate);
+        }
+    }
+    let (pq, stats) = selected
+        .zip(canonical.map(|(_, stats)| stats))
+        .expect("validated worker list is non-empty");
+    #[cfg(feature = "async-store")]
+    let pq_manifest = pq.manifest_cid().clone();
+    #[cfg(feature = "async-store")]
+    if options.async_quantizers {
+        bench_async_pq_builds(
+            map,
+            store.clone(),
+            workers,
+            &pq_config,
+            &pq_manifest,
+            &stats,
+            dimensions,
+        );
+    }
+    let sidecar = derived_closure_size(
+        &store,
+        map.tree().descriptor.clone(),
+        TypedContentRoot::new(
+            ContentObjectKind::ProductQuantization,
+            pq.manifest_cid().clone(),
+        ),
+    );
+    row(
+        "pq_sidecar_bytes",
+        dimensions,
+        0,
+        Duration::ZERO,
+        sidecar.total_bytes,
         stats.encoded_vectors,
     );
+    row(
+        "pq_manifest_code_bytes",
+        dimensions,
+        0,
+        Duration::ZERO,
+        sidecar.manifest_bytes,
+        sidecar.code_tree_bytes,
+    );
+    let accelerators = AcceleratorSet::empty().with_pq(map.tree(), pq).unwrap();
     let mut request = SearchRequest::exact(query, k);
     request.policy = SearchPolicy::FixedBudget;
     request.options.backend = SearchBackend::ProductQuantized;
-    let started = Instant::now();
-    let result = pq.search(map, request).unwrap();
+    request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
+    let mut result = None;
+    let mut samples = Vec::with_capacity(options.repeats);
+    let mut physical_reads = 0;
+    let warm_io = SearchIo::new(store.clone(), Arc::new(SearchRuntime::default()));
+    if !options.reset_cache {
+        map.search_with(&accelerators, &warm_io, request.clone())
+            .unwrap();
+    }
+    for _ in 0..options.repeats {
+        let cold_io = if options.reset_cache {
+            map.clear_content_cache().unwrap();
+            Some(SearchIo::new(
+                store.clone(),
+                Arc::new(SearchRuntime::default()),
+            ))
+        } else {
+            None
+        };
+        let io = cold_io.as_ref().unwrap_or(&warm_io);
+        let reads_before = io.physical_reads();
+        let started = Instant::now();
+        result = Some(map.search_with(&accelerators, io, request.clone()).unwrap());
+        samples.push(started.elapsed());
+        physical_reads = io.physical_reads().saturating_sub(reads_before);
+    }
+    let result = result.expect("search repeats is positive");
+    let latency = LatencySummary::from_samples(samples);
     row(
         "pq_search",
         dimensions,
         0,
-        started.elapsed(),
+        latency.median,
+        result.stats.quantized_distance_evaluations,
         result.stats.distance_evaluations,
-        result.stats.reranked_candidates,
     );
+    row(
+        "pq_search_p95",
+        dimensions,
+        0,
+        latency.p95,
+        result.stats.bytes_read,
+        result.stats.physical_bytes_read,
+    );
+    row(
+        "pq_search_p99",
+        dimensions,
+        0,
+        latency.p99,
+        result.stats.candidate_handles_peak,
+        result.stats.candidate_retained_bytes_peak,
+    );
+    row(
+        "pq_search_work",
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.frontier_peak,
+        completion_id(result.completion),
+    );
+    row(
+        "pq_search_io",
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.nodes_read,
+        physical_reads,
+    );
+    row(
+        "pq_search_rerank",
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.reranked_candidates,
+        result.stats.committed_bytes,
+    );
+    println!(
+        "pq_recall,{dimensions},0,0,{:.6},0",
+        recall_at_k(exact_oracle, &result, k),
+    );
+    #[cfg(feature = "async-store")]
+    if options.async_quantizers {
+        bench_async_pq(
+            map,
+            store.clone(),
+            pq_manifest,
+            AsyncQuantizerBenchCase {
+                query,
+                exact_oracle,
+                k,
+                dimensions,
+                options,
+                expected: &result,
+            },
+        );
+    }
+
+    if !include_non_quantized {
+        return;
+    }
 
     let started = Instant::now();
     let (hnsw, stats) = HnswIndex::build(map, HnswConfig::default()).unwrap();
@@ -366,13 +1083,528 @@ fn bench_accelerators<S>(
 }
 
 #[cfg(feature = "async-store")]
-fn bench_async(
-    map: &ProximityMap<Arc<MemStore>>,
-    store: Arc<MemStore>,
-    query: &[f32],
+#[derive(Clone, Copy)]
+struct AsyncQuantizerBenchCase<'a> {
+    query: &'a [f32],
+    exact_oracle: &'a prolly::SearchResult,
     k: usize,
     dimensions: usize,
+    options: SearchBenchOptions<'a>,
+    expected: &'a prolly::SearchResult,
+}
+
+#[cfg(feature = "async-store")]
+fn bench_async_turboquant_builds<S>(
+    map: &ProximityMap<S>,
+    store: S,
+    workers: &[usize],
+    config: &TurboQuantizationConfig,
+    expected_manifest: &Cid,
+    expected_stats: &prolly::TurboQuantizationBuildStats,
+    dimensions: usize,
+) where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let async_store = SyncStoreAsAsync::new(store);
+    let async_map = block_on(AsyncProximityMap::load(
+        async_store,
+        map.tree().descriptor.clone(),
+    ))
+    .unwrap();
+    for &worker_count in workers {
+        let started = Instant::now();
+        let (catalog, build_stats) = block_on(AsyncAcceleratorCatalog::build(
+            &async_map,
+            AsyncAcceleratorBuildOptions {
+                turboquant: Some(AsyncTurboQuantizerBuild {
+                    config: config.clone(),
+                    parallelism: BuildParallelism::new(worker_count).unwrap(),
+                    limits: Default::default(),
+                }),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
+        let duration = started.elapsed();
+        let stats = build_stats
+            .turboquant
+            .expect("async TurboQuant build must return logical statistics");
+        assert_eq!(
+            &stats, expected_stats,
+            "async TurboQuant logical build statistics differ from sync"
+        );
+        assert_eq!(
+            catalog.entries().len(),
+            1,
+            "single-accelerator async build returned an unexpected catalog"
+        );
+        assert_eq!(
+            &catalog.entries()[0].manifest,
+            expected_manifest,
+            "async TurboQuant manifest differs from sync"
+        );
+        row(
+            "turboquant_build_async",
+            dimensions,
+            worker_count,
+            duration,
+            stats.transformed_components,
+            stats.encoded_output_bytes,
+        );
+        row(
+            "turboquant_build_async_resources",
+            dimensions,
+            worker_count,
+            Duration::ZERO,
+            stats.peak_temporary_bytes,
+            stats.butterfly_operations,
+        );
+        row(
+            "turboquant_build_async_publication",
+            dimensions,
+            worker_count,
+            Duration::ZERO,
+            build_stats.objects_published,
+            build_stats.bytes_published,
+        );
+    }
+}
+
+#[cfg(feature = "async-store")]
+fn bench_async_pq_builds<S>(
+    map: &ProximityMap<S>,
+    store: S,
+    workers: &[usize],
+    config: &ProductQuantizationConfig,
+    expected_manifest: &Cid,
+    expected_stats: &prolly::ProductQuantizationBuildStats,
+    dimensions: usize,
+) where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let async_store = SyncStoreAsAsync::new(store);
+    let async_map = block_on(AsyncProximityMap::load(
+        async_store,
+        map.tree().descriptor.clone(),
+    ))
+    .unwrap();
+    for &worker_count in workers {
+        let started = Instant::now();
+        let (catalog, build_stats) = block_on(AsyncAcceleratorCatalog::build(
+            &async_map,
+            AsyncAcceleratorBuildOptions {
+                product_quantizer: Some(AsyncProductQuantizerBuild {
+                    config: config.clone(),
+                    parallelism: BuildParallelism::new(worker_count).unwrap(),
+                    limits: Default::default(),
+                }),
+                ..Default::default()
+            },
+        ))
+        .unwrap();
+        let duration = started.elapsed();
+        let stats = build_stats
+            .product_quantizer
+            .expect("async PQ build must return logical statistics");
+        assert_eq!(
+            &stats, expected_stats,
+            "async PQ logical build statistics differ from sync"
+        );
+        assert_eq!(
+            catalog.entries().len(),
+            1,
+            "single-accelerator async build returned an unexpected catalog"
+        );
+        assert_eq!(
+            &catalog.entries()[0].manifest,
+            expected_manifest,
+            "async PQ manifest differs from sync"
+        );
+        row(
+            "pq_build_async",
+            dimensions,
+            worker_count,
+            duration,
+            stats.training_distance_evaluations,
+            stats.encoded_vectors,
+        );
+        row(
+            "pq_build_async_publication",
+            dimensions,
+            worker_count,
+            Duration::ZERO,
+            build_stats.objects_published,
+            build_stats.bytes_published,
+        );
+    }
+}
+
+#[cfg(feature = "async-store")]
+fn bench_async_turboquant<S>(
+    map: &ProximityMap<S>,
+    store: S,
+    manifest: Cid,
+    case: AsyncQuantizerBenchCase<'_>,
+) where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let AsyncQuantizerBenchCase {
+        query,
+        exact_oracle,
+        k,
+        dimensions,
+        options,
+        expected,
+    } = case;
+    let mut request = SearchRequest::exact(query, k);
+    request.policy = SearchPolicy::FixedBudget;
+    request.kernel = QueryKernel::ScalarDeterministic;
+    request.options.backend = SearchBackend::TurboQuantized;
+    request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
+    let descriptor = map.tree().descriptor.clone();
+
+    let (result, latency, physical_reads) = if options.reset_cache {
+        let mut result = None;
+        let mut samples = Vec::with_capacity(options.repeats);
+        let mut physical_reads = 0;
+        for _ in 0..options.repeats {
+            map.clear_content_cache().unwrap();
+            let io = SearchIo::new(
+                SyncStoreAsAsync::new(store.clone()),
+                Arc::new(SearchRuntime::default()),
+            );
+            let before = io.physical_bytes_read();
+            let reads_before = io.physical_reads();
+            let started = Instant::now();
+            let (async_map, turboquant) = block_on(async {
+                let async_map =
+                    AsyncProximityMap::load_with_search_io(io.clone(), descriptor.clone()).await?;
+                let turboquant = AsyncTurboQuantizer::load(&io, manifest.clone()).await?;
+                Ok::<_, prolly::Error>((async_map, turboquant))
+            })
+            .unwrap();
+            let accelerators = AsyncAcceleratorSet::empty()
+                .with_turboquant(async_map.tree(), turboquant)
+                .unwrap();
+            let mut sample = block_on(async_map.search_with_accelerators(
+                &accelerators,
+                request.clone(),
+                AsyncSearchControl::default(),
+            ))
+            .unwrap();
+            sample.stats.physical_bytes_read = io.physical_bytes_read().saturating_sub(before);
+            physical_reads = io.physical_reads().saturating_sub(reads_before);
+            samples.push(started.elapsed());
+            result = Some(sample);
+        }
+        (
+            result.expect("search repeats is positive"),
+            LatencySummary::from_samples(samples),
+            physical_reads,
+        )
+    } else {
+        let io = SearchIo::new(
+            SyncStoreAsAsync::new(store),
+            Arc::new(SearchRuntime::default()),
+        );
+        let (async_map, turboquant) = block_on(async {
+            let async_map =
+                AsyncProximityMap::load_with_search_io(io.clone(), descriptor.clone()).await?;
+            let turboquant = AsyncTurboQuantizer::load(&io, manifest).await?;
+            Ok::<_, prolly::Error>((async_map, turboquant))
+        })
+        .unwrap();
+        let accelerators = AsyncAcceleratorSet::empty()
+            .with_turboquant(async_map.tree(), turboquant)
+            .unwrap();
+        block_on(async_map.search_with_accelerators(
+            &accelerators,
+            request.clone(),
+            AsyncSearchControl::default(),
+        ))
+        .unwrap();
+        let mut result = None;
+        let mut samples = Vec::with_capacity(options.repeats);
+        let mut physical_reads = 0;
+        for _ in 0..options.repeats {
+            let reads_before = io.physical_reads();
+            let started = Instant::now();
+            result = Some(
+                block_on(async_map.search_with_accelerators(
+                    &accelerators,
+                    request.clone(),
+                    AsyncSearchControl::default(),
+                ))
+                .unwrap(),
+            );
+            samples.push(started.elapsed());
+            physical_reads = io.physical_reads().saturating_sub(reads_before);
+        }
+        (
+            result.expect("search repeats is positive"),
+            LatencySummary::from_samples(samples),
+            physical_reads,
+        )
+    };
+
+    assert_search_logical_parity(expected, &result, "turboquant_search_async");
+
+    emit_quantized_search_rows(
+        "turboquant_search_async",
+        dimensions,
+        &result,
+        latency,
+        physical_reads,
+    );
+    println!(
+        "turboquant_recall_async,{dimensions},0,0,{:.6},0",
+        recall_at_k(exact_oracle, &result, k),
+    );
+}
+
+#[cfg(feature = "async-store")]
+fn bench_async_pq<S>(
+    map: &ProximityMap<S>,
+    store: S,
+    manifest: Cid,
+    case: AsyncQuantizerBenchCase<'_>,
+) where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
+    let AsyncQuantizerBenchCase {
+        query,
+        exact_oracle,
+        k,
+        dimensions,
+        options,
+        expected,
+    } = case;
+    let mut request = SearchRequest::exact(query, k);
+    request.policy = SearchPolicy::FixedBudget;
+    request.options.backend = SearchBackend::ProductQuantized;
+    request.filter = benchmark_filter(options.eligible_keys, options.eligibility_ppm);
+    let descriptor = map.tree().descriptor.clone();
+
+    let (result, latency, physical_reads) = if options.reset_cache {
+        let mut result = None;
+        let mut samples = Vec::with_capacity(options.repeats);
+        let mut physical_reads = 0;
+        for _ in 0..options.repeats {
+            map.clear_content_cache().unwrap();
+            let io = SearchIo::new(
+                SyncStoreAsAsync::new(store.clone()),
+                Arc::new(SearchRuntime::default()),
+            );
+            let before = io.physical_bytes_read();
+            let reads_before = io.physical_reads();
+            let started = Instant::now();
+            let (async_map, pq) = block_on(async {
+                let async_map =
+                    AsyncProximityMap::load_with_search_io(io.clone(), descriptor.clone()).await?;
+                let pq = AsyncProductQuantizer::load(&io, manifest.clone()).await?;
+                Ok::<_, prolly::Error>((async_map, pq))
+            })
+            .unwrap();
+            let accelerators = AsyncAcceleratorSet::empty()
+                .with_pq(async_map.tree(), pq)
+                .unwrap();
+            let mut sample = block_on(async_map.search_with_accelerators(
+                &accelerators,
+                request.clone(),
+                AsyncSearchControl::default(),
+            ))
+            .unwrap();
+            sample.stats.physical_bytes_read = io.physical_bytes_read().saturating_sub(before);
+            physical_reads = io.physical_reads().saturating_sub(reads_before);
+            samples.push(started.elapsed());
+            result = Some(sample);
+        }
+        (
+            result.expect("search repeats is positive"),
+            LatencySummary::from_samples(samples),
+            physical_reads,
+        )
+    } else {
+        let io = SearchIo::new(
+            SyncStoreAsAsync::new(store),
+            Arc::new(SearchRuntime::default()),
+        );
+        let (async_map, pq) = block_on(async {
+            let async_map =
+                AsyncProximityMap::load_with_search_io(io.clone(), descriptor.clone()).await?;
+            let pq = AsyncProductQuantizer::load(&io, manifest).await?;
+            Ok::<_, prolly::Error>((async_map, pq))
+        })
+        .unwrap();
+        let accelerators = AsyncAcceleratorSet::empty()
+            .with_pq(async_map.tree(), pq)
+            .unwrap();
+        block_on(async_map.search_with_accelerators(
+            &accelerators,
+            request.clone(),
+            AsyncSearchControl::default(),
+        ))
+        .unwrap();
+        let mut result = None;
+        let mut samples = Vec::with_capacity(options.repeats);
+        let mut physical_reads = 0;
+        for _ in 0..options.repeats {
+            let reads_before = io.physical_reads();
+            let started = Instant::now();
+            result = Some(
+                block_on(async_map.search_with_accelerators(
+                    &accelerators,
+                    request.clone(),
+                    AsyncSearchControl::default(),
+                ))
+                .unwrap(),
+            );
+            samples.push(started.elapsed());
+            physical_reads = io.physical_reads().saturating_sub(reads_before);
+        }
+        (
+            result.expect("search repeats is positive"),
+            LatencySummary::from_samples(samples),
+            physical_reads,
+        )
+    };
+
+    assert_search_logical_parity(expected, &result, "pq_search_async");
+
+    emit_quantized_search_rows(
+        "pq_search_async",
+        dimensions,
+        &result,
+        latency,
+        physical_reads,
+    );
+    println!(
+        "pq_recall_async,{dimensions},0,0,{:.6},0",
+        recall_at_k(exact_oracle, &result, k),
+    );
+}
+
+fn assert_search_logical_parity(
+    expected: &prolly::SearchResult,
+    actual: &prolly::SearchResult,
+    context: &str,
 ) {
+    assert_eq!(actual.neighbors, expected.neighbors, "{context} neighbors");
+    assert_eq!(actual.plan, expected.plan, "{context} plan");
+    assert_eq!(
+        actual.completion, expected.completion,
+        "{context} completion"
+    );
+    assert_eq!(
+        actual.stats.levels_visited, expected.stats.levels_visited,
+        "{context} levels visited"
+    );
+    assert_eq!(
+        actual.stats.nodes_read, expected.stats.nodes_read,
+        "{context} logical nodes"
+    );
+    assert_eq!(
+        actual.stats.bytes_read, expected.stats.bytes_read,
+        "{context} logical bytes"
+    );
+    assert_eq!(
+        actual.stats.committed_bytes, expected.stats.committed_bytes,
+        "{context} committed bytes"
+    );
+    assert_eq!(
+        actual.stats.distance_evaluations, expected.stats.distance_evaluations,
+        "{context} exact evaluations"
+    );
+    assert_eq!(
+        actual.stats.quantized_distance_evaluations, expected.stats.quantized_distance_evaluations,
+        "{context} quantized evaluations"
+    );
+    assert_eq!(
+        actual.stats.reranked_candidates, expected.stats.reranked_candidates,
+        "{context} reranked candidates"
+    );
+    assert_eq!(
+        actual.stats.frontier_peak, expected.stats.frontier_peak,
+        "{context} frontier peak"
+    );
+    assert_eq!(
+        actual.stats.candidate_handles_peak, expected.stats.candidate_handles_peak,
+        "{context} candidate handles"
+    );
+    assert_eq!(
+        actual.stats.candidate_retained_bytes_peak, expected.stats.candidate_retained_bytes_peak,
+        "{context} retained candidate bytes"
+    );
+}
+
+#[cfg(feature = "async-store")]
+fn emit_quantized_search_rows(
+    name: &str,
+    dimensions: usize,
+    result: &prolly::SearchResult,
+    latency: LatencySummary,
+    physical_reads: usize,
+) {
+    row(
+        name,
+        dimensions,
+        0,
+        latency.median,
+        result.stats.quantized_distance_evaluations,
+        result.stats.distance_evaluations,
+    );
+    row(
+        &format!("{name}_p95"),
+        dimensions,
+        0,
+        latency.p95,
+        result.stats.bytes_read,
+        result.stats.physical_bytes_read,
+    );
+    row(
+        &format!("{name}_p99"),
+        dimensions,
+        0,
+        latency.p99,
+        result.stats.candidate_handles_peak,
+        result.stats.candidate_retained_bytes_peak,
+    );
+    row(
+        &format!("{name}_work"),
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.frontier_peak,
+        completion_id(result.completion),
+    );
+    row(
+        &format!("{name}_io"),
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.nodes_read,
+        physical_reads,
+    );
+    row(
+        &format!("{name}_rerank"),
+        dimensions,
+        0,
+        Duration::ZERO,
+        result.stats.reranked_candidates,
+        result.stats.committed_bytes,
+    );
+}
+
+#[cfg(feature = "async-store")]
+fn bench_async<S>(map: &ProximityMap<S>, store: S, query: &[f32], k: usize, dimensions: usize)
+where
+    S: prolly::Store + Clone + Send + Sync,
+    S::Error: Send + Sync,
+{
     let async_map = block_on(AsyncProximityMap::load(
         SyncStoreAsAsync::new(store),
         map.tree().descriptor.clone(),
@@ -407,9 +1639,9 @@ fn block_on<F: Future>(future: F) -> F::Output {
     }
 }
 
-fn config(dimensions: usize) -> ProximityConfig {
+fn config(dimensions: usize, metric: DistanceMetric) -> ProximityConfig {
     let mut config = ProximityConfig::new(dimensions as u32);
-    config.metric = DistanceMetric::L2Squared;
+    config.metric = metric;
     config.hierarchy.level_hash_seed = 42;
     config.overflow.min_page_bytes = 4 * 1024;
     config.overflow.target_page_bytes = 16 * 1024;
@@ -419,6 +1651,84 @@ fn config(dimensions: usize) -> ProximityConfig {
         group_size: (dimensions as u32).min(32),
     });
     config
+}
+
+#[derive(Clone, Copy)]
+struct LatencySummary {
+    median: Duration,
+    p95: Duration,
+    p99: Duration,
+}
+
+impl LatencySummary {
+    fn from_samples(mut samples: Vec<Duration>) -> Self {
+        assert!(!samples.is_empty(), "latency samples must not be empty");
+        samples.sort_unstable();
+        Self {
+            median: nearest_rank(&samples, 50),
+            p95: nearest_rank(&samples, 95),
+            p99: nearest_rank(&samples, 99),
+        }
+    }
+}
+
+struct DerivedClosureSize {
+    total_bytes: usize,
+    manifest_bytes: usize,
+    code_tree_bytes: usize,
+}
+
+fn derived_closure_size<S>(
+    store: &S,
+    source_descriptor: Cid,
+    root: TypedContentRoot,
+) -> DerivedClosureSize
+where
+    S: prolly::Store,
+{
+    let limits = ContentGraphLimits::default();
+    let source = prolly::walk_content_graph(
+        store,
+        &[TypedContentRoot::proximity_descriptor(source_descriptor)],
+        &limits,
+    )
+    .unwrap();
+    let source_cids: HashSet<_> = source
+        .objects
+        .into_iter()
+        .map(|object| object.root.cid)
+        .collect();
+    let manifest_cid = root.cid.clone();
+    let closure = prolly::walk_content_graph(store, &[root], &limits).unwrap();
+    let mut total_bytes = 0usize;
+    let mut manifest_bytes = 0usize;
+    for object in closure.objects {
+        if source_cids.contains(&object.root.cid) {
+            continue;
+        }
+        total_bytes = total_bytes.saturating_add(object.bytes.len());
+        if object.root.cid == manifest_cid {
+            manifest_bytes = object.bytes.len();
+        }
+    }
+    assert!(
+        manifest_bytes > 0,
+        "derived manifest must be in its closure"
+    );
+    DerivedClosureSize {
+        total_bytes,
+        manifest_bytes,
+        code_tree_bytes: total_bytes.saturating_sub(manifest_bytes),
+    }
+}
+
+fn nearest_rank(samples: &[Duration], percentile: usize) -> Duration {
+    let rank = samples
+        .len()
+        .saturating_mul(percentile)
+        .div_ceil(100)
+        .max(1);
+    samples[rank - 1]
 }
 
 fn row(
@@ -435,6 +1745,31 @@ fn row(
     );
 }
 
+fn command_output(program: &str, arguments: &[&str]) -> String {
+    Command::new(program)
+        .args(arguments)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| {
+            String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .replace('\n', " | ")
+        })
+        .filter(|output| !output.is_empty())
+        .unwrap_or_else(|| "unavailable".to_owned())
+}
+
+fn completion_id(completion: SearchCompletion) -> usize {
+    match completion {
+        SearchCompletion::Exact => 0,
+        SearchCompletion::ApproximatePolicySatisfied => 1,
+        SearchCompletion::BudgetExhausted => 2,
+        SearchCompletion::Cancelled => 3,
+        SearchCompletion::DeadlineExceeded => 4,
+    }
+}
+
 fn make_records(count: usize, dimensions: usize) -> Vec<ProximityRecord> {
     (0..count)
         .map(|index| ProximityRecord {
@@ -446,43 +1781,59 @@ fn make_records(count: usize, dimensions: usize) -> Vec<ProximityRecord> {
 }
 
 fn make_vector(index: usize, dimensions: usize) -> Vec<f32> {
+    let index = u64::try_from(index).expect("benchmark vector index must fit in u64");
     (0..dimensions)
         .map(|component| {
+            let component =
+                u64::try_from(component).expect("benchmark vector component index must fit in u64");
+            // The multiplier is coprime to BENCHMARK_VECTOR_PERIOD, so the
+            // first 2,000,003 component-zero values are distinct. Using u64
+            // rather than usize also freezes identical datasets on 32-bit
+            // WASM and 64-bit native targets. The previous modulus (20,003)
+            // repeated the complete vector about five times in a 100K cell.
             let mixed = index
                 .wrapping_mul(1_000_003)
                 .wrapping_add(component.wrapping_mul(97_409));
-            ((mixed % 20_003) as f32 - 10_001.0) / 1_000.0
+            ((mixed % BENCHMARK_VECTOR_PERIOD) as f64 - 1_000_001.0) as f32 / 100_000.0
         })
         .collect()
 }
 
-fn recall_at_k(
-    records: &[ProximityRecord],
+fn authoritative_exact_oracle<S>(
+    map: &ProximityMap<S>,
     query: &[f32],
-    result: &prolly::SearchResult,
     k: usize,
-) -> f64 {
-    let mut scored: Vec<_> = records
+    eligible_keys: &[Vec<u8>],
+    eligibility_ppm: usize,
+) -> prolly::SearchResult
+where
+    S: prolly::Store + Clone,
+{
+    let mut request = SearchRequest::exact(query, k);
+    request.kernel = QueryKernel::ScalarDeterministic;
+    request.filter = benchmark_filter(eligible_keys, eligibility_ppm);
+    let result = map.search(request).unwrap();
+    assert_eq!(
+        result.completion,
+        SearchCompletion::Exact,
+        "qualification oracle must complete an authoritative exact search"
+    );
+    assert_eq!(
+        result.neighbors.len(),
+        k,
+        "qualification oracle must return the effective k"
+    );
+    result
+}
+
+fn recall_at_k(exact: &prolly::SearchResult, result: &prolly::SearchResult, k: usize) -> f64 {
+    let exact: HashSet<_> = exact
+        .neighbors
         .iter()
-        .map(|record| {
-            let distance = record
-                .vector
-                .iter()
-                .zip(query)
-                .map(|(&left, &right)| {
-                    let delta = f64::from(left) - f64::from(right);
-                    delta * delta
-                })
-                .sum::<f64>();
-            (distance, record.key.clone())
-        })
+        .take(k)
+        .map(|neighbor| neighbor.key.clone())
         .collect();
-    scored.sort_by(|left, right| {
-        left.0
-            .total_cmp(&right.0)
-            .then_with(|| left.1.cmp(&right.1))
-    });
-    let exact: HashSet<_> = scored.into_iter().take(k).map(|(_, key)| key).collect();
+    assert_eq!(exact.len(), k, "qualification oracle keys must be unique");
     result
         .neighbors
         .iter()
@@ -491,8 +1842,31 @@ fn recall_at_k(
         / k.max(1) as f64
 }
 
+fn benchmark_filter<'a>(keys: &'a [Vec<u8>], eligibility_ppm: usize) -> ProximityFilter<'a> {
+    if eligibility_ppm == 1_000_000 {
+        ProximityFilter::Prefix(b"record-")
+    } else {
+        ProximityFilter::EligibleKeys(keys)
+    }
+}
+
+fn env_metric(name: &str) -> Option<DistanceMetric> {
+    let value = std::env::var(name).ok()?;
+    Some(match value.trim().to_ascii_lowercase().as_str() {
+        "l2" | "l2_squared" => DistanceMetric::L2Squared,
+        "cosine" => DistanceMetric::Cosine,
+        "inner_product" | "ip" => DistanceMetric::InnerProduct,
+        _ => panic!("{name} has an unsupported metric value"),
+    })
+}
+
 fn env_usize(name: &str) -> Option<usize> {
-    std::env::var(name).ok()?.parse().ok()
+    let value = std::env::var(name).ok()?;
+    Some(
+        value
+            .parse()
+            .unwrap_or_else(|_| panic!("{name} must be an unsigned integer")),
+    )
 }
 
 fn env_bool(name: &str) -> bool {
@@ -506,9 +1880,29 @@ fn env_bool(name: &str) -> bool {
 
 fn env_list(name: &str) -> Option<Vec<usize>> {
     let value = std::env::var(name).ok()?;
-    let values: Vec<_> = value
-        .split(',')
-        .filter_map(|item| item.trim().parse().ok())
-        .collect();
-    (!values.is_empty()).then_some(values)
+    Some(
+        value
+            .split(',')
+            .map(|item| {
+                item.trim()
+                    .parse()
+                    .unwrap_or_else(|_| panic!("{name} must be a comma-separated integer list"))
+            })
+            .collect(),
+    )
+}
+
+fn assert_unique_positive_workers(workers: &[usize]) {
+    assert!(
+        !workers.is_empty(),
+        "benchmark worker list must not be empty"
+    );
+    let mut unique = HashSet::with_capacity(workers.len());
+    for worker in workers {
+        assert!(*worker > 0, "benchmark worker counts must be positive");
+        assert!(
+            unique.insert(*worker),
+            "benchmark worker counts must be unique"
+        );
+    }
 }

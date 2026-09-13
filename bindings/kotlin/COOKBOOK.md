@@ -30,6 +30,41 @@ Application-style files include `BatchBuild.kt`, `LocalFirstState.kt`,
 `VectorSidecar.kt`, `ProvenanceValues.kt`, `MaterializedView.kt`,
 `FilesystemSnapshot.kt`, and `DurableSqlite.kt`.
 
+## Build And Force A TurboQuant RAG Sidecar
+
+TurboQuant is a disposable routing sidecar. The proximity map remains
+authoritative and every retained candidate is reranked from its full-precision
+vector. Keep selection explicit until qualification enables `Auto`.
+
+```kotlin
+Engine.memory().use { engine ->
+    val records = (0 until 32).map { index ->
+        ProximityRecord(
+            "chunk/%02d".format(index).toByteArray(),
+            listOf(index.toFloat(), (index % 3).toFloat(), 0f, 1f, 2f, 3f, 4f, 5f),
+            "document-%02d".format(index).toByteArray(),
+        )
+    }
+    engine.buildProximity(8u, records).use { proximity ->
+        val built = proximity.buildTurboquant(workerThreads = 2uL)
+        val request = exactProximitySearchRequest(
+            listOf(0f, 0f, 0f, 1f, 2f, 3f, 4f, 5f), 3uL,
+        ).copy(
+            policy = SearchPolicyKind.FIXED_BUDGET,
+            backend = SearchBackendRecord.TURBO_QUANTIZED,
+        )
+        built.index.use { index ->
+            check(index.verify(proximity).encodedVectors == 32uL)
+            check(index.search(proximity, request).backend == SearchBackendRecord.TURBO_QUANTIZED)
+            val manifest = index.manifest
+            proximity.loadTurboquant(manifest).use { reopened ->
+                check(reopened.manifest.contentEquals(manifest))
+            }
+        }
+    }
+}
+```
+
 ## Create A Durable Index
 
 ```kotlin

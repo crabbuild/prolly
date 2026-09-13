@@ -4,11 +4,11 @@ This audit maps every approved goal to implementation, adversarial tests,
 and a benchmark row. The release is a hard format cutoff: proximity v1 is
 legacy rejection input only; ordered CRAB bytes remain unchanged.
 
-## Thirteen-goal evidence matrix
+## Fourteen-goal evidence matrix
 
 | # | Goal | Implementation evidence | Test evidence | Benchmark row |
 | ---: | --- | --- | --- | --- |
-| 1 | Canonical localized exact-directory mutation | `src/prolly/canonical_splice.rs`, `proximity/mutation/`, `map.rs` | `tests/canonical_splice.rs`, `tests/proximity_mutation.rs` | `localized_mutation` (`nodes_written`, `nodes_reused`) |
+| 1 | Canonical localized exact-directory mutation | `src/prolly/splice.rs`, `src/prolly/proximity/mutation.rs`, `src/prolly/proximity/map.rs` | `tests/splice.rs`, `tests/proximity_mutation.rs` | `localized_mutation` (`nodes_written`, `nodes_reused`) |
 | 2 | Deterministic global best-first search | `proximity/search/engine.rs`, `map.rs` | `tests/proximity_search.rs` | `search_exact_scalar`, `search_adaptive_sq8` |
 | 3 | Conservative compositional bounds | `proximity/distance/canonical.rs`, `storage/node.rs`, `storage/overflow.rs` | `tests/proximity_metrics.rs`, `tests/proximity_overflow.rs`, verifier corruption tests | exact-search and proof rows |
 | 4 | Range/prefix/eligible/secondary filters | `proximity/search/filter.rs` | `tests/proximity_search.rs`, `tests/proximity_proofs.rs` | prefix filter is applied to all search rows |
@@ -21,6 +21,21 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 | 11 | Typed traversal, sync, manifests, GC, proofs | `content_graph/`, `proximity/proof/` | `tests/proximity_content_graph.rs`, `tests/proximity_proofs.rs` | `content_graph_copy`, `content_graph_gc_plan`, `search_proof_*` |
 | 12 | Overflow hierarchies and external vectors | `proximity/storage/{overflow,vector}.rs` | `tests/proximity_overflow.rs` | all rows use bounded overflow and externalize vectors above 4 KiB |
 | 13 | Validated source-bound HNSW | `proximity/accelerator/hnsw/` | `tests/proximity_hnsw.rs`, `tests/proximity_proofs.rs` | `hnsw_build`, `hnsw_search` |
+| 14 | Native source-bound TurboQuant-MSE routing | `proximity/accelerator/{turboquant,quantized,async}.rs`, `proximity/distance/simd.rs`, `proximity/search/runtime.rs`; the TurboQuant algorithm module statically forbids unsafe code | `tests/proximity_turboquant.rs`, including bounded native async direct/composite construction, canonical repeated-equal-error quality persistence, and cancellation at every full-scan/direct-lookup/rerank store-read boundary; `fuzz/fuzz_targets/` contains arbitrary-decode and bounded lifecycle/corruption targets; runtime tests prove that only cache-authenticated reads bypass duplicate CID hashing and corrupt fallbacks remain unverified; every-code signed-zero/extreme-weight product-table identity and scalar/SIMD identity pass strict-provenance Miri; `tests/proximity_wire.rs` and async/proof/content/composite suites complete the focused coverage | `turboquant_build`, `turboquant_search_scalar`, `turboquant_search_simd`, `turboquant_recall` |
+
+The TurboQuant binding deliverable is also mapped directly: Python, Go,
+Node/TypeScript, Kotlin, Java, Ruby, Swift, and browser WASM each expose and
+test build/load/verify/forced-search behavior, pre-cancelled search, and
+reported build/search statistics. Every lifecycle also attaches the native
+TurboQuant sidecar directly to an accelerator catalog, dispatches a catalog
+search through it, and constructs and searches a mutation-aware composite
+whose base kind is TurboQuant. Each corresponding
+`bindings/*/COOKBOOK.md` now includes a deterministic RAG-sidecar lifecycle.
+The regenerated `bindings/api/classification-audit.json` contains 73
+TurboQuant rows, all `implemented` and `release_complete`.
+The repository-wide inventory and production qualification gates remain
+tracked separately in
+[`proximity-turboquant-qualification.md`](proximity-turboquant-qualification.md).
 
 ## Wire and migration evidence
 
@@ -32,18 +47,62 @@ legacy rejection input only; ordered CRAB bytes remain unchanged.
 
 ## Benchmark protocol
 
-`benches/proximity_bench.rs` emits CSV:
+`benches/prolly_proximity_bench.rs` emits CSV:
 
 ```text
 operation,dimensions,threads,micros,metric_a,metric_b
 ```
 
+For repeated accelerator searches, the base row's `micros` value is the
+sample median and `_p95`/`_p99` companion rows contain nearest-rank tail
+latency. Companion counters expose logical/physical read bytes and candidate
+retention peaks. Quantized `_io` rows expose logical nodes and actual store read
+operations; `_rerank` rows expose authoritative rerank counts and committed
+logical bytes. Dedicated resource and sidecar rows record owned build bytes,
+transform work, authoritative source-closure bytes, derived accelerator bytes,
+and encoded payload counts. Accelerator sidecar totals exclude
+content-addressed source objects referenced by the manifest; companion rows
+split manifest bytes from code-tree bytes.
+
 Default dimensions are 8, 128, 768, and 1536; build rows use 1, 2, and 4
 workers. The harness also records mutation locality, exact/adaptive/SQ8,
-scalar/SIMD, sync/async, PQ/HNSW, content copy/GC, and proof generation/replay.
+scalar/SIMD, sync/async, TurboQuant/PQ/HNSW, content copy/GC, and proof
+generation/replay.
 Counters in `metric_a`/`metric_b` are operation-specific and printed beside
 wall time so regressions can be attributed to logical work rather than timing
 noise.
+
+The strict matrix entry point is
+`scripts/run_turboquant_qualification.py`. Its `full` profile contains 45,360
+deterministic cells and supports stable hash sharding and exact-contract resume.
+It validates schema/revision metadata, row completeness, worker determinism,
+warm/cold physical I/O, and sync/async logical parity before writing an atomic
+completion record. The harness asserts neighbor, exact-distance, plan,
+completion, and complete logical-statistic parity across scalar/SIMD/automatic
+and async execution. Shard zero also records an unskipped browser-WASM build
+and test smoke gate. `scripts/summarize_turboquant_qualification.py` accepts
+only the complete, disjoint shard set and emits consolidated rows plus separate
+forced-backend and `Auto` gate results.
+
+The first ten schema-v3 cells are retained as superseded diagnostics in
+[`proximity-turboquant-v3-qualification.md`](proximity-turboquant-v3-qualification.md).
+They cover 10K and 100K × 768 at the default four-bit, 8× setting for all
+three metrics, plus matching 16× cosine and inner-product diagnostics.
+Their cosine oracle rescored raw pre-ingestion vectors with platform `sqrt`
+instead of using persisted canonical vectors and the authoritative
+deterministic scorer; exhaustive reranking consequently reported only 0.50
+recall. Benchmark schema 4 corrects the oracle and rejects every older row.
+
+Eleven corrected schema-4 cells are retained in
+[`proximity-turboquant-v4-qualification.md`](proximity-turboquant-v4-qualification.md).
+They establish 1.00 exhaustive recall for both TurboQuant and PQ and expose
+the remaining 10K cosine default failure: all authoritative exact top-10
+vectors share a packed code with 222 lower-key records, so the frozen
+80-candidate `(approximate_score, key)` shortlist cannot select them. This is
+a contract-level recall gap, not a scorer defect.
+
+All 45,360 current-schema cells still require a single frozen-revision run,
+and all final release gates remain open.
 
 Smoke command:
 
@@ -51,7 +110,7 @@ Smoke command:
 PROLLY_PROXIMITY_BENCH_RECORDS=64 \
 PROLLY_PROXIMITY_BENCH_DIMENSIONS=8 \
 PROLLY_PROXIMITY_BENCH_THREADS=1,2 \
-cargo bench --all-features --bench proximity_bench
+cargo bench --all-features --bench prolly_proximity_bench
 ```
 
 Recorded smoke result on 2026-07-14 (Apple Silicon development machine, release
@@ -80,7 +139,7 @@ Production characterization command:
 PROLLY_PROXIMITY_BENCH_RECORDS=10000 \
 PROLLY_PROXIMITY_BENCH_DIMENSIONS=8,128,768,1536 \
 PROLLY_PROXIMITY_BENCH_THREADS=1,2,4 \
-cargo bench --all-features --bench proximity_bench
+cargo bench --all-features --bench prolly_proximity_bench
 ```
 
 Results are hardware-, compiler-, and store-specific. Persist CSV output with
@@ -94,10 +153,12 @@ The completion gate is:
 ```sh
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo +1.81.0 check --all-targets --all-features
+cargo +1.89.0 check --all-targets --all-features
 cargo test --all-features --no-fail-fast
 cargo test --doc --all-features
 cargo bench --all-features --no-run
+cargo +nightly fuzz run proximity_turboquant_decode -- -runs=2048 -max_len=4096 -timeout=5
+cargo +nightly fuzz run proximity_turboquant_lifecycle -- -runs=256 -max_len=1024 -timeout=5
 git diff --check
 ```
 
@@ -105,12 +166,19 @@ The focused evidence suites are:
 
 ```sh
 cargo test --test proximity_api --test proximity_metrics --test proximity_wire
-cargo test --test canonical_splice --test proximity_overflow --test proximity_mutation
+cargo test --test splice --test proximity_overflow --test proximity_mutation
 cargo test --test proximity_search --test proximity_parallel --test proximity_simd
 cargo test --all-features --test proximity_async
 cargo test --test proximity_quantization --test proximity_hnsw
+cargo test --test proximity_turboquant --test proximity_wire
 cargo test --test proximity_content_graph --test proximity_proofs
 ```
+
+TurboQuant is explicit-only until its separate recall and comparative value
+gates pass. See
+[`proximity-turboquant-qualification.md`](proximity-turboquant-qualification.md)
+for pending evidence; this audit does not treat a local smoke timing as a GA or
+`Auto` qualification result.
 
 ## Commit trail
 

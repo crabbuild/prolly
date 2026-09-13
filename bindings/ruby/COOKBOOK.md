@@ -42,6 +42,59 @@ Application-style files include `batch_build.rb`, `local_first_state.rb`,
 `vector_sidecar.rb`, `provenance_values.rb`, `materialized_view.rb`,
 `filesystem_snapshot.rb`, and `durable_sqlite.rb`.
 
+## Build And Force A TurboQuant RAG Sidecar
+
+TurboQuant is a disposable routing sidecar. The proximity map remains
+authoritative and every retained candidate is reranked from its full-precision
+vector. Keep the backend explicit until qualification enables `Auto`.
+
+```ruby
+require 'prolly'
+
+records = 32.times.map do |index|
+  Prolly::ProximityRecord.new(
+    key: format('chunk/%02d', index).b,
+    vector: [index.to_f, (index % 3).to_f, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+    value: format('document-%02d', index).b
+  )
+end
+
+Prolly::Engine.memory.use do |engine|
+  proximity = engine.build_proximity(dimensions: 8, records: records)
+  begin
+    built = proximity.build_turboquant(worker_threads: 2)
+    request = Prolly.exact_proximity_search_request(
+      [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3
+    )
+    request = Prolly::ProximitySearchRequestRecord.new(
+      query: request.query,
+      k: request.k,
+      policy: Prolly::SearchPolicyKind::FIXED_BUDGET,
+      adaptive_quality: request.adaptive_quality,
+      budget: request.budget,
+      filter: request.filter,
+      kernel: request.kernel,
+      backend: Prolly::SearchBackendRecord::TURBO_QUANTIZED,
+      hnsw_ef_search: request.hnsw_ef_search,
+      pq_rerank_multiplier: request.pq_rerank_multiplier,
+      turboquant_rerank_multiplier: request.turboquant_rerank_multiplier
+    )
+
+    built.index.use do |index|
+      raise 'incomplete sidecar' unless index.verify(proximity).encoded_vectors == records.length
+      result = index.search(proximity, request)
+      raise 'unexpected backend' unless result.backend == Prolly::SearchBackendRecord::TURBO_QUANTIZED
+      manifest = index.manifest
+      proximity.load_turboquant(manifest).use do |reopened|
+        raise 'manifest mismatch' unless reopened.manifest == manifest
+      end
+    end
+  ensure
+    proximity.close
+  end
+end
+```
+
 ## Create A Durable Index
 
 ```ruby

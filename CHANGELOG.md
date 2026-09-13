@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add a native, source-bound TurboQuant-MSE proximity accelerator with
+  deterministic structured rotation, fixed two/three/four-bit Lloyd-Max
+  codebooks, authoritative reranking, SIMD scoring, async/catalog/composite/
+  proof/content-graph integration, and maintained binding APIs. TurboQuant is
+  explicit-only until its checked-in recall and comparative performance gates
+  pass; it has no Turbovec dependency or wire compatibility.
+
 ## 0.7.2 — 2026-08-21
 
 - Add native `AsyncProlly::indexed_map(...).await` support with asynchronous

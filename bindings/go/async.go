@@ -390,6 +390,23 @@ func (i *ProductQuantizer) SearchWithRuntimeAsync(
 	})
 }
 
+func (i *TurboQuantizer) SearchAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return i.SearchCancellable(ctx, proximity, owned, nil, token)
+	})
+}
+
+func (i *TurboQuantizer) SearchWithRuntimeAsync(
+	ctx context.Context, proximity *ProximityMap, request SearchRequest,
+	searchRuntime *ProximitySearchRuntime,
+) *Future[SearchResult] {
+	return startProximitySearchFuture(ctx, request, func(owned SearchRequest, token *ProximityCancellationToken) (SearchResult, error) {
+		return i.SearchCancellable(ctx, proximity, owned, searchRuntime, token)
+	})
+}
+
 func (a *CompositeAccelerator) SearchAsync(
 	ctx context.Context, proximity *ProximityMap, request SearchRequest,
 ) *Future[SearchResult] {

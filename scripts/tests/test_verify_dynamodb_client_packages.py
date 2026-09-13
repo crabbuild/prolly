@@ -33,10 +33,11 @@ class PackageVerificationContractTest(unittest.TestCase):
         self.assertGreaterEqual(script.count("  --locked \\\n"), 2)
         self.assertIn("CARGO_NET_OFFLINE=true cargo update", script)
         self.assertIn("--offline", script)
-        self.assertIn(
-            "registry+https://github.com/rust-lang/crates.io-index#prolly-map@0.7.0",
-            script,
-        )
+        self.assertIn("package_version()", script)
+        self.assertIn('map_registry_package="registry+', script)
+        self.assertIn('--package "${map_registry_package}"', script)
+        self.assertNotIn("prolly-map-0.7.0", script)
+        self.assertNotIn("prolly-store-dynamodb-0.6.0", script)
         self.assertIn("CARGO_INCREMENTAL=0", script)
         self.assertIn("CARGO_PROFILE_TEST_DEBUG=0", script)
 

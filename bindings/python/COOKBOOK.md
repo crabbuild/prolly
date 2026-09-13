@@ -33,6 +33,43 @@ Application-style files include `batch_build.py`, `local_first_state.py`,
 `vector_sidecar.py`, `provenance_values.py`, `materialized_view.py`,
 `filesystem_snapshot.py`, and `durable_sqlite.py`.
 
+## Build And Force A TurboQuant RAG Sidecar
+
+TurboQuant is a disposable routing sidecar: the proximity map remains the
+source of truth, shortlisted records are reranked from their full-precision
+vectors, and `Auto` does not select TurboQuant until qualification passes.
+
+```python
+import prolly
+
+records = [
+    prolly.ProximityRecord(
+        f"chunk/{index:02}".encode(),
+        [float(index), float(index % 3), 0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+        f"document-{index:02}".encode(),
+    )
+    for index in range(32)
+]
+
+with prolly.Engine.memory() as engine:
+    with engine.build_proximity(dimensions=8, records=records) as proximity:
+        built = proximity.build_turboquant(worker_threads=2)
+        request = prolly.exact_proximity_search_request(
+            [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3
+        )
+        request.policy = prolly.SearchPolicyKind.FIXED_BUDGET
+        request.backend = prolly.SearchBackendRecord.TURBO_QUANTIZED
+
+        with built.index as index:
+            assert index.verify(proximity).encoded_vectors == len(records)
+            result = index.search(proximity, request)
+            assert result.backend == prolly.SearchBackendRecord.TURBO_QUANTIZED
+            manifest = index.manifest
+
+        with proximity.load_turboquant(manifest) as reopened:
+            assert reopened.manifest == manifest
+```
+
 ## Create A Durable Index
 
 Use SQLite for an application-local durable store. Keep immutable snapshots as

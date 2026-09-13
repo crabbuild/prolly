@@ -16,7 +16,8 @@ use prolly_bindings::{
     default_composite_accelerator_config, default_composite_build_limits,
     default_composite_rebuild_options, default_config, default_content_graph_limits,
     default_hnsw_build_limits, default_hnsw_config, default_pq_build_limits, default_pq_config,
-    default_proximity_config, default_proximity_search_runtime_policy, verify_key_proof,
+    default_proximity_config, default_proximity_search_runtime_policy,
+    default_turboquant_build_limits, default_turboquant_config, verify_key_proof,
     verify_multi_key_proof, verify_proximity_membership_proof, verify_proximity_structure_proof,
     verify_range_page_proof, verify_range_proof, AcceleratorCatalogEntryRecord,
     ActiveIndexHealthRecord, AdaptiveQualityRecord, BindingAcceleratorCatalog,
@@ -24,15 +25,15 @@ use prolly_bindings::{
     BindingIndexedSnapshot, BindingMapComparison, BindingMapMerge, BindingMapSnapshot,
     BindingMapSubscription, BindingProductQuantizer, BindingProximityCancellationToken,
     BindingProximityMap, BindingProximityReadSession, BindingProximitySearchProof,
-    BindingProximitySearchRuntime, BindingSecondaryIndexSnapshot, BindingVersionedMap,
-    BindingVersionedTransaction, CatalogAcceleratorKindRecord, CompositeAcceleratorConfigRecord,
-    CompositeBaseKindRecord, CompositeBuildLimitsRecord, CompositeBuildOrRebuildKindRecord,
-    CompositeBuildOrRebuildOutcomeRecord, CompositeBuildOutcomeRecord, CompositeBuildStatsRecord,
-    CompositeRebuildOptionsRecord, DistanceMetricRecord, ExactProximityRecordRecord,
-    FullRebuildReasonKindRecord, FullRebuildReasonRecord, HnswBuildLimitsRecord,
-    HnswBuildStatsRecord, HnswConfigRecord, HnswRoutingVectorEncodingRecord,
-    IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord, IndexPageRecord,
-    IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
+    BindingProximitySearchRuntime, BindingSecondaryIndexSnapshot, BindingTurboQuantizer,
+    BindingVersionedMap, BindingVersionedTransaction, CatalogAcceleratorKindRecord,
+    CompositeAcceleratorConfigRecord, CompositeBaseKindRecord, CompositeBuildLimitsRecord,
+    CompositeBuildOrRebuildKindRecord, CompositeBuildOrRebuildOutcomeRecord,
+    CompositeBuildOutcomeRecord, CompositeBuildStatsRecord, CompositeRebuildOptionsRecord,
+    DistanceMetricRecord, ExactProximityRecordRecord, FullRebuildReasonKindRecord,
+    FullRebuildReasonRecord, HnswBuildLimitsRecord, HnswBuildStatsRecord, HnswConfigRecord,
+    HnswRoutingVectorEncodingRecord, IndexBuildResultRecord, IndexEntryRecord, IndexMatchRecord,
+    IndexPageRecord, IndexProjectionRecord, IndexVerificationRecord, IndexedMapHealthRecord,
     IndexedMapMetricsRecord, IndexedRetentionRecord, IndexedSnapshotIdRecord, IndexedSourceRecord,
     IndexedUpdateKind, IndexedUpdateRecord, IndexedVersionRecord, KeyProofRecord, MapUpdateKind,
     MapUpdateRecord, MapVersionRecord, MultiKeyProofRecord, ProductQuantizationBuildLimitsRecord,
@@ -46,7 +47,9 @@ use prolly_bindings::{
     ProximityStructuralProofRecord, ProximityVerificationRecord, QueryKernelRecord,
     RangeProofRecord, SearchBackendRecord, SearchBudgetRecord, SearchCompletionRecord,
     SearchPolicyKind, SecondaryIndexExtractorCallback, SecondaryIndexLimitsRecord,
-    VersionPruneRecord,
+    TurboQuantizationBuildLimitsRecord, TurboQuantizationBuildStatsRecord,
+    TurboQuantizationConfigRecord, TurboQuantizationQualityRecord,
+    TurboQuantizationVerificationRecord, VersionPruneRecord,
 };
 use std::sync::Arc;
 
@@ -879,6 +882,7 @@ pub struct NodePortableSearchRequest {
     pub backend: String,
     pub hnsw_ef_search: Option<u32>,
     pub pq_rerank_multiplier: Option<u16>,
+    pub turboquant_rerank_multiplier: Option<u16>,
 }
 
 fn parse_u64(value: String, name: &str) -> Result<u64> {
@@ -1124,6 +1128,129 @@ impl From<ProductQuantizationQualityRecord> for NodePortablePqQuality {
 }
 
 #[napi(object)]
+pub struct NodePortableTurboQuantConfig {
+    pub bit_width: u32,
+    pub rerank_multiplier: u32,
+    pub seed: String,
+}
+
+impl From<TurboQuantizationConfigRecord> for NodePortableTurboQuantConfig {
+    fn from(value: TurboQuantizationConfigRecord) -> Self {
+        Self {
+            bit_width: u32::from(value.bit_width),
+            rerank_multiplier: value.rerank_multiplier,
+            seed: value.seed.to_string(),
+        }
+    }
+}
+
+impl TryFrom<NodePortableTurboQuantConfig> for TurboQuantizationConfigRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableTurboQuantConfig) -> Result<Self> {
+        Ok(Self {
+            bit_width: value
+                .bit_width
+                .try_into()
+                .map_err(|_| Error::new(Status::InvalidArg, "bitWidth must fit in uint8"))?,
+            rerank_multiplier: value.rerank_multiplier,
+            seed: parse_u64(value.seed, "seed")?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableTurboQuantBuildLimits {
+    pub max_records: Option<String>,
+    pub max_input_bytes: Option<String>,
+    pub max_temporary_bytes: Option<String>,
+    pub max_transform_operations: Option<String>,
+    pub max_encoded_output_bytes: Option<String>,
+    pub max_worker_threads: Option<String>,
+}
+
+impl TryFrom<NodePortableTurboQuantBuildLimits> for TurboQuantizationBuildLimitsRecord {
+    type Error = Error;
+
+    fn try_from(value: NodePortableTurboQuantBuildLimits) -> Result<Self> {
+        Ok(Self {
+            max_records: parse_optional_u64(value.max_records, "maxRecords")?,
+            max_input_bytes: parse_optional_u64(value.max_input_bytes, "maxInputBytes")?,
+            max_temporary_bytes: parse_optional_u64(
+                value.max_temporary_bytes,
+                "maxTemporaryBytes",
+            )?,
+            max_transform_operations: parse_optional_u64(
+                value.max_transform_operations,
+                "maxTransformOperations",
+            )?,
+            max_encoded_output_bytes: parse_optional_u64(
+                value.max_encoded_output_bytes,
+                "maxEncodedOutputBytes",
+            )?,
+            max_worker_threads: parse_optional_u64(value.max_worker_threads, "maxWorkerThreads")?,
+        })
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableTurboQuantBuildStats {
+    pub encoded_vectors: String,
+    pub zero_vectors: String,
+    pub transformed_components: String,
+    pub butterfly_operations: String,
+    pub input_bytes: String,
+    pub encoded_output_bytes: String,
+    pub peak_temporary_bytes: String,
+}
+
+impl From<TurboQuantizationBuildStatsRecord> for NodePortableTurboQuantBuildStats {
+    fn from(value: TurboQuantizationBuildStatsRecord) -> Self {
+        Self {
+            encoded_vectors: value.encoded_vectors.to_string(),
+            zero_vectors: value.zero_vectors.to_string(),
+            transformed_components: value.transformed_components.to_string(),
+            butterfly_operations: value.butterfly_operations.to_string(),
+            input_bytes: value.input_bytes.to_string(),
+            encoded_output_bytes: value.encoded_output_bytes.to_string(),
+            peak_temporary_bytes: value.peak_temporary_bytes.to_string(),
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableTurboQuantQuality {
+    pub mean_squared_error: f64,
+    pub maximum_squared_error: f64,
+}
+
+impl From<TurboQuantizationQualityRecord> for NodePortableTurboQuantQuality {
+    fn from(value: TurboQuantizationQualityRecord) -> Self {
+        Self {
+            mean_squared_error: value.mean_squared_error,
+            maximum_squared_error: value.maximum_squared_error,
+        }
+    }
+}
+
+#[napi(object)]
+pub struct NodePortableTurboQuantVerification {
+    pub encoded_vectors: String,
+    pub zero_vectors: String,
+    pub quality: NodePortableTurboQuantQuality,
+}
+
+impl From<TurboQuantizationVerificationRecord> for NodePortableTurboQuantVerification {
+    fn from(value: TurboQuantizationVerificationRecord) -> Self {
+        Self {
+            encoded_vectors: value.encoded_vectors.to_string(),
+            zero_vectors: value.zero_vectors.to_string(),
+            quality: value.quality.into(),
+        }
+    }
+}
+
+#[napi(object)]
 pub struct NodePortableCompositeConfig {
     pub max_delta_records: String,
     pub max_shadow_records: String,
@@ -1259,6 +1386,8 @@ pub struct NodePortableCompositeRebuildOptions {
     pub hnsw_limits: NodePortableHnswBuildLimits,
     pub pq_worker_threads: String,
     pub pq_limits: NodePortablePqBuildLimits,
+    pub turboquant_worker_threads: String,
+    pub turboquant_limits: NodePortableTurboQuantBuildLimits,
 }
 
 impl TryFrom<NodePortableCompositeRebuildOptions> for CompositeRebuildOptionsRecord {
@@ -1269,6 +1398,11 @@ impl TryFrom<NodePortableCompositeRebuildOptions> for CompositeRebuildOptionsRec
             hnsw_limits: value.hnsw_limits.try_into()?,
             pq_worker_threads: parse_u64(value.pq_worker_threads, "pqWorkerThreads")?,
             pq_limits: value.pq_limits.try_into()?,
+            turboquant_worker_threads: parse_u64(
+                value.turboquant_worker_threads,
+                "turboquantWorkerThreads",
+            )?,
+            turboquant_limits: value.turboquant_limits.try_into()?,
         })
     }
 }
@@ -1287,6 +1421,7 @@ impl From<AcceleratorCatalogEntryRecord> for NodePortableCatalogEntry {
                 CatalogAcceleratorKindRecord::Hnsw => "hnsw",
                 CatalogAcceleratorKindRecord::ProductQuantized => "product_quantized",
                 CatalogAcceleratorKindRecord::Composite => "composite",
+                CatalogAcceleratorKindRecord::TurboQuantized => "turbo_quantized",
             }
             .to_string(),
             configuration_fingerprint: Buffer::from(value.configuration_fingerprint),
@@ -1362,6 +1497,7 @@ impl TryFrom<NodePortableSearchRequest> for ProximitySearchRequestRecord {
             "hnsw" => SearchBackendRecord::Hnsw,
             "composite" => SearchBackendRecord::Composite,
             "auto" => SearchBackendRecord::Auto,
+            "turbo_quantized" | "turboquant" => SearchBackendRecord::TurboQuantized,
             other => {
                 return Err(Error::new(
                     Status::InvalidArg,
@@ -1394,6 +1530,7 @@ impl TryFrom<NodePortableSearchRequest> for ProximitySearchRequestRecord {
             backend,
             hnsw_ef_search: value.hnsw_ef_search,
             pq_rerank_multiplier: value.pq_rerank_multiplier,
+            turboquant_rerank_multiplier: value.turboquant_rerank_multiplier,
         })
     }
 }
@@ -1420,6 +1557,7 @@ pub struct NodePortableProximitySearchRuntimePolicy {
     pub authoritative_max_bytes: String,
     pub hnsw_max_bytes: String,
     pub pq_max_bytes: String,
+    pub turboquant_max_bytes: String,
 }
 
 impl From<ProximitySearchRuntimePolicyRecord> for NodePortableProximitySearchRuntimePolicy {
@@ -1430,6 +1568,7 @@ impl From<ProximitySearchRuntimePolicyRecord> for NodePortableProximitySearchRun
             authoritative_max_bytes: value.authoritative_max_bytes.to_string(),
             hnsw_max_bytes: value.hnsw_max_bytes.to_string(),
             pq_max_bytes: value.pq_max_bytes.to_string(),
+            turboquant_max_bytes: value.turboquant_max_bytes.to_string(),
         }
     }
 }
@@ -1447,6 +1586,7 @@ impl TryFrom<NodePortableProximitySearchRuntimePolicy> for ProximitySearchRuntim
             )?,
             hnsw_max_bytes: parse_u64(value.hnsw_max_bytes, "hnswMaxBytes")?,
             pq_max_bytes: parse_u64(value.pq_max_bytes, "pqMaxBytes")?,
+            turboquant_max_bytes: parse_u64(value.turboquant_max_bytes, "turboquantMaxBytes")?,
         })
     }
 }
@@ -1561,6 +1701,7 @@ impl From<ProximitySearchResultRecord> for NodePortableSearchResult {
             SearchBackendRecord::Hnsw => "hnsw",
             SearchBackendRecord::Composite => "composite",
             SearchBackendRecord::Auto => "auto",
+            SearchBackendRecord::TurboQuantized => "turbo_quantized",
         };
         Self {
             neighbors: value.neighbors.into_iter().map(Into::into).collect(),
@@ -3708,6 +3849,7 @@ enum NodePortableProximitySearchTarget {
     Session(Arc<BindingProximityReadSession>),
     Hnsw(Arc<BindingHnswIndex>, Arc<BindingProximityMap>),
     ProductQuantized(Arc<BindingProductQuantizer>, Arc<BindingProximityMap>),
+    TurboQuantized(Arc<BindingTurboQuantizer>, Arc<BindingProximityMap>),
     Composite(Arc<BindingCompositeAccelerator>, Arc<BindingProximityMap>),
     Catalog(Arc<BindingAcceleratorCatalog>, Arc<BindingProximityMap>),
 }
@@ -3735,6 +3877,13 @@ impl Task for NodePortableProximitySearchTask {
                 Arc::clone(&self.cancellation),
             ),
             NodePortableProximitySearchTarget::ProductQuantized(index, map) => index
+                .search_cancellable(
+                    Arc::clone(map),
+                    self.request.clone(),
+                    self.runtime.clone(),
+                    Arc::clone(&self.cancellation),
+                ),
+            NodePortableProximitySearchTarget::TurboQuantized(index, map) => index
                 .search_cancellable(
                     Arc::clone(map),
                     self.request.clone(),
@@ -4007,6 +4156,130 @@ impl NativePortableProductQuantizer {
 }
 
 #[napi]
+pub struct NativePortableTurboQuantBuildResult {
+    index: Arc<BindingTurboQuantizer>,
+    stats: TurboQuantizationBuildStatsRecord,
+}
+
+#[napi]
+impl NativePortableTurboQuantBuildResult {
+    #[napi]
+    pub fn index(&self) -> NativePortableTurboQuantizer {
+        NativePortableTurboQuantizer {
+            inner: Arc::clone(&self.index),
+        }
+    }
+
+    #[napi]
+    pub fn stats(&self) -> NodePortableTurboQuantBuildStats {
+        self.stats.clone().into()
+    }
+}
+
+#[napi]
+pub struct NativePortableTurboQuantizer {
+    inner: Arc<BindingTurboQuantizer>,
+}
+
+#[napi]
+impl NativePortableTurboQuantizer {
+    #[napi]
+    pub fn manifest(&self) -> Buffer {
+        Buffer::from(self.inner.manifest())
+    }
+
+    #[napi(js_name = "sourceDescriptor")]
+    pub fn source_descriptor(&self) -> Buffer {
+        Buffer::from(self.inner.source_descriptor())
+    }
+
+    #[napi]
+    pub fn config(&self) -> NodePortableTurboQuantConfig {
+        self.inner.config().into()
+    }
+
+    #[napi]
+    pub fn quality(&self) -> NodePortableTurboQuantQuality {
+        self.inner.quality().into()
+    }
+
+    #[napi]
+    pub fn verify(
+        &self,
+        map: &NativePortableProximityMap,
+    ) -> Result<NodePortableTurboQuantVerification> {
+        self.inner
+            .verify(Arc::clone(&map.inner))
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi]
+    pub fn search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search(Arc::clone(&map.inner), request.try_into()?)
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchWithRuntime")]
+    pub fn search_with_runtime(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: &NativePortableProximitySearchRuntime,
+    ) -> Result<NodePortableSearchResult> {
+        self.inner
+            .search_with_runtime(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                Arc::clone(&runtime.inner),
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "searchCancellable")]
+    pub fn search_cancellable(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+        runtime: Option<&NativePortableProximitySearchRuntime>,
+        cancellation: &NativePortableProximityCancellationToken,
+    ) -> Result<AsyncTask<NodePortableProximitySearchTask>> {
+        Ok(AsyncTask::new(NodePortableProximitySearchTask {
+            target: NodePortableProximitySearchTarget::TurboQuantized(
+                Arc::clone(&self.inner),
+                Arc::clone(&map.inner),
+            ),
+            request: request.try_into()?,
+            runtime: runtime.map(|value| Arc::clone(&value.inner)),
+            cancellation: Arc::clone(&cancellation.inner),
+        }))
+    }
+
+    #[napi(js_name = "proveSearch")]
+    pub fn prove_search(
+        &self,
+        map: &NativePortableProximityMap,
+        request: NodePortableSearchRequest,
+    ) -> Result<NativePortableProximitySearchProof> {
+        self.inner
+            .prove_search(
+                Arc::clone(&map.inner),
+                request.try_into()?,
+                default_content_graph_limits(),
+            )
+            .map(|inner| NativePortableProximitySearchProof { inner })
+            .map_err(to_napi_error)
+    }
+}
+
+#[napi]
 pub struct NativePortableCompositeBuildResult {
     accelerator: Option<Arc<BindingCompositeAccelerator>>,
     reasons: Vec<FullRebuildReasonRecord>,
@@ -4061,6 +4334,7 @@ impl NativePortableCompositeBuildOrRebuildResult {
             CompositeBuildOrRebuildKindRecord::ProductQuantizedRebuilt => {
                 "product_quantized_rebuilt"
             }
+            CompositeBuildOrRebuildKindRecord::TurboQuantizedRebuilt => "turbo_quantized_rebuilt",
         }
         .to_string()
     }
@@ -4096,6 +4370,16 @@ impl NativePortableCompositeBuildOrRebuildResult {
     }
 
     #[napi]
+    pub fn turboquant(&self) -> Option<NativePortableTurboQuantizer> {
+        self.inner
+            .turboquant
+            .as_ref()
+            .map(|inner| NativePortableTurboQuantizer {
+                inner: Arc::clone(inner),
+            })
+    }
+
+    #[napi]
     pub fn reasons(&self) -> Vec<NodePortableFullRebuildReason> {
         self.inner
             .reasons
@@ -4118,6 +4402,11 @@ impl NativePortableCompositeBuildOrRebuildResult {
     #[napi(js_name = "pqStats")]
     pub fn pq_stats(&self) -> Option<NodePortablePqBuildStats> {
         self.inner.pq_stats.clone().map(Into::into)
+    }
+
+    #[napi(js_name = "turboquantStats")]
+    pub fn turboquant_stats(&self) -> Option<NodePortableTurboQuantBuildStats> {
+        self.inner.turboquant_stats.clone().map(Into::into)
     }
 }
 
@@ -4148,6 +4437,7 @@ impl NativePortableCompositeAccelerator {
         match self.inner.base_kind() {
             CompositeBaseKindRecord::Hnsw => "hnsw",
             CompositeBaseKindRecord::ProductQuantized => "product_quantized",
+            CompositeBaseKindRecord::TurboQuantized => "turbo_quantized",
         }
         .to_string()
     }
@@ -4399,6 +4689,38 @@ impl NativePortableProximityMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "buildTurboQuant")]
+    pub fn build_turboquant(
+        &self,
+        config: Option<NodePortableTurboQuantConfig>,
+        worker_threads: String,
+        limits: Option<NodePortableTurboQuantBuildLimits>,
+    ) -> Result<NativePortableTurboQuantBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_turboquant_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_turboquant_build_limits);
+        self.inner
+            .build_turboquant(config, parse_u64(worker_threads, "workerThreads")?, limits)
+            .map(|value| NativePortableTurboQuantBuildResult {
+                index: value.index,
+                stats: value.stats,
+            })
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "loadTurboQuant")]
+    pub fn load_turboquant(&self, manifest: Buffer) -> Result<NativePortableTurboQuantizer> {
+        self.inner
+            .load_turboquant(manifest.to_vec())
+            .map(|inner| NativePortableTurboQuantizer { inner })
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "buildCompositeHnsw")]
     pub fn build_composite_hnsw(
         &self,
@@ -4444,6 +4766,33 @@ impl NativePortableProximityMap {
             .unwrap_or_else(default_composite_build_limits);
         self.inner
             .build_composite_pq(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+            )
+            .map(Into::into)
+            .map_err(to_napi_error)
+    }
+
+    #[napi(js_name = "buildCompositeTurboQuant")]
+    pub fn build_composite_turboquant(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableTurboQuantizer,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+    ) -> Result<NativePortableCompositeBuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        self.inner
+            .build_composite_turboquant(
                 Arc::clone(&base_map.inner),
                 Arc::clone(&base.inner),
                 config,
@@ -4519,6 +4868,39 @@ impl NativePortableProximityMap {
             .map_err(to_napi_error)
     }
 
+    #[napi(js_name = "buildOrRebuildCompositeTurboQuant")]
+    pub fn build_or_rebuild_composite_turboquant(
+        &self,
+        base_map: &NativePortableProximityMap,
+        base: &NativePortableTurboQuantizer,
+        config: Option<NodePortableCompositeConfig>,
+        limits: Option<NodePortableCompositeBuildLimits>,
+        rebuild: Option<NodePortableCompositeRebuildOptions>,
+    ) -> Result<NativePortableCompositeBuildOrRebuildResult> {
+        let config = config
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_accelerator_config);
+        let limits = limits
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_build_limits);
+        let rebuild = rebuild
+            .map(TryInto::try_into)
+            .transpose()?
+            .unwrap_or_else(default_composite_rebuild_options);
+        self.inner
+            .build_or_rebuild_composite_turboquant(
+                Arc::clone(&base_map.inner),
+                Arc::clone(&base.inner),
+                config,
+                limits,
+                rebuild,
+            )
+            .map(|inner| NativePortableCompositeBuildOrRebuildResult { inner })
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "loadComposite")]
     pub fn load_composite(&self, manifest: Buffer) -> Result<NativePortableCompositeAccelerator> {
         self.inner
@@ -4532,12 +4914,14 @@ impl NativePortableProximityMap {
         &self,
         hnsw: Option<&NativePortableHnswIndex>,
         pq: Option<&NativePortableProductQuantizer>,
+        turboquant: Option<&NativePortableTurboQuantizer>,
         composite: Option<&NativePortableCompositeAccelerator>,
     ) -> Result<NativePortableAcceleratorCatalog> {
         self.inner
             .build_accelerator_catalog(
                 hnsw.map(|value| Arc::clone(&value.inner)),
                 pq.map(|value| Arc::clone(&value.inner)),
+                turboquant.map(|value| Arc::clone(&value.inner)),
                 composite.map(|value| Arc::clone(&value.inner)),
             )
             .map(|inner| NativePortableAcceleratorCatalog { inner })

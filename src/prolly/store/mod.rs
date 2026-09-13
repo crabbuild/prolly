@@ -231,6 +231,51 @@ impl<'a> NodePublication<'a> {
 /// Ordered results from a retained immutable-byte batch read.
 pub type SharedReadBatch = Vec<Option<Arc<[u8]>>>;
 
+/// Retained immutable bytes plus the validation already performed for this read.
+///
+/// External stores can construct only unverified reads. Crate-owned adapters may
+/// preserve a successful key-to-CID check so the engine does not hash the same
+/// immutable bytes again before decoding them.
+#[derive(Clone, Debug)]
+pub struct ValidatedSharedRead {
+    bytes: Arc<[u8]>,
+    cid_verified: bool,
+}
+
+impl ValidatedSharedRead {
+    /// Wrap retained bytes that still require content-ID validation.
+    pub fn unverified(bytes: Arc<[u8]>) -> Self {
+        Self {
+            bytes,
+            cid_verified: false,
+        }
+    }
+
+    pub(crate) fn cid_verified(bytes: Arc<[u8]>) -> Self {
+        Self {
+            bytes,
+            cid_verified: true,
+        }
+    }
+
+    /// Borrow the retained bytes.
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// Consume the read and return its retained bytes.
+    pub fn into_bytes(self) -> Arc<[u8]> {
+        self.bytes
+    }
+
+    pub(crate) fn into_parts(self) -> (Arc<[u8]>, bool) {
+        (self.bytes, self.cid_verified)
+    }
+}
+
+/// Ordered results carrying per-value content-ID validation state.
+pub type ValidatedSharedReadBatch = Vec<Option<ValidatedSharedRead>>;
+
 /// Storage backend trait for Prolly Trees
 ///
 /// Keys are CID bytes, values are serialized nodes.
@@ -253,6 +298,15 @@ pub trait Store: Send + Sync {
             .map(|value| value.map(|bytes| Arc::from(bytes.into_boxed_slice())))
     }
 
+    /// Get retained bytes together with any CID validation already performed.
+    ///
+    /// The default is deliberately unverified. This preserves fail-closed CID
+    /// checking for every external store implementation.
+    fn get_validated_shared(&self, key: &[u8]) -> Result<Option<ValidatedSharedRead>, Self::Error> {
+        self.get_shared(key)
+            .map(|value| value.map(ValidatedSharedRead::unverified))
+    }
+
     /// Retrieve unique keys in order as retained immutable byte buffers.
     fn batch_get_shared_ordered_unique(
         &self,
@@ -262,6 +316,19 @@ pub trait Store: Send + Sync {
             values
                 .into_iter()
                 .map(|value| value.map(|bytes| Arc::from(bytes.into_boxed_slice())))
+                .collect()
+        })
+    }
+
+    /// Retrieve unique retained reads with per-value CID validation state.
+    fn batch_get_validated_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<ValidatedSharedReadBatch, Self::Error> {
+        self.batch_get_shared_ordered_unique(keys).map(|values| {
+            values
+                .into_iter()
+                .map(|value| value.map(ValidatedSharedRead::unverified))
                 .collect()
         })
     }
@@ -509,6 +576,19 @@ pub trait AsyncStore {
             .map(|value| value.map(|bytes| Arc::from(bytes.into_boxed_slice())))
     }
 
+    /// Async retained read carrying any CID validation already performed.
+    ///
+    /// The default remains unverified so external implementations cannot
+    /// accidentally bypass the engine's content-address check.
+    async fn get_validated_shared(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<ValidatedSharedRead>, Self::Error> {
+        self.get_shared(key)
+            .await
+            .map(|value| value.map(ValidatedSharedRead::unverified))
+    }
+
     /// Async ordered retained-byte batch read for unique keys.
     async fn batch_get_shared_ordered_unique(
         &self,
@@ -520,6 +600,21 @@ pub trait AsyncStore {
                 .map(|value| value.map(|bytes| Arc::from(bytes.into_boxed_slice())))
                 .collect()
         })
+    }
+
+    /// Async ordered retained reads with per-value CID validation state.
+    async fn batch_get_validated_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<ValidatedSharedReadBatch, Self::Error> {
+        self.batch_get_shared_ordered_unique(keys)
+            .await
+            .map(|values| {
+                values
+                    .into_iter()
+                    .map(|value| value.map(ValidatedSharedRead::unverified))
+                    .collect()
+            })
     }
 
     /// Whether async shared reads retain backend-owned immutable allocations.
@@ -786,11 +881,25 @@ impl<S: Store> AsyncStore for SyncStoreAsAsync<S> {
         self.inner.get_shared(key)
     }
 
+    async fn get_validated_shared(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<ValidatedSharedRead>, Self::Error> {
+        self.inner.get_validated_shared(key)
+    }
+
     async fn batch_get_shared_ordered_unique(
         &self,
         keys: &[&[u8]],
     ) -> Result<SharedReadBatch, Self::Error> {
         self.inner.batch_get_shared_ordered_unique(keys)
+    }
+
+    async fn batch_get_validated_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<ValidatedSharedReadBatch, Self::Error> {
+        self.inner.batch_get_validated_shared_ordered_unique(keys)
     }
 
     fn has_native_shared_reads(&self) -> bool {
@@ -1291,11 +1400,22 @@ impl<T: Store> Store for std::sync::Arc<T> {
         (**self).get_shared(key)
     }
 
+    fn get_validated_shared(&self, key: &[u8]) -> Result<Option<ValidatedSharedRead>, Self::Error> {
+        (**self).get_validated_shared(key)
+    }
+
     fn batch_get_shared_ordered_unique(
         &self,
         keys: &[&[u8]],
     ) -> Result<SharedReadBatch, Self::Error> {
         (**self).batch_get_shared_ordered_unique(keys)
+    }
+
+    fn batch_get_validated_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<ValidatedSharedReadBatch, Self::Error> {
+        (**self).batch_get_validated_shared_ordered_unique(keys)
     }
 
     fn has_native_shared_reads(&self) -> bool {
@@ -1384,11 +1504,22 @@ impl<T: Store + ?Sized> Store for &T {
         (**self).get_shared(key)
     }
 
+    fn get_validated_shared(&self, key: &[u8]) -> Result<Option<ValidatedSharedRead>, Self::Error> {
+        (**self).get_validated_shared(key)
+    }
+
     fn batch_get_shared_ordered_unique(
         &self,
         keys: &[&[u8]],
     ) -> Result<SharedReadBatch, Self::Error> {
         (**self).batch_get_shared_ordered_unique(keys)
+    }
+
+    fn batch_get_validated_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<ValidatedSharedReadBatch, Self::Error> {
+        (**self).batch_get_validated_shared_ordered_unique(keys)
     }
 
     fn has_native_shared_reads(&self) -> bool {
@@ -1471,11 +1602,27 @@ impl<T: AsyncStore> AsyncStore for std::sync::Arc<T> {
         (**self).get_shared(key).await
     }
 
+    async fn get_validated_shared(
+        &self,
+        key: &[u8],
+    ) -> Result<Option<ValidatedSharedRead>, Self::Error> {
+        (**self).get_validated_shared(key).await
+    }
+
     async fn batch_get_shared_ordered_unique(
         &self,
         keys: &[&[u8]],
     ) -> Result<SharedReadBatch, Self::Error> {
         (**self).batch_get_shared_ordered_unique(keys).await
+    }
+
+    async fn batch_get_validated_shared_ordered_unique(
+        &self,
+        keys: &[&[u8]],
+    ) -> Result<ValidatedSharedReadBatch, Self::Error> {
+        (**self)
+            .batch_get_validated_shared_ordered_unique(keys)
+            .await
     }
 
     fn has_native_shared_reads(&self) -> bool {

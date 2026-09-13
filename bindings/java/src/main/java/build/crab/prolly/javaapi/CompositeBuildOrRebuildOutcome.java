@@ -7,9 +7,17 @@ public record CompositeBuildOrRebuildOutcome(
         CompositeAccelerator composite,
         HnswIndex hnsw,
         ProductQuantizer pq,
+        TurboQuantizer turboquant,
         List<FullRebuildReason> reasons,
         CompositeBuildStats compositeStats,
         HnswBuildStats hnswStats,
-        ProductQuantizationBuildStats pqStats) {
-    public enum Kind { COMPOSITE, NO_ACCELERATOR_REQUIRED, HNSW_REBUILT, PRODUCT_QUANTIZED_REBUILT }
+        ProductQuantizationBuildStats pqStats,
+        TurboQuantizationBuildStats turboquantStats) {
+    public enum Kind {
+        COMPOSITE,
+        NO_ACCELERATOR_REQUIRED,
+        HNSW_REBUILT,
+        PRODUCT_QUANTIZED_REBUILT,
+        TURBO_QUANTIZED_REBUILT
+    }
 }

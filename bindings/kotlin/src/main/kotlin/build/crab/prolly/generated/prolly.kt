@@ -1295,6 +1295,10 @@ external fun uniffi_prolly_bindings_checksum_func_default_proximity_config(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy(
 ): Short
+external fun uniffi_prolly_bindings_checksum_func_default_turboquant_build_limits(
+): Short
+external fun uniffi_prolly_bindings_checksum_func_default_turboquant_config(
+): Short
 external fun uniffi_prolly_bindings_checksum_func_exact_proximity_search_request(
 ): Short
 external fun uniffi_prolly_bindings_checksum_func_verify_proximity_membership_proof(
@@ -1919,13 +1923,19 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_co
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_pq(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_turboquant(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_hnsw(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_pq(
 ): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_turboquant(
+): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_turboquant(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache(
 ): Short
@@ -1948,6 +1958,8 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_com
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_hnsw(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_pq(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_turboquant(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate(
 ): Short
@@ -1994,6 +2006,24 @@ external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntim
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_policy(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_stats(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingturboquantizer_config(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingturboquantizer_manifest(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingturboquantizer_prove_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingturboquantizer_quality(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingturboquantizer_search(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingturboquantizer_search_cancellable(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingturboquantizer_search_with_runtime(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingturboquantizer_source_descriptor(
+): Short
+external fun uniffi_prolly_bindings_checksum_method_bindingturboquantizer_verify(
 ): Short
 external fun uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit(
 ): Short
@@ -3084,11 +3114,13 @@ external fun uniffi_prolly_bindings_fn_clone_bindingproximitymap(`handle`: Long,
 ): Long
 external fun uniffi_prolly_bindings_fn_free_bindingproximitymap(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
-external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog(`ptr`: Long,`hnsw`: RustBuffer.ByValue,`pq`: RustBuffer.ByValue,`composite`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog(`ptr`: Long,`hnsw`: RustBuffer.ByValue,`pq`: RustBuffer.ByValue,`turboquant`: RustBuffer.ByValue,`composite`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_hnsw(`ptr`: Long,`baseMap`: Long,`base`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq(`ptr`: Long,`baseMap`: Long,`base`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_turboquant(`ptr`: Long,`baseMap`: Long,`base`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_hnsw(`ptr`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -3096,7 +3128,11 @@ external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebui
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_pq(`ptr`: Long,`baseMap`: Long,`base`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,`rebuild`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_turboquant(`ptr`: Long,`baseMap`: Long,`base`: Long,`config`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,`rebuild`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq(`ptr`: Long,`config`: RustBuffer.ByValue,`workerThreads`: Long,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_build_turboquant(`ptr`: Long,`config`: RustBuffer.ByValue,`workerThreads`: Long,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_clear_content_cache(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Unit
@@ -3119,6 +3155,8 @@ external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_load_composite
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_load_hnsw(`ptr`: Long,`manifest`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq(`ptr`: Long,`manifest`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_load_turboquant(`ptr`: Long,`manifest`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): Long
 external fun uniffi_prolly_bindings_fn_method_bindingproximitymap_mutate(`ptr`: Long,`mutations`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
@@ -3177,6 +3215,28 @@ external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_clea
 external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_policy(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_method_bindingproximitysearchruntime_stats(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_clone_bindingturboquantizer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_free_bindingturboquantizer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
+): Unit
+external fun uniffi_prolly_bindings_fn_method_bindingturboquantizer_config(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingturboquantizer_manifest(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingturboquantizer_prove_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`limits`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): Long
+external fun uniffi_prolly_bindings_fn_method_bindingturboquantizer_quality(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingturboquantizer_search(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingturboquantizer_search_cancellable(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: RustBuffer.ByValue,`cancellation`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingturboquantizer_search_with_runtime(`ptr`: Long,`map`: Long,`request`: RustBuffer.ByValue,`runtime`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingturboquantizer_source_descriptor(`ptr`: Long,uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_method_bindingturboquantizer_verify(`ptr`: Long,`map`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_clone_proximityrecordvisitorcallback(`handle`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): Long
@@ -3764,6 +3824,10 @@ external fun uniffi_prolly_bindings_fn_func_default_proximity_config(`dimensions
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy(uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_turboquant_build_limits(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
+external fun uniffi_prolly_bindings_fn_func_default_turboquant_config(uniffi_out_err: UniffiRustCallStatus,
+): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_exact_proximity_search_request(`query`: RustBuffer.ByValue,`k`: Long,uniffi_out_err: UniffiRustCallStatus,
 ): RustBuffer.ByValue
 external fun uniffi_prolly_bindings_fn_func_verify_proximity_membership_proof(`proof`: RustBuffer.ByValue,`expectedDescriptor`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus,
@@ -4291,6 +4355,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_default_proximity_search_runtime_policy() != 8352.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_turboquant_build_limits() != 16284.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_func_default_turboquant_config() != 37586.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_func_exact_proximity_search_request() != 59384.toShort()) {
@@ -5220,13 +5290,16 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitycancellationtoken_is_cancelled() != 33821.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog() != 27841.toShort()) {
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_accelerator_catalog() != 39929.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_hnsw() != 60836.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_pq() != 36562.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_composite_turboquant() != 32424.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_hnsw() != 15873.toShort()) {
@@ -5238,7 +5311,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_pq() != 27287.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_or_rebuild_composite_turboquant() != 42282.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_pq() != 7075.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_build_turboquant() != 51245.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_clear_content_cache() != 42240.toShort()) {
@@ -5272,6 +5351,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_pq() != 63976.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_load_turboquant() != 12420.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitymap_mutate() != 39394.toShort()) {
@@ -5341,6 +5423,33 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_bindingproximitysearchruntime_stats() != 45140.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingturboquantizer_config() != 59416.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingturboquantizer_manifest() != 10558.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingturboquantizer_prove_search() != 38682.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingturboquantizer_quality() != 37928.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingturboquantizer_search() != 30129.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingturboquantizer_search_cancellable() != 39190.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingturboquantizer_search_with_runtime() != 64232.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingturboquantizer_source_descriptor() != 44910.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_prolly_bindings_checksum_method_bindingturboquantizer_verify() != 57510.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_prolly_bindings_checksum_method_proximityrecordvisitorcallback_visit() != 31782.toShort()) {
@@ -12524,11 +12633,13 @@ public object FfiConverterTypeBindingProximityCancellationToken: FfiConverter<Bi
 
 public interface BindingProximityMapInterface {
 
-    fun `buildAcceleratorCatalog`(`hnsw`: BindingHnswIndex?, `pq`: BindingProductQuantizer?, `composite`: BindingCompositeAccelerator?): BindingAcceleratorCatalog
+    fun `buildAcceleratorCatalog`(`hnsw`: BindingHnswIndex?, `pq`: BindingProductQuantizer?, `turboquant`: BindingTurboQuantizer?, `composite`: BindingCompositeAccelerator?): BindingAcceleratorCatalog
 
     fun `buildCompositeHnsw`(`baseMap`: BindingProximityMap, `base`: BindingHnswIndex, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord): CompositeBuildOutcomeRecord
 
     fun `buildCompositePq`(`baseMap`: BindingProximityMap, `base`: BindingProductQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord): CompositeBuildOutcomeRecord
+
+    fun `buildCompositeTurboquant`(`baseMap`: BindingProximityMap, `base`: BindingTurboQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord): CompositeBuildOutcomeRecord
 
     fun `buildHnsw`(`config`: HnswConfigRecord, `limits`: HnswBuildLimitsRecord): HnswBuildResultRecord
 
@@ -12536,7 +12647,11 @@ public interface BindingProximityMapInterface {
 
     fun `buildOrRebuildCompositePq`(`baseMap`: BindingProximityMap, `base`: BindingProductQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord, `rebuild`: CompositeRebuildOptionsRecord): CompositeBuildOrRebuildOutcomeRecord
 
+    fun `buildOrRebuildCompositeTurboquant`(`baseMap`: BindingProximityMap, `base`: BindingTurboQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord, `rebuild`: CompositeRebuildOptionsRecord): CompositeBuildOrRebuildOutcomeRecord
+
     fun `buildPq`(`config`: ProductQuantizationConfigRecord, `workerThreads`: kotlin.ULong, `limits`: ProductQuantizationBuildLimitsRecord): ProductQuantizationBuildResultRecord
+
+    fun `buildTurboquant`(`config`: TurboQuantizationConfigRecord, `workerThreads`: kotlin.ULong, `limits`: TurboQuantizationBuildLimitsRecord): TurboQuantizationBuildResultRecord
 
     fun `clearContentCache`()
 
@@ -12559,6 +12674,8 @@ public interface BindingProximityMapInterface {
     fun `loadHnsw`(`manifest`: kotlin.ByteArray): BindingHnswIndex
 
     fun `loadPq`(`manifest`: kotlin.ByteArray): BindingProductQuantizer
+
+    fun `loadTurboquant`(`manifest`: kotlin.ByteArray): BindingTurboQuantizer
 
     fun `mutate`(`mutations`: List<ProximityMutationRecord>): ProximityMutationResultRecord
 
@@ -12682,13 +12799,13 @@ open class BindingProximityMap: Disposable, AutoCloseable, BindingProximityMapIn
     }
 
 
-    @Throws(ProllyBindingException::class)override fun `buildAcceleratorCatalog`(`hnsw`: BindingHnswIndex?, `pq`: BindingProductQuantizer?, `composite`: BindingCompositeAccelerator?): BindingAcceleratorCatalog {
+    @Throws(ProllyBindingException::class)override fun `buildAcceleratorCatalog`(`hnsw`: BindingHnswIndex?, `pq`: BindingProductQuantizer?, `turboquant`: BindingTurboQuantizer?, `composite`: BindingCompositeAccelerator?): BindingAcceleratorCatalog {
             return FfiConverterTypeBindingAcceleratorCatalog.lift(
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_accelerator_catalog(
         it,
-        FfiConverterOptionalTypeBindingHnswIndex.lower(`hnsw`),FfiConverterOptionalTypeBindingProductQuantizer.lower(`pq`),FfiConverterOptionalTypeBindingCompositeAccelerator.lower(`composite`),_status)
+        FfiConverterOptionalTypeBindingHnswIndex.lower(`hnsw`),FfiConverterOptionalTypeBindingProductQuantizer.lower(`pq`),FfiConverterOptionalTypeBindingTurboQuantizer.lower(`turboquant`),FfiConverterOptionalTypeBindingCompositeAccelerator.lower(`composite`),_status)
 }
     }
     )
@@ -12717,6 +12834,20 @@ open class BindingProximityMap: Disposable, AutoCloseable, BindingProximityMapIn
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_pq(
         it,
         FfiConverterTypeBindingProximityMap.lower(`baseMap`),FfiConverterTypeBindingProductQuantizer.lower(`base`),FfiConverterTypeCompositeAcceleratorConfigRecord.lower(`config`),FfiConverterTypeCompositeBuildLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `buildCompositeTurboquant`(`baseMap`: BindingProximityMap, `base`: BindingTurboQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord): CompositeBuildOutcomeRecord {
+            return FfiConverterTypeCompositeBuildOutcomeRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_composite_turboquant(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`baseMap`),FfiConverterTypeBindingTurboQuantizer.lower(`base`),FfiConverterTypeCompositeAcceleratorConfigRecord.lower(`config`),FfiConverterTypeCompositeBuildLimitsRecord.lower(`limits`),_status)
 }
     }
     )
@@ -12766,6 +12897,20 @@ open class BindingProximityMap: Disposable, AutoCloseable, BindingProximityMapIn
 
 
 
+    @Throws(ProllyBindingException::class)override fun `buildOrRebuildCompositeTurboquant`(`baseMap`: BindingProximityMap, `base`: BindingTurboQuantizer, `config`: CompositeAcceleratorConfigRecord, `limits`: CompositeBuildLimitsRecord, `rebuild`: CompositeRebuildOptionsRecord): CompositeBuildOrRebuildOutcomeRecord {
+            return FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_or_rebuild_composite_turboquant(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`baseMap`),FfiConverterTypeBindingTurboQuantizer.lower(`base`),FfiConverterTypeCompositeAcceleratorConfigRecord.lower(`config`),FfiConverterTypeCompositeBuildLimitsRecord.lower(`limits`),FfiConverterTypeCompositeRebuildOptionsRecord.lower(`rebuild`),_status)
+}
+    }
+    )
+    }
+
+
+
     @Throws(ProllyBindingException::class)override fun `buildPq`(`config`: ProductQuantizationConfigRecord, `workerThreads`: kotlin.ULong, `limits`: ProductQuantizationBuildLimitsRecord): ProductQuantizationBuildResultRecord {
             return FfiConverterTypeProductQuantizationBuildResultRecord.lift(
     callWithHandle {
@@ -12773,6 +12918,20 @@ open class BindingProximityMap: Disposable, AutoCloseable, BindingProximityMapIn
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_pq(
         it,
         FfiConverterTypeProductQuantizationConfigRecord.lower(`config`),FfiConverterULong.lower(`workerThreads`),FfiConverterTypeProductQuantizationBuildLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `buildTurboquant`(`config`: TurboQuantizationConfigRecord, `workerThreads`: kotlin.ULong, `limits`: TurboQuantizationBuildLimitsRecord): TurboQuantizationBuildResultRecord {
+            return FfiConverterTypeTurboQuantizationBuildResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_build_turboquant(
+        it,
+        FfiConverterTypeTurboQuantizationConfigRecord.lower(`config`),FfiConverterULong.lower(`workerThreads`),FfiConverterTypeTurboQuantizationBuildLimitsRecord.lower(`limits`),_status)
 }
     }
     )
@@ -12922,6 +13081,20 @@ open class BindingProximityMap: Disposable, AutoCloseable, BindingProximityMapIn
     callWithHandle {
     uniffiRustCallWithError(ProllyBindingException) { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_pq(
+        it,
+        FfiConverterByteArray.lower(`manifest`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `loadTurboquant`(`manifest`: kotlin.ByteArray): BindingTurboQuantizer {
+            return FfiConverterTypeBindingTurboQuantizer.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingproximitymap_load_turboquant(
         it,
         FfiConverterByteArray.lower(`manifest`),_status)
 }
@@ -14434,6 +14607,381 @@ public object FfiConverterTypeBindingSecondaryIndexSnapshot: FfiConverter<Bindin
     override fun allocationSize(value: BindingSecondaryIndexSnapshot) = 8UL
 
     override fun write(value: BindingSecondaryIndexSnapshot, buf: ByteBuffer) {
+        buf.putLong(lower(value))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a handle
+// to the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque handle to the underlying Rust struct.
+//     Method calls need to read this handle from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its handle should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the handle, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the handle, but is interrupted
+//      before it can pass the handle over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read handle value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+public interface BindingTurboQuantizerInterface {
+
+    fun `config`(): TurboQuantizationConfigRecord
+
+    fun `manifest`(): kotlin.ByteArray
+
+    fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof
+
+    fun `quality`(): TurboQuantizationQualityRecord
+
+    fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord
+
+    fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord
+
+    fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord
+
+    fun `sourceDescriptor`(): kotlin.ByteArray
+
+    fun `verify`(`map`: BindingProximityMap): TurboQuantizationVerificationRecord
+
+    companion object
+}
+
+open class BindingTurboQuantizer: Disposable, AutoCloseable, BindingTurboQuantizerInterface
+{
+
+    @Suppress("UNUSED_PARAMETER")
+    /**
+     * @suppress
+     */
+    constructor(withHandle: UniffiWithHandle, handle: Long) {
+        this.handle = handle
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(handle))
+    }
+
+    /**
+     * @suppress
+     *
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noHandle: NoHandle) {
+        this.handle = 0
+        this.cleanable = null
+    }
+
+    protected val handle: Long
+    protected val cleanable: UniffiCleaner.Cleanable?
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithHandle(block: (handle: Long) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the handle being freed concurrently.
+        try {
+            return block(this.uniffiCloneHandle())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable?.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val handle: Long) : Runnable {
+        override fun run() {
+            if (handle == 0.toLong()) {
+                // Fake object created with `NoHandle`, don't try to free.
+                return;
+            }
+            uniffiRustCall { status ->
+                UniffiLib.uniffi_prolly_bindings_fn_free_bindingturboquantizer(handle, status)
+            }
+        }
+    }
+
+    /**
+     * @suppress
+     */
+    fun uniffiCloneHandle(): Long {
+        if (handle == 0.toLong()) {
+            throw InternalException("uniffiCloneHandle() called on NoHandle object");
+        }
+        return uniffiRustCall() { status ->
+            UniffiLib.uniffi_prolly_bindings_fn_clone_bindingturboquantizer(handle, status)
+        }
+    }
+
+    override fun `config`(): TurboQuantizationConfigRecord {
+            return FfiConverterTypeTurboQuantizationConfigRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingturboquantizer_config(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+    override fun `manifest`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingturboquantizer_manifest(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `proveSearch`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `limits`: ContentGraphLimitsRecord): BindingProximitySearchProof {
+            return FfiConverterTypeBindingProximitySearchProof.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingturboquantizer_prove_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeContentGraphLimitsRecord.lower(`limits`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `quality`(): TurboQuantizationQualityRecord {
+            return FfiConverterTypeTurboQuantizationQualityRecord.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingturboquantizer_quality(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `search`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingturboquantizer_search(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchCancellable`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime?, `cancellation`: BindingProximityCancellationToken): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingturboquantizer_search_cancellable(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterOptionalTypeBindingProximitySearchRuntime.lower(`runtime`),FfiConverterTypeBindingProximityCancellationToken.lower(`cancellation`),_status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `searchWithRuntime`(`map`: BindingProximityMap, `request`: ProximitySearchRequestRecord, `runtime`: BindingProximitySearchRuntime): ProximitySearchResultRecord {
+            return FfiConverterTypeProximitySearchResultRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingturboquantizer_search_with_runtime(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),FfiConverterTypeProximitySearchRequestRecord.lower(`request`),FfiConverterTypeBindingProximitySearchRuntime.lower(`runtime`),_status)
+}
+    }
+    )
+    }
+
+
+    override fun `sourceDescriptor`(): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    callWithHandle {
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingturboquantizer_source_descriptor(
+        it,
+        _status)
+}
+    }
+    )
+    }
+
+
+
+    @Throws(ProllyBindingException::class)override fun `verify`(`map`: BindingProximityMap): TurboQuantizationVerificationRecord {
+            return FfiConverterTypeTurboQuantizationVerificationRecord.lift(
+    callWithHandle {
+    uniffiRustCallWithError(ProllyBindingException) { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_method_bindingturboquantizer_verify(
+        it,
+        FfiConverterTypeBindingProximityMap.lower(`map`),_status)
+}
+    }
+    )
+    }
+
+
+
+
+
+
+
+
+
+    /**
+     * @suppress
+     */
+    companion object
+
+}
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeBindingTurboQuantizer: FfiConverter<BindingTurboQuantizer, Long> {
+    override fun lower(value: BindingTurboQuantizer): Long {
+        return value.uniffiCloneHandle()
+    }
+
+    override fun lift(value: Long): BindingTurboQuantizer {
+        return BindingTurboQuantizer(UniffiWithHandle, value)
+    }
+
+    override fun read(buf: ByteBuffer): BindingTurboQuantizer {
+        return lift(buf.getLong())
+    }
+
+    override fun allocationSize(value: BindingTurboQuantizer) = 8UL
+
+    override fun write(value: BindingTurboQuantizer, buf: ByteBuffer) {
         buf.putLong(lower(value))
     }
 }
@@ -25235,6 +25783,8 @@ data class CompositeBuildOrRebuildOutcomeRecord (
     ,
     var `pq`: BindingProductQuantizer?
     ,
+    var `turboquant`: BindingTurboQuantizer?
+    ,
     var `reasons`: List<FullRebuildReasonRecord>
     ,
     var `compositeStats`: CompositeBuildStatsRecord
@@ -25242,6 +25792,8 @@ data class CompositeBuildOrRebuildOutcomeRecord (
     var `hnswStats`: HnswBuildStatsRecord?
     ,
     var `pqStats`: ProductQuantizationBuildStatsRecord?
+    ,
+    var `turboquantStats`: TurboQuantizationBuildStatsRecord?
 
 ): Disposable{
 
@@ -25257,10 +25809,12 @@ data class CompositeBuildOrRebuildOutcomeRecord (
         this.`composite`,
         this.`hnsw`,
         this.`pq`,
+        this.`turboquant`,
         this.`reasons`,
         this.`compositeStats`,
         this.`hnswStats`,
-        this.`pqStats`
+        this.`pqStats`,
+        this.`turboquantStats`
     )
     }
 
@@ -25277,10 +25831,12 @@ public object FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord: FfiConverter
             FfiConverterOptionalTypeBindingCompositeAccelerator.read(buf),
             FfiConverterOptionalTypeBindingHnswIndex.read(buf),
             FfiConverterOptionalTypeBindingProductQuantizer.read(buf),
+            FfiConverterOptionalTypeBindingTurboQuantizer.read(buf),
             FfiConverterSequenceTypeFullRebuildReasonRecord.read(buf),
             FfiConverterTypeCompositeBuildStatsRecord.read(buf),
             FfiConverterOptionalTypeHnswBuildStatsRecord.read(buf),
             FfiConverterOptionalTypeProductQuantizationBuildStatsRecord.read(buf),
+            FfiConverterOptionalTypeTurboQuantizationBuildStatsRecord.read(buf),
         )
     }
 
@@ -25289,10 +25845,12 @@ public object FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord: FfiConverter
             FfiConverterOptionalTypeBindingCompositeAccelerator.allocationSize(value.`composite`) +
             FfiConverterOptionalTypeBindingHnswIndex.allocationSize(value.`hnsw`) +
             FfiConverterOptionalTypeBindingProductQuantizer.allocationSize(value.`pq`) +
+            FfiConverterOptionalTypeBindingTurboQuantizer.allocationSize(value.`turboquant`) +
             FfiConverterSequenceTypeFullRebuildReasonRecord.allocationSize(value.`reasons`) +
             FfiConverterTypeCompositeBuildStatsRecord.allocationSize(value.`compositeStats`) +
             FfiConverterOptionalTypeHnswBuildStatsRecord.allocationSize(value.`hnswStats`) +
-            FfiConverterOptionalTypeProductQuantizationBuildStatsRecord.allocationSize(value.`pqStats`)
+            FfiConverterOptionalTypeProductQuantizationBuildStatsRecord.allocationSize(value.`pqStats`) +
+            FfiConverterOptionalTypeTurboQuantizationBuildStatsRecord.allocationSize(value.`turboquantStats`)
     )
 
     override fun write(value: CompositeBuildOrRebuildOutcomeRecord, buf: ByteBuffer) {
@@ -25300,10 +25858,12 @@ public object FfiConverterTypeCompositeBuildOrRebuildOutcomeRecord: FfiConverter
             FfiConverterOptionalTypeBindingCompositeAccelerator.write(value.`composite`, buf)
             FfiConverterOptionalTypeBindingHnswIndex.write(value.`hnsw`, buf)
             FfiConverterOptionalTypeBindingProductQuantizer.write(value.`pq`, buf)
+            FfiConverterOptionalTypeBindingTurboQuantizer.write(value.`turboquant`, buf)
             FfiConverterSequenceTypeFullRebuildReasonRecord.write(value.`reasons`, buf)
             FfiConverterTypeCompositeBuildStatsRecord.write(value.`compositeStats`, buf)
             FfiConverterOptionalTypeHnswBuildStatsRecord.write(value.`hnswStats`, buf)
             FfiConverterOptionalTypeProductQuantizationBuildStatsRecord.write(value.`pqStats`, buf)
+            FfiConverterOptionalTypeTurboQuantizationBuildStatsRecord.write(value.`turboquantStats`, buf)
     }
 }
 
@@ -25446,6 +26006,10 @@ data class CompositeRebuildOptionsRecord (
     var `pqWorkerThreads`: kotlin.ULong
     ,
     var `pqLimits`: ProductQuantizationBuildLimitsRecord
+    ,
+    var `turboquantWorkerThreads`: kotlin.ULong
+    ,
+    var `turboquantLimits`: TurboQuantizationBuildLimitsRecord
 
 ){
 
@@ -25465,19 +26029,25 @@ public object FfiConverterTypeCompositeRebuildOptionsRecord: FfiConverterRustBuf
             FfiConverterTypeHnswBuildLimitsRecord.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterTypeProductQuantizationBuildLimitsRecord.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterTypeTurboQuantizationBuildLimitsRecord.read(buf),
         )
     }
 
     override fun allocationSize(value: CompositeRebuildOptionsRecord) = (
             FfiConverterTypeHnswBuildLimitsRecord.allocationSize(value.`hnswLimits`) +
             FfiConverterULong.allocationSize(value.`pqWorkerThreads`) +
-            FfiConverterTypeProductQuantizationBuildLimitsRecord.allocationSize(value.`pqLimits`)
+            FfiConverterTypeProductQuantizationBuildLimitsRecord.allocationSize(value.`pqLimits`) +
+            FfiConverterULong.allocationSize(value.`turboquantWorkerThreads`) +
+            FfiConverterTypeTurboQuantizationBuildLimitsRecord.allocationSize(value.`turboquantLimits`)
     )
 
     override fun write(value: CompositeRebuildOptionsRecord, buf: ByteBuffer) {
             FfiConverterTypeHnswBuildLimitsRecord.write(value.`hnswLimits`, buf)
             FfiConverterULong.write(value.`pqWorkerThreads`, buf)
             FfiConverterTypeProductQuantizationBuildLimitsRecord.write(value.`pqLimits`, buf)
+            FfiConverterULong.write(value.`turboquantWorkerThreads`, buf)
+            FfiConverterTypeTurboQuantizationBuildLimitsRecord.write(value.`turboquantLimits`, buf)
     }
 }
 
@@ -30208,6 +30778,8 @@ data class ProximitySearchRequestRecord (
     var `hnswEfSearch`: kotlin.UInt?
     ,
     var `pqRerankMultiplier`: kotlin.UShort?
+    ,
+    var `turboquantRerankMultiplier`: kotlin.UShort?
 
 ){
 
@@ -30234,6 +30806,7 @@ public object FfiConverterTypeProximitySearchRequestRecord: FfiConverterRustBuff
             FfiConverterTypeSearchBackendRecord.read(buf),
             FfiConverterOptionalUInt.read(buf),
             FfiConverterOptionalUShort.read(buf),
+            FfiConverterOptionalUShort.read(buf),
         )
     }
 
@@ -30247,7 +30820,8 @@ public object FfiConverterTypeProximitySearchRequestRecord: FfiConverterRustBuff
             FfiConverterTypeQueryKernelRecord.allocationSize(value.`kernel`) +
             FfiConverterTypeSearchBackendRecord.allocationSize(value.`backend`) +
             FfiConverterOptionalUInt.allocationSize(value.`hnswEfSearch`) +
-            FfiConverterOptionalUShort.allocationSize(value.`pqRerankMultiplier`)
+            FfiConverterOptionalUShort.allocationSize(value.`pqRerankMultiplier`) +
+            FfiConverterOptionalUShort.allocationSize(value.`turboquantRerankMultiplier`)
     )
 
     override fun write(value: ProximitySearchRequestRecord, buf: ByteBuffer) {
@@ -30261,6 +30835,7 @@ public object FfiConverterTypeProximitySearchRequestRecord: FfiConverterRustBuff
             FfiConverterTypeSearchBackendRecord.write(value.`backend`, buf)
             FfiConverterOptionalUInt.write(value.`hnswEfSearch`, buf)
             FfiConverterOptionalUShort.write(value.`pqRerankMultiplier`, buf)
+            FfiConverterOptionalUShort.write(value.`turboquantRerankMultiplier`, buf)
     }
 }
 
@@ -30329,6 +30904,8 @@ data class ProximitySearchRuntimePolicyRecord (
     var `hnswMaxBytes`: kotlin.ULong
     ,
     var `pqMaxBytes`: kotlin.ULong
+    ,
+    var `turboquantMaxBytes`: kotlin.ULong
 
 ){
 
@@ -30350,6 +30927,7 @@ public object FfiConverterTypeProximitySearchRuntimePolicyRecord: FfiConverterRu
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
             FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
         )
     }
 
@@ -30358,7 +30936,8 @@ public object FfiConverterTypeProximitySearchRuntimePolicyRecord: FfiConverterRu
             FfiConverterULong.allocationSize(value.`maxBytes`) +
             FfiConverterULong.allocationSize(value.`authoritativeMaxBytes`) +
             FfiConverterULong.allocationSize(value.`hnswMaxBytes`) +
-            FfiConverterULong.allocationSize(value.`pqMaxBytes`)
+            FfiConverterULong.allocationSize(value.`pqMaxBytes`) +
+            FfiConverterULong.allocationSize(value.`turboquantMaxBytes`)
     )
 
     override fun write(value: ProximitySearchRuntimePolicyRecord, buf: ByteBuffer) {
@@ -30367,6 +30946,7 @@ public object FfiConverterTypeProximitySearchRuntimePolicyRecord: FfiConverterRu
             FfiConverterULong.write(value.`authoritativeMaxBytes`, buf)
             FfiConverterULong.write(value.`hnswMaxBytes`, buf)
             FfiConverterULong.write(value.`pqMaxBytes`, buf)
+            FfiConverterULong.write(value.`turboquantMaxBytes`, buf)
     }
 }
 
@@ -33491,6 +34071,298 @@ public object FfiConverterTypeTreeStatsRecord: FfiConverterRustBuffer<TreeStatsR
 
 
 
+data class TurboQuantizationBuildLimitsRecord (
+    var `maxRecords`: kotlin.ULong?
+    ,
+    var `maxInputBytes`: kotlin.ULong?
+    ,
+    var `maxTemporaryBytes`: kotlin.ULong?
+    ,
+    var `maxTransformOperations`: kotlin.ULong?
+    ,
+    var `maxEncodedOutputBytes`: kotlin.ULong?
+    ,
+    var `maxWorkerThreads`: kotlin.ULong?
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTurboQuantizationBuildLimitsRecord: FfiConverterRustBuffer<TurboQuantizationBuildLimitsRecord> {
+    override fun read(buf: ByteBuffer): TurboQuantizationBuildLimitsRecord {
+        return TurboQuantizationBuildLimitsRecord(
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+            FfiConverterOptionalULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TurboQuantizationBuildLimitsRecord) = (
+            FfiConverterOptionalULong.allocationSize(value.`maxRecords`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxInputBytes`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxTemporaryBytes`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxTransformOperations`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxEncodedOutputBytes`) +
+            FfiConverterOptionalULong.allocationSize(value.`maxWorkerThreads`)
+    )
+
+    override fun write(value: TurboQuantizationBuildLimitsRecord, buf: ByteBuffer) {
+            FfiConverterOptionalULong.write(value.`maxRecords`, buf)
+            FfiConverterOptionalULong.write(value.`maxInputBytes`, buf)
+            FfiConverterOptionalULong.write(value.`maxTemporaryBytes`, buf)
+            FfiConverterOptionalULong.write(value.`maxTransformOperations`, buf)
+            FfiConverterOptionalULong.write(value.`maxEncodedOutputBytes`, buf)
+            FfiConverterOptionalULong.write(value.`maxWorkerThreads`, buf)
+    }
+}
+
+
+
+data class TurboQuantizationBuildResultRecord (
+    var `index`: BindingTurboQuantizer
+    ,
+    var `stats`: TurboQuantizationBuildStatsRecord
+
+): Disposable{
+
+
+
+
+
+    @Suppress("UNNECESSARY_SAFE_CALL") // codegen is much simpler if we unconditionally emit safe calls here
+    override fun destroy() {
+
+    Disposable.destroy(
+        this.`index`,
+        this.`stats`
+    )
+    }
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTurboQuantizationBuildResultRecord: FfiConverterRustBuffer<TurboQuantizationBuildResultRecord> {
+    override fun read(buf: ByteBuffer): TurboQuantizationBuildResultRecord {
+        return TurboQuantizationBuildResultRecord(
+            FfiConverterTypeBindingTurboQuantizer.read(buf),
+            FfiConverterTypeTurboQuantizationBuildStatsRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TurboQuantizationBuildResultRecord) = (
+            FfiConverterTypeBindingTurboQuantizer.allocationSize(value.`index`) +
+            FfiConverterTypeTurboQuantizationBuildStatsRecord.allocationSize(value.`stats`)
+    )
+
+    override fun write(value: TurboQuantizationBuildResultRecord, buf: ByteBuffer) {
+            FfiConverterTypeBindingTurboQuantizer.write(value.`index`, buf)
+            FfiConverterTypeTurboQuantizationBuildStatsRecord.write(value.`stats`, buf)
+    }
+}
+
+
+
+data class TurboQuantizationBuildStatsRecord (
+    var `encodedVectors`: kotlin.ULong
+    ,
+    var `zeroVectors`: kotlin.ULong
+    ,
+    var `transformedComponents`: kotlin.ULong
+    ,
+    var `butterflyOperations`: kotlin.ULong
+    ,
+    var `inputBytes`: kotlin.ULong
+    ,
+    var `encodedOutputBytes`: kotlin.ULong
+    ,
+    var `peakTemporaryBytes`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTurboQuantizationBuildStatsRecord: FfiConverterRustBuffer<TurboQuantizationBuildStatsRecord> {
+    override fun read(buf: ByteBuffer): TurboQuantizationBuildStatsRecord {
+        return TurboQuantizationBuildStatsRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TurboQuantizationBuildStatsRecord) = (
+            FfiConverterULong.allocationSize(value.`encodedVectors`) +
+            FfiConverterULong.allocationSize(value.`zeroVectors`) +
+            FfiConverterULong.allocationSize(value.`transformedComponents`) +
+            FfiConverterULong.allocationSize(value.`butterflyOperations`) +
+            FfiConverterULong.allocationSize(value.`inputBytes`) +
+            FfiConverterULong.allocationSize(value.`encodedOutputBytes`) +
+            FfiConverterULong.allocationSize(value.`peakTemporaryBytes`)
+    )
+
+    override fun write(value: TurboQuantizationBuildStatsRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`encodedVectors`, buf)
+            FfiConverterULong.write(value.`zeroVectors`, buf)
+            FfiConverterULong.write(value.`transformedComponents`, buf)
+            FfiConverterULong.write(value.`butterflyOperations`, buf)
+            FfiConverterULong.write(value.`inputBytes`, buf)
+            FfiConverterULong.write(value.`encodedOutputBytes`, buf)
+            FfiConverterULong.write(value.`peakTemporaryBytes`, buf)
+    }
+}
+
+
+
+data class TurboQuantizationConfigRecord (
+    var `bitWidth`: kotlin.UByte
+    ,
+    var `rerankMultiplier`: kotlin.UInt
+    ,
+    var `seed`: kotlin.ULong
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTurboQuantizationConfigRecord: FfiConverterRustBuffer<TurboQuantizationConfigRecord> {
+    override fun read(buf: ByteBuffer): TurboQuantizationConfigRecord {
+        return TurboQuantizationConfigRecord(
+            FfiConverterUByte.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TurboQuantizationConfigRecord) = (
+            FfiConverterUByte.allocationSize(value.`bitWidth`) +
+            FfiConverterUInt.allocationSize(value.`rerankMultiplier`) +
+            FfiConverterULong.allocationSize(value.`seed`)
+    )
+
+    override fun write(value: TurboQuantizationConfigRecord, buf: ByteBuffer) {
+            FfiConverterUByte.write(value.`bitWidth`, buf)
+            FfiConverterUInt.write(value.`rerankMultiplier`, buf)
+            FfiConverterULong.write(value.`seed`, buf)
+    }
+}
+
+
+
+data class TurboQuantizationQualityRecord (
+    var `meanSquaredError`: kotlin.Double
+    ,
+    var `maximumSquaredError`: kotlin.Double
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTurboQuantizationQualityRecord: FfiConverterRustBuffer<TurboQuantizationQualityRecord> {
+    override fun read(buf: ByteBuffer): TurboQuantizationQualityRecord {
+        return TurboQuantizationQualityRecord(
+            FfiConverterDouble.read(buf),
+            FfiConverterDouble.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TurboQuantizationQualityRecord) = (
+            FfiConverterDouble.allocationSize(value.`meanSquaredError`) +
+            FfiConverterDouble.allocationSize(value.`maximumSquaredError`)
+    )
+
+    override fun write(value: TurboQuantizationQualityRecord, buf: ByteBuffer) {
+            FfiConverterDouble.write(value.`meanSquaredError`, buf)
+            FfiConverterDouble.write(value.`maximumSquaredError`, buf)
+    }
+}
+
+
+
+data class TurboQuantizationVerificationRecord (
+    var `encodedVectors`: kotlin.ULong
+    ,
+    var `zeroVectors`: kotlin.ULong
+    ,
+    var `quality`: TurboQuantizationQualityRecord
+
+){
+
+
+
+
+
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeTurboQuantizationVerificationRecord: FfiConverterRustBuffer<TurboQuantizationVerificationRecord> {
+    override fun read(buf: ByteBuffer): TurboQuantizationVerificationRecord {
+        return TurboQuantizationVerificationRecord(
+            FfiConverterULong.read(buf),
+            FfiConverterULong.read(buf),
+            FfiConverterTypeTurboQuantizationQualityRecord.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: TurboQuantizationVerificationRecord) = (
+            FfiConverterULong.allocationSize(value.`encodedVectors`) +
+            FfiConverterULong.allocationSize(value.`zeroVectors`) +
+            FfiConverterTypeTurboQuantizationQualityRecord.allocationSize(value.`quality`)
+    )
+
+    override fun write(value: TurboQuantizationVerificationRecord, buf: ByteBuffer) {
+            FfiConverterULong.write(value.`encodedVectors`, buf)
+            FfiConverterULong.write(value.`zeroVectors`, buf)
+            FfiConverterTypeTurboQuantizationQualityRecord.write(value.`quality`, buf)
+    }
+}
+
+
+
 data class TypedContentObjectRecord (
     var `kind`: ContentObjectKindRecord
     ,
@@ -33978,7 +34850,8 @@ enum class CatalogAcceleratorKindRecord {
 
     HNSW,
     PRODUCT_QUANTIZED,
-    COMPOSITE;
+    COMPOSITE,
+    TURBO_QUANTIZED;
 
 
 
@@ -34012,7 +34885,8 @@ public object FfiConverterTypeCatalogAcceleratorKindRecord: FfiConverterRustBuff
 enum class CompositeBaseKindRecord {
 
     HNSW,
-    PRODUCT_QUANTIZED;
+    PRODUCT_QUANTIZED,
+    TURBO_QUANTIZED;
 
 
 
@@ -34048,7 +34922,8 @@ enum class CompositeBuildOrRebuildKindRecord {
     COMPOSITE,
     NO_ACCELERATOR_REQUIRED,
     HNSW_REBUILT,
-    PRODUCT_QUANTIZED_REBUILT;
+    PRODUCT_QUANTIZED_REBUILT,
+    TURBO_QUANTIZED_REBUILT;
 
 
 
@@ -34092,7 +34967,8 @@ enum class ContentObjectKindRecord {
     HNSW_MANIFEST,
     HNSW_PAGE,
     COMPOSITE_ACCELERATOR,
-    ACCELERATOR_CATALOG;
+    ACCELERATOR_CATALOG,
+    TURBO_QUANTIZATION;
 
 
 
@@ -35182,7 +36058,8 @@ enum class SearchBackendRecord {
     PRODUCT_QUANTIZED,
     HNSW,
     COMPOSITE,
-    AUTO;
+    AUTO,
+    TURBO_QUANTIZED;
 
 
 
@@ -35802,6 +36679,38 @@ public object FfiConverterOptionalTypeBindingProximitySearchRuntime: FfiConverte
         } else {
             buf.put(1)
             FfiConverterTypeBindingProximitySearchRuntime.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeBindingTurboQuantizer: FfiConverterRustBuffer<BindingTurboQuantizer?> {
+    override fun read(buf: ByteBuffer): BindingTurboQuantizer? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeBindingTurboQuantizer.read(buf)
+    }
+
+    override fun allocationSize(value: BindingTurboQuantizer?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeBindingTurboQuantizer.allocationSize(value)
+        }
+    }
+
+    override fun write(value: BindingTurboQuantizer?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeBindingTurboQuantizer.write(value, buf)
         }
     }
 }
@@ -36634,6 +37543,38 @@ public object FfiConverterOptionalTypeTreeRecord: FfiConverterRustBuffer<TreeRec
         } else {
             buf.put(1)
             FfiConverterTypeTreeRecord.write(value, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
+public object FfiConverterOptionalTypeTurboQuantizationBuildStatsRecord: FfiConverterRustBuffer<TurboQuantizationBuildStatsRecord?> {
+    override fun read(buf: ByteBuffer): TurboQuantizationBuildStatsRecord? {
+        if (buf.get().toInt() == 0) {
+            return null
+        }
+        return FfiConverterTypeTurboQuantizationBuildStatsRecord.read(buf)
+    }
+
+    override fun allocationSize(value: TurboQuantizationBuildStatsRecord?): ULong {
+        if (value == null) {
+            return 1UL
+        } else {
+            return 1UL + FfiConverterTypeTurboQuantizationBuildStatsRecord.allocationSize(value)
+        }
+    }
+
+    override fun write(value: TurboQuantizationBuildStatsRecord?, buf: ByteBuffer) {
+        if (value == null) {
+            buf.put(0)
+        } else {
+            buf.put(1)
+            FfiConverterTypeTurboQuantizationBuildStatsRecord.write(value, buf)
         }
     }
 }
@@ -39564,6 +40505,26 @@ public object FfiConverterSequenceOptionalByteArray: FfiConverterRustBuffer<List
             return FfiConverterTypeProximitySearchRuntimePolicyRecord.lift(
     uniffiRustCall() { _status ->
     UniffiLib.uniffi_prolly_bindings_fn_func_default_proximity_search_runtime_policy(
+
+        _status)
+}
+    )
+    }
+
+ fun `defaultTurboquantBuildLimits`(): TurboQuantizationBuildLimitsRecord {
+            return FfiConverterTypeTurboQuantizationBuildLimitsRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_turboquant_build_limits(
+
+        _status)
+}
+    )
+    }
+
+ fun `defaultTurboquantConfig`(): TurboQuantizationConfigRecord {
+            return FfiConverterTypeTurboQuantizationConfigRecord.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.uniffi_prolly_bindings_fn_func_default_turboquant_config(
 
         _status)
 }

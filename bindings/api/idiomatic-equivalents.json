@@ -87,8 +87,8 @@
     },
     "store-trait": {
       "classification": "idiomatic",
-      "portable_semantics": "Rust storage traits become host callback or protocol interfaces with the same ordered batch, manifest, transaction, hint, and capability behavior.",
-      "performance_contract": "Inputs are owned for the callback duration, callback results become Rust-owned before return, ordered batch operations stay batched, and async adapters own handles across await.",
+      "portable_semantics": "Rust storage traits become host callback or protocol interfaces with the same ordered batch, manifest, transaction, hint, and capability behavior. Rust-owned default methods may attach internal read-validation provenance without adding a host callback or trusting a host-provided validation claim.",
+      "performance_contract": "Inputs are owned for the callback duration, callback results become Rust-owned before return, ordered batch operations stay batched, async adapters own handles across await, and validation provenance remains a zero-copy Rust-side optimization.",
       "language_patterns": {
         "python": "store protocol object with synchronous and async adapters",
         "go": "Store interface implemented by host callbacks",

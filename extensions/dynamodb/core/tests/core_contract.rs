@@ -17,9 +17,9 @@ use prolly_dynamodb_core::{
     BlobFuture, BlobStorage, BulkImportOptions, Clock, Condition, Database, DatabaseFormatRecord,
     DynamoNumber, IdGenerator, IndexQueryRequest, Item, KeyAttribute, KeyCondition, KeyKind,
     LargeValueConfig, LargeWriteOptions, MaintenanceContext, Result, RetentionPolicy,
-    SecondaryIndexDefinition, SecondaryIndexKind, SecondaryIndexProjection,
-    StoragePublicationMode, TableArchive, TableArchiveLimits, TableId, TransactGetRequest,
-    TransactWriteAction, TransactionCancellationCode,
+    SecondaryIndexDefinition, SecondaryIndexKind, SecondaryIndexProjection, StoragePublicationMode,
+    TableArchive, TableArchiveLimits, TableId, TransactGetRequest, TransactWriteAction,
+    TransactionCancellationCode,
 };
 
 #[test]
@@ -109,10 +109,7 @@ fn explicit_large_write_exceeds_aws_action_limit_in_one_commit() {
         let actions = (0..101)
             .map(|index| TransactWriteAction::Put {
                 table_name: "Large".into(),
-                item: Item::from([(
-                    "id".into(),
-                    AttributeValue::S(format!("{index:08}")),
-                )]),
+                item: Item::from([("id".into(), AttributeValue::S(format!("{index:08}")))]),
                 condition: None,
                 return_failure_old: false,
             })

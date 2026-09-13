@@ -37,7 +37,7 @@ pub(super) fn next_up(value: f64) -> f64 {
 /// Newton iteration supplies a nearby candidate. An exact integer comparison
 /// of IEEE significands then selects the greatest representable value whose
 /// square does not exceed the input. No target `sqrt` instruction is used.
-pub(super) fn sqrt_down(value: f64) -> f64 {
+pub(crate) fn sqrt_down(value: f64) -> f64 {
     debug_assert!(value.is_finite() && value >= 0.0);
     if value == 0.0 {
         return 0.0;

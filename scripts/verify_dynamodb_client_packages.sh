@@ -26,6 +26,26 @@ trap 'rm -rf -- "${work_dir}"' EXIT
 package_target="${work_dir}/target"
 mkdir -p "${package_target}"
 
+package_version() {
+  cargo metadata \
+    --manifest-path "$1" \
+    --format-version 1 \
+    --no-deps \
+    | python3 -c 'import json, sys; print(json.load(sys.stdin)["packages"][0]["version"])'
+}
+
+map_version="$(package_version "${repo_root}/Cargo.toml")"
+store_version="$(package_version "${repo_root}/stores/prolly-store-dynamodb/Cargo.toml")"
+core_version="$(package_version "${repo_root}/extensions/dynamodb/core/Cargo.toml")"
+client_version="$(package_version "${repo_root}/extensions/dynamodb/client/Cargo.toml")"
+
+map_package="prolly-map-${map_version}"
+store_package="prolly-store-dynamodb-${store_version}"
+core_package="prolly-dynamodb-core-${core_version}"
+client_package="prolly-dynamodb-client-${client_version}"
+map_registry_package="registry+https://github.com/rust-lang/crates.io-index#prolly-map@${map_version}"
+store_registry_package="registry+https://github.com/rust-lang/crates.io-index#prolly-store-dynamodb@${store_version}"
+
 cargo_package() {
   if [[ "${allow_dirty}" == "1" ]]; then
     cargo package "$@" --locked --allow-dirty
@@ -58,10 +78,10 @@ for manifest in "${manifests[@]}"; do
 done
 
 archives=(
-  "${package_target}/package/prolly-map-0.7.0.crate"
-  "${package_target}/package/prolly-store-dynamodb-0.6.0.crate"
-  "${package_target}/package/prolly-dynamodb-core-0.1.0.crate"
-  "${package_target}/package/prolly-dynamodb-client-0.1.0.crate"
+  "${package_target}/package/${map_package}.crate"
+  "${package_target}/package/${store_package}.crate"
+  "${package_target}/package/${core_package}.crate"
+  "${package_target}/package/${client_package}.crate"
 )
 for archive in "${archives[@]}"; do
   test -s "${archive}"
@@ -70,12 +90,12 @@ done
 
 # The durable-format oracle must travel with the semantic core. A repository
 # test alone cannot protect downstream releases if cargo packaging omits it.
-test -s "${work_dir}/prolly-dynamodb-core-0.1.0/tests/fixtures/database-format-10.json"
-test -s "${work_dir}/prolly-dynamodb-core-0.1.0/tests/fixtures/database-format-11.json"
-test -s "${work_dir}/prolly-dynamodb-core-0.1.0/tests/fixtures/database-format-12.json"
+test -s "${work_dir}/${core_package}/tests/fixtures/database-format-10.json"
+test -s "${work_dir}/${core_package}/tests/fixtures/database-format-11.json"
+test -s "${work_dir}/${core_package}/tests/fixtures/database-format-12.json"
 for fixture in canonical-v1.json validation-v1.json; do
-  core_fixture="${work_dir}/prolly-dynamodb-core-0.1.0/tests/fixtures/${fixture}"
-  client_fixture="${work_dir}/prolly-dynamodb-client-0.1.0/src/fixtures/${fixture}"
+  core_fixture="${work_dir}/${core_package}/tests/fixtures/${fixture}"
+  client_fixture="${work_dir}/${client_package}/src/fixtures/${fixture}"
   test -s "${core_fixture}"
   test -s "${client_fixture}"
   cmp --silent "${core_fixture}" "${client_fixture}"
@@ -83,7 +103,7 @@ done
 
 # The reviewed client API baseline is a release artifact. Packaging must not
 # silently omit or substitute it.
-packaged_public_api="${work_dir}/prolly-dynamodb-client-0.1.0/public-api.txt"
+packaged_public_api="${work_dir}/${client_package}/public-api.txt"
 test -s "${packaged_public_api}"
 cmp --silent "${repo_root}/extensions/dynamodb/client/public-api.txt" "${packaged_public_api}"
 
@@ -92,32 +112,32 @@ cmp --silent "${repo_root}/extensions/dynamodb/client/public-api.txt" "${package
 # library consumer cannot observe.
 package_test_target="${work_dir}/package-test-target"
 CARGO_NET_OFFLINE=true cargo update \
-  --manifest-path "${work_dir}/prolly-dynamodb-core-0.1.0/Cargo.toml" \
+  --manifest-path "${work_dir}/${core_package}/Cargo.toml" \
   --offline \
-  --package 'registry+https://github.com/rust-lang/crates.io-index#prolly-map@0.7.0' \
-  --config "patch.crates-io.prolly-map.path='${work_dir}/prolly-map-0.7.0'"
+  --package "${map_registry_package}" \
+  --config "patch.crates-io.prolly-map.path='${work_dir}/${map_package}'"
 CARGO_TARGET_DIR="${package_test_target}" cargo test \
-  --manifest-path "${work_dir}/prolly-dynamodb-core-0.1.0/Cargo.toml" \
+  --manifest-path "${work_dir}/${core_package}/Cargo.toml" \
   --locked \
   --all-targets \
   --no-run \
-  --config "patch.crates-io.prolly-map.path='${work_dir}/prolly-map-0.7.0'"
+  --config "patch.crates-io.prolly-map.path='${work_dir}/${map_package}'"
 CARGO_NET_OFFLINE=true cargo update \
-  --manifest-path "${work_dir}/prolly-dynamodb-client-0.1.0/Cargo.toml" \
+  --manifest-path "${work_dir}/${client_package}/Cargo.toml" \
   --offline \
-  --package 'registry+https://github.com/rust-lang/crates.io-index#prolly-map@0.7.0' \
-  --package 'registry+https://github.com/rust-lang/crates.io-index#prolly-store-dynamodb@0.6.0' \
-  --config "patch.crates-io.prolly-map.path='${work_dir}/prolly-map-0.7.0'" \
-  --config "patch.crates-io.prolly-store-dynamodb.path='${work_dir}/prolly-store-dynamodb-0.6.0'" \
-  --config "patch.crates-io.prolly-dynamodb-core.path='${work_dir}/prolly-dynamodb-core-0.1.0'"
+  --package "${map_registry_package}" \
+  --package "${store_registry_package}" \
+  --config "patch.crates-io.prolly-map.path='${work_dir}/${map_package}'" \
+  --config "patch.crates-io.prolly-store-dynamodb.path='${work_dir}/${store_package}'" \
+  --config "patch.crates-io.prolly-dynamodb-core.path='${work_dir}/${core_package}'"
 CARGO_TARGET_DIR="${package_test_target}" cargo test \
-  --manifest-path "${work_dir}/prolly-dynamodb-client-0.1.0/Cargo.toml" \
+  --manifest-path "${work_dir}/${client_package}/Cargo.toml" \
   --locked \
   --all-targets \
   --no-run \
-  --config "patch.crates-io.prolly-map.path='${work_dir}/prolly-map-0.7.0'" \
-  --config "patch.crates-io.prolly-store-dynamodb.path='${work_dir}/prolly-store-dynamodb-0.6.0'" \
-  --config "patch.crates-io.prolly-dynamodb-core.path='${work_dir}/prolly-dynamodb-core-0.1.0'"
+  --config "patch.crates-io.prolly-map.path='${work_dir}/${map_package}'" \
+  --config "patch.crates-io.prolly-store-dynamodb.path='${work_dir}/${store_package}'" \
+  --config "patch.crates-io.prolly-dynamodb-core.path='${work_dir}/${core_package}'"
 
 consumer="${work_dir}/consumer"
 mkdir -p "${consumer}/src"
@@ -129,12 +149,12 @@ edition = "2021"
 publish = false
 
 [dependencies]
-prolly-dynamodb-client = { path = "${work_dir}/prolly-dynamodb-client-0.1.0" }
+prolly-dynamodb-client = { path = "${work_dir}/${client_package}" }
 
 [patch.crates-io]
-prolly-map = { path = "${work_dir}/prolly-map-0.7.0" }
-prolly-store-dynamodb = { path = "${work_dir}/prolly-store-dynamodb-0.6.0" }
-prolly-dynamodb-core = { path = "${work_dir}/prolly-dynamodb-core-0.1.0" }
+prolly-map = { path = "${work_dir}/${map_package}" }
+prolly-store-dynamodb = { path = "${work_dir}/${store_package}" }
+prolly-dynamodb-core = { path = "${work_dir}/${core_package}" }
 EOF
 cat >"${consumer}/src/main.rs" <<'EOF'
 use prolly_dynamodb_client::{CancellationToken, Client};

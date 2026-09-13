@@ -1,0 +1,63 @@
+{
+  "contract": {
+    "benchmark_schema_version": 4,
+    "dataset": "linear-mod-2000003-v2",
+    "environments": [
+      {
+        "async_quantizers": false,
+        "cold": false,
+        "name": "memory-warm-sync",
+        "store": "memory"
+      },
+      {
+        "async_quantizers": false,
+        "cold": true,
+        "name": "memory-cold-sync",
+        "store": "memory"
+      },
+      {
+        "async_quantizers": false,
+        "cold": false,
+        "name": "file-warm-sync",
+        "store": "file"
+      },
+      {
+        "async_quantizers": false,
+        "cold": true,
+        "name": "file-cold-sync",
+        "store": "file"
+      },
+      {
+        "async_quantizers": true,
+        "cold": false,
+        "name": "memory-warm-async",
+        "store": "memory"
+      },
+      {
+        "async_quantizers": true,
+        "cold": true,
+        "name": "memory-cold-async",
+        "store": "memory"
+      }
+    ],
+    "exhaustive_max_records": 10000,
+    "full_cell_count": 45360,
+    "full_matrix_digest": "a4c137363c5cffe5390a2959217017321f5f17daabf2babb83c52f17a3571d9f",
+    "max_cell_records": null,
+    "profile": "full",
+    "revision": "729c2ffac8835db9c99d7706746c321067abfa1d",
+    "schema": "prolly-turboquant-qualification-v4",
+    "search_repeats": 30,
+    "shard_cell_count": 1,
+    "shard_count": 1000000,
+    "shard_index": 79516,
+    "shard_matrix_digest": "bad24b6c59267c9cadb8895d87a693f58e32af946bfbeed4bbe15b662221d72f",
+    "wasm_smoke": false,
+    "workers": [
+      1,
+      2,
+      4
+    ]
+  },
+  "created_at": "2026-09-12T20:52:24.242953+00:00"
+}

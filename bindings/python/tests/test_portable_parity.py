@@ -16,6 +16,7 @@ from prolly import (
     ProximityFilterRecord,
     ProximityRecord,
     ProductQuantizationConfigRecord,
+    TurboQuantizationConfigRecord,
     ProllyBindingError,
     ProximityMutationRecord,
     ProximityCancellationToken,
@@ -260,6 +261,100 @@ class PortableParityTests(unittest.TestCase):
             with proximity.load_pq(manifest) as loaded:
                 self.assertEqual(loaded.manifest, manifest)
 
+    def test_turboquant_lifecycle_is_portable_verifiable_and_bounded(self):
+        with Engine.memory() as engine:
+            proximity = engine.build_proximity(
+                dimensions=8,
+                records=[
+                    ProximityRecord(
+                        f"turbo-{index:02}".encode(),
+                        [float(index), float(index % 3), 0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                        f"value-{index:02}".encode(),
+                    )
+                    for index in range(32)
+                ],
+            )
+            config = TurboQuantizationConfigRecord(
+                bit_width=4,
+                rerank_multiplier=4,
+                seed=(1 << 64) - 1,
+            )
+            built = proximity.build_turboquant(config=config, worker_threads=2)
+            self.assertEqual(built.stats.encoded_vectors, 32)
+            request = exact_proximity_search_request(
+                [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3
+            )
+            request.policy = SearchPolicyKind.FIXED_BUDGET
+            request.backend = SearchBackendRecord.TURBO_QUANTIZED
+
+            with built.index as index:
+                self.assertEqual(index.config, config)
+                self.assertEqual(index.source_descriptor, proximity.descriptor)
+                self.assertEqual(index.verify(proximity).encoded_vectors, 32)
+                result = index.search(proximity, request)
+                self.assertEqual(result.backend, SearchBackendRecord.TURBO_QUANTIZED)
+                self.assertEqual(result.neighbors[0].key, b"turbo-00")
+                self.assertGreater(result.stats.distance_evaluations, 0)
+                with engine.proximity_search_runtime() as runtime:
+                    self.assertEqual(
+                        index.search_with_runtime(proximity, request, runtime).backend,
+                        SearchBackendRecord.TURBO_QUANTIZED,
+                    )
+                with ProximityCancellationToken() as cancellation:
+                    cancellation.cancel()
+                    cancelled = index.search_cancellable(
+                        proximity, request, cancellation=cancellation
+                    )
+                    self.assertEqual(cancelled.completion, SearchCompletionRecord.CANCELLED)
+                    self.assertEqual(cancelled.neighbors, [])
+                manifest = index.manifest
+                with index.prove_search(proximity, request) as proof:
+                    self.assertEqual(
+                        proof.verify(proximity.descriptor).result.backend,
+                        SearchBackendRecord.TURBO_QUANTIZED,
+                    )
+                with proximity.build_accelerator_catalog(turboquant=index) as catalog:
+                    self.assertEqual(
+                        catalog.entries[0].kind,
+                        CatalogAcceleratorKindRecord.TURBO_QUANTIZED,
+                    )
+                    self.assertEqual(
+                        catalog.search(proximity, request).backend,
+                        SearchBackendRecord.TURBO_QUANTIZED,
+                    )
+
+                current, _ = proximity.mutate(
+                    [
+                        ProximityMutationRecord(
+                            key=b"turbo-00",
+                            vector=[0.25, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+                            value=b"updated",
+                        )
+                    ]
+                )
+                with current:
+                    composite = current.build_composite_turboquant(
+                        proximity, index
+                    ).accelerator
+                    self.assertIsNotNone(composite)
+                    with composite:
+                        self.assertEqual(
+                            composite.base_kind,
+                            CompositeBaseKindRecord.TURBO_QUANTIZED,
+                        )
+                        composite_request = exact_proximity_search_request(
+                            [0.0, 0.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0], 3
+                        )
+                        composite_request.policy = SearchPolicyKind.FIXED_BUDGET
+                        composite_request.backend = SearchBackendRecord.COMPOSITE
+                        self.assertEqual(
+                            composite.search(current, composite_request).backend,
+                            SearchBackendRecord.COMPOSITE,
+                        )
+
+            with proximity.load_turboquant(manifest) as loaded:
+                self.assertEqual(loaded.manifest, manifest)
+
     def test_hnsw_accelerator_lifecycle_is_portable(self):
         with Engine.memory() as engine:
             proximity = engine.build_proximity(
@@ -336,6 +431,7 @@ class PortableParityTests(unittest.TestCase):
                 backend=SearchBackendRecord.AUTO,
                 hnsw_ef_search=None,
                 pq_rerank_multiplier=None,
+                turboquant_rerank_multiplier=None,
             )
 
             result = proximity.search(request)

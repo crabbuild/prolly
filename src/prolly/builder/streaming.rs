@@ -12,6 +12,9 @@ pub(crate) struct EmittedNode {
     pub(crate) summary: NodeSummary,
     pub(crate) node: Node,
     pub(crate) bytes: Vec<u8>,
+    /// Logical heap payload simultaneously owned by this emission: the raw
+    /// node entries, encoded node bytes, and cloned first-key summary.
+    pub(crate) owned_payload_bytes: usize,
 }
 
 pub(crate) struct LevelEmitter {
@@ -23,6 +26,7 @@ pub(crate) struct LevelEmitter {
     sizer: Option<EncodedNodeSizer>,
     encoded_measure: bool,
     upper_size: u64,
+    current_payload_bytes: usize,
 }
 
 impl LevelEmitter {
@@ -50,6 +54,7 @@ impl LevelEmitter {
             encoded_measure,
             sizer,
             upper_size,
+            current_payload_bytes: 0,
             config,
             leaf,
             level,
@@ -169,6 +174,18 @@ impl LevelEmitter {
         let boundary = self
             .detector
             .observe(&key, &value, encoded_entry_bytes as usize)?;
+        self.current_payload_bytes = self
+            .current_payload_bytes
+            .checked_add(key.len())
+            .and_then(|bytes| bytes.checked_add(value.len()))
+            .and_then(|bytes| {
+                bytes.checked_add(if child_count.is_some() {
+                    std::mem::size_of::<u64>()
+                } else {
+                    0
+                })
+            })
+            .ok_or(Error::InvalidNode)?;
         self.current.keys.push(key);
         self.current.vals.push(value);
         if let Some(count) = child_count {
@@ -224,6 +241,10 @@ impl LevelEmitter {
         self.current.is_empty()
     }
 
+    pub(crate) fn retained_payload_bytes(&self) -> usize {
+        self.current_payload_bytes
+    }
+
     fn flush_current(&mut self) -> Result<Option<EmittedNode>, Error> {
         if self.current.is_empty() {
             return Ok(None);
@@ -232,6 +253,7 @@ impl LevelEmitter {
             &mut self.current,
             new_builder_node(&self.config, self.leaf, self.level),
         );
+        let node_payload_bytes = std::mem::take(&mut self.current_payload_bytes);
         let bytes = node.to_bytes();
         let hard_max = self.config.format.chunking.hard_max_node_bytes;
         if bytes.len() as u64 > hard_max {
@@ -255,10 +277,15 @@ impl LevelEmitter {
         } else {
             self.upper_size = conservative_empty_upper(&self.config.format)?;
         }
+        let owned_payload_bytes = node_payload_bytes
+            .checked_add(bytes.len())
+            .and_then(|payload| payload.checked_add(summary.first_key.len()))
+            .ok_or(Error::InvalidNode)?;
         Ok(Some(EmittedNode {
             summary,
             node,
             bytes,
+            owned_payload_bytes,
         }))
     }
 
@@ -385,6 +412,39 @@ impl HierarchicalEmitter {
             }
             index += 1;
         }
+    }
+
+    /// Logical key/value/child-count payload retained between streamed adds.
+    /// Fixed-size allocator and codec metadata are intentionally excluded, as
+    /// are provider-owned publication buffers.
+    pub(crate) fn retained_payload_bytes(&self) -> Result<usize, Error> {
+        let mut bytes = self.leaf.retained_payload_bytes();
+        for level in &self.parents {
+            bytes = bytes
+                .checked_add(
+                    level
+                        .pending_first
+                        .as_ref()
+                        .map(|summary| summary.first_key.len())
+                        .unwrap_or(0),
+                )
+                .and_then(|bytes| {
+                    bytes.checked_add(
+                        level
+                            .emitter
+                            .as_ref()
+                            .map(LevelEmitter::retained_payload_bytes)
+                            .unwrap_or(0),
+                    )
+                })
+                .ok_or(Error::InvalidNode)?;
+        }
+        for (_, summary) in &self.cascade_scratch {
+            bytes = bytes
+                .checked_add(summary.first_key.len())
+                .ok_or(Error::InvalidNode)?;
+        }
+        Ok(bytes)
     }
 
     fn cascade(

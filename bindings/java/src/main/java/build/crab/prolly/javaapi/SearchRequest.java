@@ -16,13 +16,14 @@ public record SearchRequest(
         Kernel kernel,
         Backend backend,
         Integer hnswEfSearch,
-        Integer pqRerankMultiplier) {
+        Integer pqRerankMultiplier,
+        Integer turboquantRerankMultiplier) {
 
     public enum Policy { EXACT, FIXED_BUDGET, ADAPTIVE }
     public enum AdaptiveQuality { FAST, BALANCED, HIGH_RECALL }
     public enum FilterKind { ALL, KEY_RANGE, PREFIX, ELIGIBLE_KEYS }
     public enum Kernel { SCALAR_DETERMINISTIC, SIMD_DETERMINISTIC, AUTO_DETERMINISTIC }
-    public enum Backend { NATIVE, PRODUCT_QUANTIZED, HNSW, COMPOSITE, AUTO }
+    public enum Backend { NATIVE, PRODUCT_QUANTIZED, HNSW, TURBO_QUANTIZED, COMPOSITE, AUTO }
 
     public record SearchBudget(
             Long maxNodes,
@@ -97,6 +98,11 @@ public record SearchRequest(
         if (pqRerankMultiplier != null && (pqRerankMultiplier < 0 || pqRerankMultiplier > 65_535)) {
             throw new IllegalArgumentException("pqRerankMultiplier must fit an unsigned 16-bit value");
         }
+        if (turboquantRerankMultiplier != null
+                && (turboquantRerankMultiplier < 0 || turboquantRerankMultiplier > 65_535)) {
+            throw new IllegalArgumentException(
+                    "turboquantRerankMultiplier must fit an unsigned 16-bit value");
+        }
     }
 
     @Override public float[] vector() { return vector.clone(); }
@@ -104,7 +110,7 @@ public record SearchRequest(
     public static SearchRequest exact(float[] vector, int topK) {
         return new SearchRequest(
                 vector, topK, Policy.EXACT, null, SearchBudget.unlimited(), SearchFilter.all(),
-                Kernel.AUTO_DETERMINISTIC, Backend.NATIVE, null, null);
+                Kernel.AUTO_DETERMINISTIC, Backend.NATIVE, null, null, null);
     }
 
     public static SearchRequest fixedBudget(
@@ -115,7 +121,8 @@ public record SearchRequest(
             Kernel kernel,
             Backend backend) {
         return new SearchRequest(
-                vector, topK, Policy.FIXED_BUDGET, null, budget, filter, kernel, backend, null, null);
+                vector, topK, Policy.FIXED_BUDGET, null, budget, filter, kernel, backend,
+                null, null, null);
     }
 
     public static SearchRequest adaptive(
@@ -127,13 +134,14 @@ public record SearchRequest(
             Kernel kernel,
             Backend backend) {
         return new SearchRequest(
-                vector, topK, Policy.ADAPTIVE, quality, budget, filter, kernel, backend, null, null);
+                vector, topK, Policy.ADAPTIVE, quality, budget, filter, kernel, backend,
+                null, null, null);
     }
 
     SearchRequest ownedCopy() {
         return new SearchRequest(
                 vector, topK, policy, adaptiveQuality, budget, filter, kernel, backend,
-                hnswEfSearch, pqRerankMultiplier);
+                hnswEfSearch, pqRerankMultiplier, turboquantRerankMultiplier);
     }
 
     JavaProximitySearchRequest toNative() {
@@ -156,6 +164,7 @@ public record SearchRequest(
                 kernel.name(),
                 backend.name(),
                 hnswEfSearch,
-                pqRerankMultiplier);
+                pqRerankMultiplier,
+                turboquantRerankMultiplier);
     }
 }

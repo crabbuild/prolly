@@ -8,6 +8,11 @@ use crate::prolly::proximity::accelerator::catalog::{
 use crate::prolly::proximity::accelerator::composite::Manifest as CompositeManifest;
 use crate::prolly::proximity::accelerator::hnsw::storage::{GraphNode, Manifest as HnswManifest};
 use crate::prolly::proximity::accelerator::pq::Manifest as PqManifest;
+use crate::prolly::proximity::accelerator::turboquant::{
+    code_tree_node_count as turboquant_node_count, decode_code_tree_node as decode_turboquant_node,
+    invalid_object as invalid_turboquant_object,
+    validate_code_value as validate_turboquant_code_value, Manifest as TurboQuantManifest,
+};
 use crate::prolly::proximity::storage::quantized::ScalarQuantized;
 use crate::prolly::proximity::storage::vector::ExternalVector;
 use crate::prolly::proximity::storage::{Descriptor, PhysicalNodeKind, ProximityNode, VectorRef};
@@ -131,6 +136,7 @@ pub fn walk_content_graph<S: Store>(
             }
         }
     }
+    validate_turboquant_closures(&walk.objects)?;
     Ok(walk)
 }
 
@@ -249,7 +255,105 @@ where
             }
         }
     }
+    validate_turboquant_closures(&walk.objects)?;
     Ok(walk)
+}
+
+fn validate_turboquant_closures(objects: &[TypedContentObject]) -> Result<(), Error> {
+    if !objects
+        .iter()
+        .any(|object| object.root.kind == ContentObjectKind::TurboQuantization)
+    {
+        return Ok(());
+    }
+    let objects_by_cid: HashMap<&Cid, &TypedContentObject> = objects
+        .iter()
+        .map(|object| (&object.root.cid, object))
+        .collect();
+    for object in objects
+        .iter()
+        .filter(|object| object.root.kind == ContentObjectKind::TurboQuantization)
+    {
+        let manifest = TurboQuantManifest::decode(&object.bytes)?;
+        let source = objects_by_cid
+            .get(&manifest.source)
+            .ok_or_else(|| invalid_turboquant_object("TurboQuant source descriptor is absent"))?;
+        if source.root.kind != ContentObjectKind::ProximityDescriptor {
+            return Err(invalid_turboquant_object(
+                "TurboQuant source reference is not a proximity descriptor",
+            ));
+        }
+        let descriptor = Descriptor::decode(&source.bytes)?;
+        if descriptor.config.dimensions != manifest.dimensions
+            || descriptor.config.metric != manifest.metric
+            || descriptor.count != manifest.count
+        {
+            return Err(invalid_turboquant_object(
+                "TurboQuant manifest disagrees with its source descriptor",
+            ));
+        }
+        let mut verified_counts = HashMap::<Cid, u64>::new();
+        let count = validate_turboquant_subtree(
+            &manifest.code_root,
+            manifest.dimensions as usize,
+            manifest.config.bit_width,
+            &objects_by_cid,
+            &mut verified_counts,
+        )?;
+        if count != manifest.count {
+            return Err(invalid_turboquant_object(
+                "TurboQuant code-tree count disagrees with manifest",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_turboquant_subtree(
+    cid: &Cid,
+    dimensions: usize,
+    bit_width: u8,
+    objects: &HashMap<&Cid, &TypedContentObject>,
+    verified_counts: &mut HashMap<Cid, u64>,
+) -> Result<u64, Error> {
+    if let Some(count) = verified_counts.get(cid) {
+        return Ok(*count);
+    }
+    let object = objects
+        .get(cid)
+        .ok_or_else(|| invalid_turboquant_object("TurboQuant code-tree node is absent"))?;
+    if object.root.kind != ContentObjectKind::OrderedNode {
+        return Err(invalid_turboquant_object(
+            "TurboQuant code-tree reference is not an ordered node",
+        ));
+    }
+    let node = decode_turboquant_node(&object.bytes)?;
+    let count = turboquant_node_count(&node)?;
+    if node.leaf {
+        for value in &node.vals {
+            validate_turboquant_code_value(value, dimensions, bit_width)?;
+        }
+    } else {
+        for (value, declared_count) in node.vals.iter().zip(&node.child_counts) {
+            let child = Cid(value.as_slice().try_into().map_err(|_| {
+                invalid_turboquant_object("TurboQuant internal code-tree value is not a CID")
+            })?);
+            let actual_count = validate_turboquant_subtree(
+                &child,
+                dimensions,
+                bit_width,
+                objects,
+                verified_counts,
+            )?;
+            if actual_count != *declared_count {
+                return Err(invalid_turboquant_object(
+                    "TurboQuant code-tree child count disagrees with its parent",
+                ));
+            }
+        }
+    }
+    verified_counts.insert(cid.clone(), count);
+    Ok(count)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -456,6 +560,16 @@ fn references(
             ));
             ContentObjectKind::ProductQuantization
         }
+        ContentObjectKind::TurboQuantization => {
+            let manifest = TurboQuantManifest::decode(bytes)?;
+            manifest.config.validate(manifest.dimensions)?;
+            output.push(TypedContentRoot::proximity_descriptor(manifest.source));
+            output.push(TypedContentRoot::new(
+                ContentObjectKind::OrderedNode,
+                manifest.code_root,
+            ));
+            ContentObjectKind::TurboQuantization
+        }
         ContentObjectKind::HnswManifest => {
             let manifest = HnswManifest::decode(bytes)?;
             manifest.config.validate()?;
@@ -484,6 +598,9 @@ fn references(
                     crate::prolly::proximity::CompositeBaseKind::ProductQuantized => {
                         ContentObjectKind::ProductQuantization
                     }
+                    crate::prolly::proximity::CompositeBaseKind::TurboQuantized => {
+                        ContentObjectKind::TurboQuantization
+                    }
                 },
                 manifest.base_manifest,
             ));
@@ -507,6 +624,9 @@ fn references(
                         }
                         CatalogAcceleratorKind::Composite => {
                             ContentObjectKind::CompositeAccelerator
+                        }
+                        CatalogAcceleratorKind::TurboQuantized => {
+                            ContentObjectKind::TurboQuantization
                         }
                     },
                     entry.manifest,

@@ -1,0 +1,7 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on shared package cache
+    Blocking waiting for file lock on build directory
+    Finished `bench` profile [optimized] target(s) in 0.11s
+  Executable benches/prolly_proximity_bench.rs (target/release/deps/prolly_proximity_bench-88edf17ca838c569)
